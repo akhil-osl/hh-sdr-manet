@@ -32,6 +32,7 @@ add_library(hhsdr_core STATIC
   src/adapters/hw/hw_adapter.c
   src/manet/discovery.c
   src/manet/neighbor.c
+  src/manet/link_health.c
 )
 target_link_libraries(hhsdr_core PUBLIC m)
 
