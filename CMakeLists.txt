@@ -28,6 +28,8 @@ add_library(hhsdr_core STATIC
   src/core/config.c
   src/core/events.c
   src/core/dispatcher.c
+  src/radio/wire.c
+  src/adapters/hw/hw_adapter.c
 )
 target_link_libraries(hhsdr_core PUBLIC m)
 
