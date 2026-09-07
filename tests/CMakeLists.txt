@@ -26,3 +26,8 @@ hh_add_test(test_recovery   unit/test_recovery.c)
 hh_add_test(test_integration integration/test_integration.c)
 hh_add_test(test_scenarios  scenario/test_scenarios.c)
 hh_add_test(test_telemetry_sca unit/test_telemetry_sca.c)
+
+# Demonstration binary: prints network behavior for a human reader.
+# Not registered as a test; it is a tool for inspecting the stack by eye.
+add_executable(demo_selfheal ${CMAKE_SOURCE_DIR}/tools/demo_selfheal.c)
+target_link_libraries(demo_selfheal PRIVATE hhsdr_core hhsim)

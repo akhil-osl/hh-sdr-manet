@@ -213,11 +213,57 @@ static void test_link_health_drives_discovery_cadence(void)
                   hh_discovery_interval(&n1->node.discovery), steady_interval);
 }
 
+/*
+ * The full Doc 1 §8 pipeline must actually run on a link failure:
+ * detection -> classification -> confirmation -> recovery.
+ *
+ * This exists because a demonstration run showed routes rerouting correctly
+ * while the recovery counters stayed at zero: neighbor expiry was deleting the
+ * neighbor before the link-health machine reached Failed, so the Failure
+ * Detector never confirmed and Self-Healing never ran. Rerouting still happened
+ * via the expiry cascade, which is why no existing test caught it.
+ */
+static void test_link_failure_drives_full_recovery_pipeline(void)
+{
+    netsim_t s;
+    sim_node_t *n1;
+
+    netsim_init(&s, 10);
+    for (hh_node_id_t i = 1; i <= 4; i++) netsim_add_node(&s, i);
+    netsim_link_up(&s, 1, 2, -50.0f);
+    netsim_link_up(&s, 1, 3, -50.0f);
+    netsim_link_up(&s, 2, 4, -50.0f);
+    netsim_link_up(&s, 3, 4, -50.0f);
+    netsim_start_all(&s);
+    netsim_run(&s, 3000, 10);
+
+    n1 = netsim_node(&s, 1);
+    HH_ASSERT(netsim_has_route(&s, 1, 4));
+    HH_ASSERT_EQ_INT(n1->node.failure_detector.confirmations, 0);
+
+    /* Break the link node 1 is actually using. */
+    netsim_link_down(&s, 1, netsim_next_hop(&s, 1, 4));
+    netsim_run(&s, 5000, 10);
+
+    /* Every stage of the pipeline must have run, not just the end result. */
+    HH_ASSERT_MSG(n1->node.link_health.transitions >= 3,
+        "link health did not walk Healthy->Degraded->Suspected->Failed (%llu transitions)",
+        (unsigned long long)n1->node.link_health.transitions);
+    HH_ASSERT_MSG(n1->node.failure_detector.confirmations >= 1,
+        "failure was never confirmed; recovery pipeline was bypassed");
+    HH_ASSERT_MSG(n1->node.self_healing.recoveries_started >= 1,
+        "self-healing never ran despite a confirmed failure");
+
+    /* And connectivity survived over the alternate path. */
+    HH_ASSERT_MSG(netsim_has_route(&s, 1, 4), "lost connectivity after recovery");
+}
+
 HH_TEST_MAIN_BEGIN("integration")
     HH_RUN(test_discovery_to_neighbor);
     HH_RUN(test_neighbor_to_link_health);
     HH_RUN(test_neighbor_to_routing);
     HH_RUN(test_link_health_through_recovery_to_routing);
+    HH_RUN(test_link_failure_drives_full_recovery_pipeline);
     HH_RUN(test_routing_to_forwarder);
     HH_RUN(test_radio_abstraction_drives_whole_stack);
     HH_RUN(test_routing_to_topology);

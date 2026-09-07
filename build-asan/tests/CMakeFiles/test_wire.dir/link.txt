@@ -1,1 +1,0 @@
-/usr/bin/cc -g   -fsanitize=address,undefined CMakeFiles/test_wire.dir/unit/test_wire.c.o  -o test_wire ../libhhsdr_core.a libhhsim.a ../libhhsdr_core.a -lm 

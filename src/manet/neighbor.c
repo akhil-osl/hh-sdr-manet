@@ -166,14 +166,15 @@ hh_status_t hh_neighbor_record_sample(hh_neighbor_mgr_t *nm, const hh_link_sampl
     return HH_OK;
 }
 
-size_t hh_neighbor_tick(hh_neighbor_mgr_t *nm, hh_time_ms_t now)
+size_t hh_neighbor_tick_ex(hh_neighbor_mgr_t *nm, hh_time_ms_t now,
+                           hh_link_failed_fn confirmed_failed, void *ctx)
 {
     size_t expired = 0;
 
     if (!nm) return 0;
     for (size_t i = 0; i < HH_MAX_NEIGHBORS; i++) {
         hh_neighbor_t *n = &nm->table[i];
-        uint32_t cadence, deadline;
+        uint32_t cadence, deadline, hard_cap;
         if (!n->used) continue;
 
         /* Expiry by cadence: allowed_loss missed beacons at the interval that
@@ -182,6 +183,18 @@ size_t hh_neighbor_tick(hh_neighbor_mgr_t *nm, hh_time_ms_t now)
         cadence = n->observed_interval_ms ? n->observed_interval_ms
                                           : nm->cfg->beacon_interval_ms;
         deadline = cadence * (nm->cfg->neighbor_allowed_loss + 1);
+
+        /* Doc 1 §4: let the link-health state machine reach its verdict rather
+         * than deleting the neighbor out from under it. Deleting first drops
+         * the link from Link Health, so the Failure Detector never confirms and
+         * the Self-Healing pipeline never runs. */
+        hard_cap = deadline + nm->cfg->lh_suspect_hold_ms + cadence * 4u;
+        if (confirmed_failed && now > n->last_heard &&
+            (now - n->last_heard) > deadline &&
+            (now - n->last_heard) <= hard_cap &&
+            !confirmed_failed(ctx, n->id)) {
+            continue;   /* still transitioning through the state machine */
+        }
 
         if (now > n->last_heard && (now - n->last_heard) > deadline) {
             hh_node_id_t id = n->id;
@@ -196,6 +209,11 @@ size_t hh_neighbor_tick(hh_neighbor_mgr_t *nm, hh_time_ms_t now)
         }
     }
     return expired;
+}
+
+size_t hh_neighbor_tick(hh_neighbor_mgr_t *nm, hh_time_ms_t now)
+{
+    return hh_neighbor_tick_ex(nm, now, NULL, NULL);
 }
 
 hh_status_t hh_neighbor_remove(hh_neighbor_mgr_t *nm, hh_node_id_t id, hh_time_ms_t now)

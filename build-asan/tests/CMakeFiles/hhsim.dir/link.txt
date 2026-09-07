@@ -1,2 +1,0 @@
-/usr/bin/ar qc libhhsim.a  CMakeFiles/hhsim.dir/sim/mock_radio.c.o CMakeFiles/hhsim.dir/sim/netsim.c.o
-/usr/bin/ranlib libhhsim.a

@@ -73,8 +73,25 @@ hh_status_t hh_neighbor_init(hh_neighbor_mgr_t *nm, const hh_config_t *cfg,
 hh_status_t hh_neighbor_on_beacon(hh_neighbor_mgr_t *nm, const hh_beacon_t *b,
                                   const hh_link_sample_t *sample, hh_time_ms_t now);
 
-/* Age out neighbors whose expected beacons have not arrived. Publishes
- * NeighborDown for each. Returns how many expired. */
+/*
+ * Age out neighbors whose expected beacons have not arrived. Publishes
+ * NeighborDown for each. Returns how many expired.
+ *
+ * `confirmed_failed` is an optional predicate asking the Link Health Monitor
+ * whether a neighbor's link has reached Failed. Doc 1 §4 requires a silent
+ * neighbor to transition through the link-health state machine rather than
+ * being deleted by a timer, so while the predicate says "not yet failed" the
+ * entry is retained past its nominal deadline and the state machine is allowed
+ * to reach its verdict. A hard cap still applies so a neighbor cannot be
+ * retained forever if the machine somehow stalls.
+ *
+ * Passing NULL disables the deferral and expires purely on cadence, which is
+ * the behavior unit tests exercise in isolation.
+ */
+typedef bool (*hh_link_failed_fn)(void *ctx, hh_node_id_t neighbor);
+
+size_t hh_neighbor_tick_ex(hh_neighbor_mgr_t *nm, hh_time_ms_t now,
+                           hh_link_failed_fn confirmed_failed, void *ctx);
 size_t hh_neighbor_tick(hh_neighbor_mgr_t *nm, hh_time_ms_t now);
 
 /* Read-only accessors. Callers must not retain the pointer across a mutation. */

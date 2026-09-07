@@ -1,1 +1,0 @@
-/usr/bin/cc -g   -fsanitize=address,undefined CMakeFiles/test_routing.dir/unit/test_routing.c.o  -o test_routing ../libhhsdr_core.a libhhsim.a ../libhhsdr_core.a -lm 

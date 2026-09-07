@@ -96,6 +96,16 @@ static void on_merged(const hh_event_t *ev, void *ctx)
     hh_sh_on_merge(&n->self_healing, &ev->u.merged, ev->timestamp);
 }
 
+/* Expiry predicate: has this neighbor's link reached a confirmed failure?
+ * Lets neighbor expiry defer to the link-health state machine (Doc 1 §4). */
+static bool node_link_failed(void *ctx, hh_node_id_t neighbor)
+{
+    const hh_node_t *n = ctx;
+    const hh_link_t *l = hh_link_health_get(&n->link_health, neighbor);
+    /* An untracked link cannot transition, so it must not block expiry. */
+    return !l || l->state == HH_LINK_FAILED;
+}
+
 /* Radio rx callback: the single ingress point for everything off the air. */
 static void radio_rx(const hh_frame_t *f, const hh_link_sample_t *m, void *ctx)
 {
@@ -339,12 +349,20 @@ hh_status_t hh_node_tick(hh_node_t *n, hh_time_ms_t now)
         n->last_route_update_at = now;
     }
 
-    /* 4. Timers: neighbor expiry, link health, route aging, recovery retries.
-     * Ordered so each stage sees the previous stage's events this same tick. */
-    hh_neighbor_tick(&n->neighbors, now);
+    /*
+     * 4. Timers, ordered so each stage sees the previous stage's events.
+     *
+     * Link health runs BEFORE neighbor expiry. Doc 1 §4 requires a silent
+     * neighbor to "transition through the link-health state machine rather than
+     * being deleted", so the machine must be given the chance to reach Failed
+     * and let the Failure Detector confirm. Running expiry first deletes the
+     * neighbor, drops the link from Link Health, and the detection ->
+     * confirmation -> recovery pipeline never runs at all.
+     */
+    hh_link_health_tick(&n->link_health, now);
     hh_dispatcher_drain_all(&n->bus, 8);
 
-    hh_link_health_tick(&n->link_health, now);
+    hh_neighbor_tick_ex(&n->neighbors, now, node_link_failed, n);
     hh_dispatcher_drain_all(&n->bus, 8);
 
     hh_routing_tick(&n->routing, now);

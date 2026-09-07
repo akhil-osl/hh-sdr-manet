@@ -385,6 +385,30 @@ size_t hh_link_health_tick(hh_link_health_t *lh, hh_time_ms_t now)
                 transition(lh, l, HH_LINK_DEGRADED, now);
         }
 
+        /*
+         * A neighbor that has missed every expected beacon past the allowed
+         * loss count is not merely degraded: every signal we have depends on
+         * receiving frames from it, so prolonged silence is decisive on its own.
+         * Without this a silent link stalls at Degraded, and the neighbor is
+         * eventually deleted by expiry before the state machine ever reaches
+         * Failed -- which would bypass the whole confirmation and recovery
+         * pipeline that Doc 1 §8 specifies.
+         */
+        if (silence > (hh_time_ms_t)miss_deadline &&
+            l->state != HH_LINK_FAILED && l->state != HH_LINK_RECOVERING) {
+            l->bad_signals |= HH_SIG_BEACON | HH_SIG_RSSI;
+            if (l->state == HH_LINK_HEALTHY)
+                transition(lh, l, HH_LINK_DEGRADED, now);
+            if (l->state == HH_LINK_DEGRADED)
+                transition(lh, l, HH_LINK_SUSPECTED_FAILURE, now);
+            /* Confirmation still respects the hold-down: reaching Failed
+             * requires the suspicion to persist, exactly as for any other
+             * cause. */
+            if (l->state == HH_LINK_SUSPECTED_FAILURE &&
+                now - l->state_since >= lh->cfg->lh_suspect_hold_ms)
+                transition(lh, l, HH_LINK_FAILED, now);
+        }
+
         reevaluate(lh, l, now);
         if (l->state != before) changed++;
     }

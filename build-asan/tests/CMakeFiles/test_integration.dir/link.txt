@@ -1,1 +1,0 @@
-/usr/bin/cc -g   -fsanitize=address,undefined CMakeFiles/test_integration.dir/integration/test_integration.c.o  -o test_integration ../libhhsdr_core.a libhhsim.a ../libhhsdr_core.a -lm 
