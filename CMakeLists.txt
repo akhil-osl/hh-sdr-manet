@@ -35,6 +35,7 @@ add_library(hhsdr_core STATIC
   src/manet/link_health.c
   src/manet/route_table.c
   src/manet/routing.c
+  src/dataplane/forwarder.c
 )
 target_link_libraries(hhsdr_core PUBLIC m)
 
