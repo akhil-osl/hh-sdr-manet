@@ -36,6 +36,9 @@ add_library(hhsdr_core STATIC
   src/manet/route_table.c
   src/manet/routing.c
   src/dataplane/forwarder.c
+  src/manet/failure_detector.c
+  src/manet/topology.c
+  src/manet/self_healing.c
 )
 target_link_libraries(hhsdr_core PUBLIC m)
 
