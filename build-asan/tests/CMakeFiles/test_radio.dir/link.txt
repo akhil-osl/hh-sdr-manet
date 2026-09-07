@@ -1,0 +1,1 @@
+/usr/bin/cc -g   -fsanitize=address,undefined CMakeFiles/test_radio.dir/unit/test_radio.c.o  -o test_radio ../libhhsdr_core.a libhhsim.a ../libhhsdr_core.a -lm 

@@ -12,8 +12,9 @@ add_compile_options(-Wall -Wextra -Wshadow -Wpointer-arith -Wcast-qual -Wstrict-
 
 option(HH_SANITIZE "Build with address/UB sanitizers" OFF)
 if(HH_SANITIZE)
+  # add_link_options() requires CMake 3.13; this project targets 3.10.
   add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
-  add_link_options(-fsanitize=address,undefined)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address,undefined")
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/include)

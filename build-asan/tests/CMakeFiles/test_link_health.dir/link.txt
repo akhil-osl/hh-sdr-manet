@@ -1,0 +1,1 @@
+/usr/bin/cc -g   -fsanitize=address,undefined CMakeFiles/test_link_health.dir/unit/test_link_health.c.o  -o test_link_health ../libhhsdr_core.a libhhsim.a ../libhhsdr_core.a -lm 

@@ -1,0 +1,1 @@
+/usr/bin/cc -g   -fsanitize=address,undefined CMakeFiles/test_dispatcher.dir/unit/test_dispatcher.c.o  -o test_dispatcher ../libhhsdr_core.a libhhsim.a ../libhhsdr_core.a -lm 

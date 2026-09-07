@@ -1,0 +1,40 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../include/hhsdr/core/dispatcher.h
+hhsdr/core/events.h
+../include/hhsdr/core/hhsdr/core/events.h
+
+../include/hhsdr/core/events.h
+hhsdr/core/types.h
+../include/hhsdr/core/hhsdr/core/types.h
+
+../include/hhsdr/core/types.h
+stdbool.h
+-
+stddef.h
+-
+stdint.h
+-
+
+../tests/hh_test.h
+math.h
+-
+stdio.h
+-
+string.h
+-
+
+/home/ospl/projects/hh-sdr-manet/tests/unit/test_dispatcher.c
+hhsdr/core/dispatcher.h
+/home/ospl/projects/hh-sdr-manet/tests/unit/hhsdr/core/dispatcher.h
+hh_test.h
+/home/ospl/projects/hh-sdr-manet/tests/unit/hh_test.h
+string.h
+-
+

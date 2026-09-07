@@ -1,0 +1,16 @@
+test_seq 1 0.0171971
+test_config 1 0.0255671
+test_log 1 0.0311232
+test_dispatcher 1 0.0280662
+test_wire 1 0.0324109
+test_radio 1 0.0341489
+test_discovery 1 0.0360422
+test_neighbor 1 0.0334389
+test_link_health 1 0.0299711
+test_routing 1 0.0348561
+test_forwarder 1 0.033793
+test_recovery 1 0.038682
+test_integration 1 0.0616479
+test_scenarios 1 0.219812
+test_telemetry_sca 1 0.0504661
+---

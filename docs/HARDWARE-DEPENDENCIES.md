@@ -51,6 +51,23 @@ stays below the boundary where it belongs.
 - Typed event definitions for HTI-04 … HTI-16
 - Event dispatcher with bounded per-subscriber queues
 - Beacon and route-update binary wire codec
+- **Discovery Manager** — acquisition/steady phases, adaptive cadence, duplicate
+  and replay rejection
+- **Neighbor Manager** — authoritative one-hop table, cadence-based expiry, LRU
+  eviction, `NeighborUp/Down/Changed`
+- **Link Health Monitor** — multi-signal fusion, hysteresis, hold-downs, cause
+  classification
+- **Routing Engine** — distance-vector with sequence freshness, composite
+  metric, split horizon with poisoned reverse, warm alternates, two-phase
+  invalidation, dampening
+- **Packet Forwarder** — lock-free snapshot reads, bounded pending queue, TTL
+- **Failure Detector** — debounced confirmation, retraction, corroboration counts
+- **Topology Manager** — read-model graph, partition and merge detection
+- **Self-Healing Manager** — full recovery pipeline, strategy by cause hint
+- **Node assembly** — event wiring, SCA lifecycle, control loop
+- **Management/Telemetry** — node/neighbor/route/topology/radio status export
+- **SCA compatibility layer** — lifecycle enforcement, property surface, port
+  declarations, component classification
 
 ### ABSTRACTED / INTERFACE ONLY
 - `hh_radio_ops_t` — the radio/SDR contract (no production backend)
@@ -61,6 +78,18 @@ stays below the boundary where it belongs.
 ### SIMULATED FOR TESTING (test-only, under `tests/`)
 - `mock_radio` — implements the same `hh_radio_ops_t` contract, supplying
   controlled frames and metrics through the interfaces real hardware will use
+- `vclock` — virtual clock making every scenario deterministic
+- `netsim` — multi-node simulator: virtual links, per-direction loss, delay,
+  RSSI/SNR/PER and PHY-error injection, node/link failure and recovery,
+  partitions, merges, mobility, asymmetric links
+
+All RF metric values consumed by the stack today (RSSI, SNR, PER, retransmits,
+PHY errors, ACK outcomes, latency) are **supplied by the test harness**. Real
+values will come from the hardware adapter through the identical interface.
+
+Verified separation: no file under `src/` or `include/` references anything
+under `tests/`, the production library contains zero test symbols, and there are
+no simulation-specific branches in production code.
 
 ### HARDWARE-DEPENDENT / TBD
 | Item | Spec reference | Notes |

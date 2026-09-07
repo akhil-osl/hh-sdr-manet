@@ -1,0 +1,34 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../include/hhsdr/core/seq.h
+hhsdr/core/types.h
+../include/hhsdr/core/hhsdr/core/types.h
+
+../include/hhsdr/core/types.h
+stdbool.h
+-
+stddef.h
+-
+stdint.h
+-
+
+../tests/hh_test.h
+math.h
+-
+stdio.h
+-
+string.h
+-
+
+/home/ospl/projects/hh-sdr-manet/tests/unit/test_seq.c
+hhsdr/core/seq.h
+/home/ospl/projects/hh-sdr-manet/tests/unit/hhsdr/core/seq.h
+hh_test.h
+/home/ospl/projects/hh-sdr-manet/tests/unit/hh_test.h
+
