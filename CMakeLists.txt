@@ -26,6 +26,8 @@ add_library(hhsdr_core STATIC
   src/core/clock.c
   src/core/log.c
   src/core/config.c
+  src/core/events.c
+  src/core/dispatcher.c
 )
 target_link_libraries(hhsdr_core PUBLIC m)
 
