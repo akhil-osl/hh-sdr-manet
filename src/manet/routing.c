@@ -171,6 +171,24 @@ hh_status_t hh_routing_offer(hh_routing_t *r, hh_node_id_t destination,
 
     if (!r || destination == HH_NODE_ID_INVALID) return HH_ERR_INVAL;
     if (destination == r->cfg->node_id) return HH_ERR_INVAL;   /* never route to self */
+
+    /* Poisoned reverse: the sender is telling us this destination is
+     * unreachable through them. Withdraw the route we hold via that neighbor
+     * rather than treating it as a very long path. */
+    if (hop_count >= (uint8_t)HH_HOP_INFINITY) {
+        hh_route_t *victim = find(r, destination);
+        if (victim && victim->valid && victim->next_hop == via_neighbor) {
+            victim->valid = false;
+            victim->invalidated_at = now;
+            victim->has_alt = false;
+            r->withdrawals++;
+            HH_LOGI(COMP, "route_withdrawn", "dst=%u next_hop=%u reason=poisoned_reverse",
+                    destination, via_neighbor);
+            publish_withdrawn(r, destination, via_neighbor, HH_WITHDRAW_EXPLICIT, now);
+            republish(r);
+        }
+        return HH_ERR_AGAIN;
+    }
     if (hop_count >= r->cfg->max_hop_count) return HH_ERR_INVAL;
 
     /* A route is only as valid as its next-hop neighbor entry (Doc 1 §6). */
@@ -211,6 +229,7 @@ hh_status_t hh_routing_offer(hh_routing_t *r, hh_node_id_t destination,
     }
 
     rt->next_hop     = via_neighbor;
+    rt->learned_from = via_neighbor;
     rt->metric       = metric;
     rt->sequence_no  = seq;
     rt->hop_count    = hop_count;
@@ -230,11 +249,20 @@ hh_status_t hh_routing_offer(hh_routing_t *r, hh_node_id_t destination,
 
 hh_status_t hh_routing_on_neighbor_up(hh_routing_t *r, hh_node_id_t id, hh_time_ms_t now)
 {
+    hh_status_t st;
+    hh_route_t *rt;
+
     if (!r) return HH_ERR_INVAL;
     /* A direct neighbor is a one-hop destination reachable via itself. Our own
      * sequence advances so this beats any stale multi-hop route to it. */
     r->own_seq++;
-    return hh_routing_offer(r, id, id, r->own_seq, 1, 0.0f, now);
+    st = hh_routing_offer(r, id, id, r->own_seq, 1, 0.0f, now);
+
+    /* A directly-observed route was not learned from an advertisement, so it is
+     * exempt from split horizon: we may tell every neighbor about it. */
+    rt = find(r, id);
+    if (rt && rt->next_hop == id) rt->learned_from = HH_NODE_ID_INVALID;
+    return st;
 }
 
 size_t hh_routing_invalidate_via(hh_routing_t *r, hh_node_id_t next_hop,
@@ -294,6 +322,21 @@ size_t hh_routing_tick(hh_routing_t *r, hh_time_ms_t now)
              * its health at install time. */
             rt->metric = composite_metric(r, rt->next_hop, rt->hop_count, 0.0f, now);
 
+            /*
+             * A route whose next hop is still a live neighbor is being actively
+             * maintained by the proactive update stream, so it is not idle even
+             * when no data traffic uses it. Ageing it out here would expire
+             * perfectly good routes on a quiet network -- which a multi-node
+             * scenario caught: a merely Degraded link lost its route because
+             * nothing had sent packets over it.
+             *
+             * ACTIVE_ROUTE_TIMEOUT still applies to routes whose next hop has
+             * gone, which is what the timer is actually for.
+             */
+            if (r->neighbors && hh_neighbor_get(r->neighbors, rt->next_hop)) {
+                rt->last_used = now;
+            }
+
             /* Expire on inactivity (ACTIVE_ROUTE_TIMEOUT analogue). */
             if (now - rt->last_used > r->cfg->route_active_timeout_ms) {
                 rt->valid = false;
@@ -318,7 +361,8 @@ size_t hh_routing_tick(hh_routing_t *r, hh_time_ms_t now)
     return changed;
 }
 
-size_t hh_routing_build_update(const hh_routing_t *r, hh_route_update_t *out)
+size_t hh_routing_build_update_for(const hh_routing_t *r, hh_node_id_t to,
+                                   hh_route_update_t *out)
 {
     size_t n = 0;
     if (!r || !out) return 0;
@@ -327,10 +371,33 @@ size_t hh_routing_build_update(const hh_routing_t *r, hh_route_update_t *out)
     out->sender = r->cfg->node_id;
     for (size_t i = 0; i < HH_ROUTING_MAX && n < HH_ROUTE_UPDATE_MAX_ENTRIES; i++) {
         const hh_route_t *rt = &r->routes[i];
-        if (!rt->used || !rt->valid) continue;
+        bool poison;
+        if (!rt->used) continue;
+
+        /* Never tell a node about a route to itself: it knows whether it
+         * exists, and our view of it is at best one hop stale. */
+        if (to != HH_NODE_ID_INVALID && rt->destination == to) continue;
+
+        /* A route that was never installed carries no information. */
+        if (!rt->valid && rt->invalidated_at == 0) continue;
+
+        /* Split horizon with poisoned reverse. Advertising a route back to the
+         * neighbor it was learned from lets the two of them believe each other
+         * still has a path after the real one breaks, and their hop counts climb
+         * together -- a count-to-infinity loop, which a multi-node scenario
+         * exposed. Sending an infinite hop count actively withdraws the route,
+         * converging faster than falling silent would.
+         *
+         * A directly-connected neighbor has learned_from == INVALID, so a
+         * direct route is never poisoned by this rule. */
+        poison = (!rt->valid) ||
+                 (to != HH_NODE_ID_INVALID &&
+                  rt->learned_from != HH_NODE_ID_INVALID &&
+                  rt->learned_from == to);
+
         out->entries[n].originator  = rt->destination;
         out->entries[n].sequence_no = rt->sequence_no;
-        out->entries[n].hop_count   = rt->hop_count;
+        out->entries[n].hop_count   = poison ? (uint8_t)HH_HOP_INFINITY : rt->hop_count;
         /* Advertise a normalized quality, not our raw cost: the receiver
          * recomputes cost against its own link to us. */
         out->entries[n].metric = rt->metric > 1.0f ? 1.0f : rt->metric;
@@ -338,6 +405,11 @@ size_t hh_routing_build_update(const hh_routing_t *r, hh_route_update_t *out)
     }
     out->count = (uint8_t)n;
     return n;
+}
+
+size_t hh_routing_build_update(const hh_routing_t *r, hh_route_update_t *out)
+{
+    return hh_routing_build_update_for(r, HH_NODE_ID_INVALID, out);
 }
 
 void hh_routing_damp(hh_routing_t *r, hh_node_id_t next_hop, hh_time_ms_t now)

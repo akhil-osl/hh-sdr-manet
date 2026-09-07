@@ -247,12 +247,21 @@ static void handle_route_update(hh_node_t *n, const hh_frame_t *f, hh_time_ms_t 
     n->route_updates_rx++;
     for (uint8_t i = 0; i < u.count; i++) {
         const hh_route_update_entry_t *e = &u.entries[i];
+        uint8_t hops;
         if (e->originator == n->cfg.node_id) continue;   /* never route to self */
+
         /* Distance vector: the advertised route costs one more hop through the
-         * sender. Routing applies the freshness/metric rule and validates the
-         * next hop against the authoritative neighbor table. */
+         * sender. An already-infinite hop count stays infinite rather than
+         * wrapping to zero, so a poisoned-reverse withdrawal is not silently
+         * turned back into an attractive zero-hop route. */
+        hops = (e->hop_count >= (uint8_t)(HH_HOP_INFINITY - 1))
+             ? (uint8_t)HH_HOP_INFINITY
+             : (uint8_t)(e->hop_count + 1);
+
+        /* Routing applies the freshness/metric rule and validates the next hop
+         * against the authoritative neighbor table. */
         hh_routing_offer(&n->routing, e->originator, u.sender, e->sequence_no,
-                         (uint8_t)(e->hop_count + 1), e->metric, now);
+                         hops, e->metric, now);
     }
 }
 
@@ -275,27 +284,39 @@ void hh_node_on_frame(hh_node_t *n, const hh_frame_t *f, const hh_link_sample_t 
     }
 }
 
-/* Broadcast our route table so neighbors can build multi-hop routes. */
+/*
+ * Send one route update per neighbor.
+ *
+ * Split horizon is per-recipient by nature: a route learned from neighbor A
+ * must not be advertised back to A, but should still be advertised to B. That
+ * requires a distinct update per neighbor rather than one broadcast, so each
+ * is addressed to its recipient.
+ */
 static void send_route_update(hh_node_t *n, hh_time_ms_t now)
 {
-    hh_route_update_t u;
-    hh_frame_t f;
-    size_t len;
+    hh_node_id_t neighbors[HH_MAX_NEIGHBORS];
+    size_t count = hh_neighbor_list(&n->neighbors, neighbors, HH_MAX_NEIGHBORS);
 
-    if (hh_routing_build_update(&n->routing, &u) == 0) return;
+    for (size_t i = 0; i < count; i++) {
+        hh_route_update_t u;
+        hh_frame_t f;
+        size_t len;
 
-    memset(&f, 0, sizeof f);
-    f.kind = HH_FRAME_ROUTING;
-    f.src  = n->cfg.node_id;
-    f.dst  = HH_NODE_ID_INVALID;   /* broadcast to one hop */
-    len = hh_route_update_encode(&u, f.data, sizeof f.data);
-    if (len == 0) return;
-    f.len = (uint16_t)len;
+        if (hh_routing_build_update_for(&n->routing, neighbors[i], &u) == 0) continue;
 
-    if (hh_radio_transmit(n->radio, &f) == HH_OK) {
-        n->route_updates_sent++;
-        HH_LOGD(COMP, "route_update_tx", "node=%u entries=%u t_ms=%llu",
-                n->cfg.node_id, u.count, (unsigned long long)now);
+        memset(&f, 0, sizeof f);
+        f.kind = HH_FRAME_ROUTING;
+        f.src  = n->cfg.node_id;
+        f.dst  = neighbors[i];
+        len = hh_route_update_encode(&u, f.data, sizeof f.data);
+        if (len == 0) continue;
+        f.len = (uint16_t)len;
+
+        if (hh_radio_transmit(n->radio, &f) == HH_OK) {
+            n->route_updates_sent++;
+            HH_LOGD(COMP, "route_update_tx", "node=%u to=%u entries=%u t_ms=%llu",
+                    n->cfg.node_id, neighbors[i], u.count, (unsigned long long)now);
+        }
     }
 }
 

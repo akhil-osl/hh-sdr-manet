@@ -216,22 +216,37 @@ static void test_two_phase_invalidation_deletes_after_grace_window(void)
     HH_ASSERT_EQ_INT(hh_routing_count(&f.rt), 0);
 }
 
-static void test_route_expires_on_inactivity_and_refreshes_on_use(void)
+static void test_live_next_hop_keeps_route_from_ageing_out(void)
 {
     fix_t f; obs_t o; fix_init(&f, &o);
     add_neighbor(&f, 2, -45.0f);
     hh_routing_offer(&f.rt, 9, 2, 20, 2, 0.0f, f.vc.now);
 
-    /* Marking the route used refreshes its activity timer. */
-    vclock_advance(&f.vc, f.cfg.route_active_timeout_ms - 100);
-    hh_routing_mark_used(&f.rt, 9, f.vc.now);
-    vclock_advance(&f.vc, 200);
-    hh_routing_tick(&f.rt, f.vc.now);
-    HH_ASSERT(hh_routing_get(&f.rt, 9)->valid);
+    /* While the next hop remains a live neighbor the proactive update stream is
+     * maintaining this route, so it is not idle even with no data traffic over
+     * it. Ageing it out here would expire good routes on a quiet network. */
+    for (int i = 0; i < 5; i++) {
+        vclock_advance(&f.vc, f.cfg.route_active_timeout_ms);
+        hh_routing_tick(&f.rt, f.vc.now);
+    }
+    HH_ASSERT_MSG(hh_routing_get(&f.rt, 9)->valid,
+                  "route aged out despite its next hop still being a neighbor");
+    hh_dispatcher_drain(&f.bus);
+    HH_ASSERT_EQ_INT(o.withdrawals, 0);
+}
 
-    /* Left unused past the timeout, it expires. */
+static void test_route_expires_once_next_hop_is_gone(void)
+{
+    fix_t f; obs_t o; fix_init(&f, &o);
+    add_neighbor(&f, 2, -45.0f);
+    hh_routing_offer(&f.rt, 9, 2, 20, 2, 0.0f, f.vc.now);
+
+    /* Remove the neighbor without cascading invalidation, leaving the route
+     * stranded. ACTIVE_ROUTE_TIMEOUT exists for exactly this case. */
+    hh_neighbor_remove(&f.nm, 2, f.vc.now);
     vclock_advance(&f.vc, f.cfg.route_active_timeout_ms + 1);
     hh_routing_tick(&f.rt, f.vc.now);
+
     HH_ASSERT(!hh_routing_get(&f.rt, 9)->valid);
     hh_dispatcher_drain(&f.bus);
     HH_ASSERT_EQ_INT(o.last_withdraw.reason, HH_WITHDRAW_EXPIRED);
@@ -356,9 +371,84 @@ static void test_build_update_advertises_valid_routes_only(void)
     HH_ASSERT_EQ_INT(hh_routing_build_update(&f.rt, &u), 2);
     HH_ASSERT_EQ_INT(u.sender, 1);
 
-    /* An invalidated route must not be advertised onward. */
+    /* An invalidated route is advertised with an infinite hop count rather than
+     * being dropped from the update: actively withdrawing it converges faster
+     * than falling silent and waiting for neighbors to time it out. */
     hh_routing_invalidate_via(&f.rt, 2, HH_WITHDRAW_FAILURE_CASCADE, f.vc.now);
-    HH_ASSERT_EQ_INT(hh_routing_build_update(&f.rt, &u), 0);
+    HH_ASSERT_EQ_INT(hh_routing_build_update(&f.rt, &u), 2);
+    for (uint8_t i = 0; i < u.count; i++)
+        HH_ASSERT_EQ_INT(u.entries[i].hop_count, HH_HOP_INFINITY);
+}
+
+static void test_split_horizon_poisons_route_back_to_its_source(void)
+{
+    fix_t f; obs_t o; fix_init(&f, &o);
+    hh_route_update_t u;
+    bool found = false;
+
+    add_neighbor(&f, 2, -45.0f);
+    add_neighbor(&f, 3, -45.0f);
+    /* Destination 9 was learned from neighbor 2. */
+    hh_routing_offer(&f.rt, 9, 2, 20, 2, 0.0f, f.vc.now);
+
+    /* Advertised back to node 2, it must be poisoned: telling 2 that we can
+     * reach 9 through it is what creates a count-to-infinity loop. */
+    hh_routing_build_update_for(&f.rt, 2, &u);
+    for (uint8_t i = 0; i < u.count; i++) {
+        if (u.entries[i].originator == 9) {
+            found = true;
+            HH_ASSERT_EQ_INT(u.entries[i].hop_count, HH_HOP_INFINITY);
+        }
+    }
+    HH_ASSERT(found);
+
+    /* To any other neighbor it is advertised normally. */
+    found = false;
+    hh_routing_build_update_for(&f.rt, 3, &u);
+    for (uint8_t i = 0; i < u.count; i++) {
+        if (u.entries[i].originator == 9) {
+            found = true;
+            HH_ASSERT_EQ_INT(u.entries[i].hop_count, 2);
+        }
+    }
+    HH_ASSERT(found);
+}
+
+static void test_direct_neighbor_route_is_exempt_from_split_horizon(void)
+{
+    fix_t f; obs_t o; fix_init(&f, &o);
+    hh_route_update_t u;
+    bool found = false;
+
+    add_neighbor(&f, 2, -45.0f);
+    add_neighbor(&f, 3, -45.0f);
+    hh_routing_on_neighbor_up(&f.rt, 2, f.vc.now);
+
+    /* Our route to 2 comes from direct observation, not from an advertisement,
+     * so it must still be advertised to every other neighbor. */
+    hh_routing_build_update_for(&f.rt, 3, &u);
+    for (uint8_t i = 0; i < u.count; i++)
+        if (u.entries[i].originator == 2) {
+            found = true;
+            HH_ASSERT_EQ_INT(u.entries[i].hop_count, 1);
+        }
+    HH_ASSERT(found);
+}
+
+static void test_poisoned_reverse_withdraws_route(void)
+{
+    fix_t f; obs_t o; fix_init(&f, &o);
+    add_neighbor(&f, 2, -45.0f);
+    hh_routing_offer(&f.rt, 9, 2, 20, 2, 0.0f, f.vc.now);
+    HH_ASSERT(hh_routing_get(&f.rt, 9)->valid);
+
+    /* Neighbor 2 reports the destination unreachable. That withdraws our route
+     * rather than being read as a merely very long path. */
+    HH_ASSERT_ERR(hh_routing_offer(&f.rt, 9, 2, 21, HH_HOP_INFINITY, 0.0f, f.vc.now),
+                  HH_ERR_AGAIN);
+    HH_ASSERT(!hh_routing_get(&f.rt, 9)->valid);
+    hh_dispatcher_drain(&f.bus);
+    HH_ASSERT_EQ_INT(o.withdrawals, 1);
 }
 
 HH_TEST_MAIN_BEGIN("routing")
@@ -371,7 +461,8 @@ HH_TEST_MAIN_BEGIN("routing")
     HH_RUN(test_invalidation_promotes_alternate_without_recompute);
     HH_RUN(test_invalidation_cascade_marks_invalid_when_no_alternate);
     HH_RUN(test_two_phase_invalidation_deletes_after_grace_window);
-    HH_RUN(test_route_expires_on_inactivity_and_refreshes_on_use);
+    HH_RUN(test_live_next_hop_keeps_route_from_ageing_out);
+    HH_RUN(test_route_expires_once_next_hop_is_gone);
     HH_RUN(test_degraded_link_loses_to_healthy_alternate_via_metric);
     HH_RUN(test_dampened_next_hop_is_penalised);
     HH_RUN(test_hop_count_limit_and_self_route_rejected);
@@ -379,4 +470,7 @@ HH_TEST_MAIN_BEGIN("routing")
     HH_RUN(test_snapshot_lookup_excludes_invalid_routes);
     HH_RUN(test_older_snapshot_stays_consistent_after_republish);
     HH_RUN(test_build_update_advertises_valid_routes_only);
+    HH_RUN(test_split_horizon_poisons_route_back_to_its_source);
+    HH_RUN(test_direct_neighbor_route_is_exempt_from_split_horizon);
+    HH_RUN(test_poisoned_reverse_withdraws_route);
 HH_TEST_MAIN_END()

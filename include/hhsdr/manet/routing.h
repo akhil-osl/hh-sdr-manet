@@ -40,6 +40,9 @@ typedef struct {
     uint8_t      hop_count;
     bool         used;
     bool         valid;
+    /* Origin of the advertisement, for split horizon. Equal to next_hop for a
+     * learned route; HH_NODE_ID_INVALID for a directly-connected neighbor. */
+    hh_node_id_t learned_from;
 
     hh_time_ms_t installed_at;
     hh_time_ms_t last_used;
@@ -102,8 +105,24 @@ size_t hh_routing_invalidate_via(hh_routing_t *r, hh_node_id_t next_hop,
 /* Age routes: expire on inactivity, delete after the grace window. */
 size_t hh_routing_tick(hh_routing_t *r, hh_time_ms_t now);
 
-/* Build the proactive update this node broadcasts (Doc 1 §6). */
+/*
+ * Build the proactive update this node broadcasts (Doc 1 §6).
+ *
+ * Applies split horizon with poisoned reverse: a route learned from a neighbor
+ * is never advertised back to that neighbor as reachable, and is instead sent
+ * with an infinite hop count. Without this, two nodes each believe the other
+ * can still reach a lost destination and count to infinity -- which is exactly
+ * what a multi-node scenario exposed before this was added.
+ *
+ * `to` names the intended recipient. HH_NODE_ID_INVALID builds an unfiltered
+ * update (useful for diagnostics); the node broadcasts per-neighbor updates.
+ */
+size_t hh_routing_build_update_for(const hh_routing_t *r, hh_node_id_t to,
+                                   hh_route_update_t *out);
 size_t hh_routing_build_update(const hh_routing_t *r, hh_route_update_t *out);
+
+/* Hop count marking a destination as unreachable (poisoned reverse). */
+#define HH_HOP_INFINITY 255u
 
 /* Penalise a next-hop that has flapped repeatedly (Doc 1 §8 route dampening). */
 void hh_routing_damp(hh_routing_t *r, hh_node_id_t next_hop, hh_time_ms_t now);
