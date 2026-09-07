@@ -40,8 +40,14 @@ add_library(hhsdr_core STATIC
   src/manet/topology.c
   src/manet/self_healing.c
   src/manet/node.c
+  src/manet/telemetry.c
+  src/sca/resource.c
 )
 target_link_libraries(hhsdr_core PUBLIC m)
 
 enable_testing()
 add_subdirectory(tests)
+
+# Node daemon. Links only the production library — never the test simulator.
+add_executable(hh-manet src/main.c)
+target_link_libraries(hh-manet PRIVATE hhsdr_core)
