@@ -2,7 +2,7 @@
 include_directories(${CMAKE_SOURCE_DIR}/tests ${CMAKE_SOURCE_DIR}/tests/sim)
 
 # Test-only simulation infrastructure. Never linked into production targets.
-add_library(hhsim STATIC sim/mock_radio.c)
+add_library(hhsim STATIC sim/mock_radio.c sim/netsim.c)
 target_link_libraries(hhsim PUBLIC hhsdr_core)
 
 function(hh_add_test name)
@@ -23,3 +23,4 @@ hh_add_test(test_link_health unit/test_link_health.c)
 hh_add_test(test_routing    unit/test_routing.c)
 hh_add_test(test_forwarder  unit/test_forwarder.c)
 hh_add_test(test_recovery   unit/test_recovery.c)
+hh_add_test(test_integration integration/test_integration.c)

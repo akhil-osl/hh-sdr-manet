@@ -39,6 +39,7 @@ add_library(hhsdr_core STATIC
   src/manet/failure_detector.c
   src/manet/topology.c
   src/manet/self_healing.c
+  src/manet/node.c
 )
 target_link_libraries(hhsdr_core PUBLIC m)
 
