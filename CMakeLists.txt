@@ -30,6 +30,8 @@ add_library(hhsdr_core STATIC
   src/core/dispatcher.c
   src/radio/wire.c
   src/adapters/hw/hw_adapter.c
+  src/manet/discovery.c
+  src/manet/neighbor.c
 )
 target_link_libraries(hhsdr_core PUBLIC m)
 
