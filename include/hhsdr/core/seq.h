@@ -1,9 +1,9 @@
 /*
  * 32-bit wraparound-safe sequence-number comparison (RFC 1982 serial arithmetic).
  *
- * Doc 1 §4: "every beacon carries a per-node monotonic sequence number (32-bit,
+ * "every beacon carries a per-node monotonic sequence number (32-bit,
  * wraparound-safe — reusing mesh_router.py's seq_gt/seq_ge logic verbatim)".
- * The same discipline is applied to route sequence numbers (HTI spec §12 item 12
+ * The same discipline is applied to route sequence numbers (
  * records the route bit-width as TBD-by-analogy; 32-bit is used consistently).
  */
 #ifndef HHSDR_CORE_SEQ_H

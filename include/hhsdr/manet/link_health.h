@@ -1,11 +1,11 @@
 /*
- * Link Health Monitor (Doc 1 §7; SCA class: Resource).
+ * Link Health Monitor.
  *
  * Owns multi-signal fusion into a per-neighbor link state. It explicitly does
  * NOT decide what to do about a bad link — that is Self-Healing's job — and it
  * does not confirm failures, which is the Failure Detector's.
  *
- * State machine (Doc 1 §7):
+ * State machine:
  *   Healthy -> Degraded          fused score drops, sustained
  *   Degraded -> Healthy          score recovers past the high-water mark
  *   Degraded -> SuspectedFailure >= 2 independent signals miss
@@ -19,7 +19,7 @@
  * than the entry threshold (lh_recover_threshold > lh_degrade_threshold, which
  * hh_config_validate enforces), so a link cannot oscillate on noise alone.
  *
- * "No single signal alone can move a link past Degraded" (Doc 1 §7) is enforced
+ * "No single signal alone can move a link past Degraded" is enforced
  * by counting how many INDEPENDENT signal types are bad and requiring at least
  * lh_min_signals_suspect of them before SuspectedFailure.
  *
@@ -64,7 +64,7 @@ typedef struct {
     bool     prev_rssi_valid;
     float    rssi_trend;         /* negative == falling                */
 
-    /* Flap accounting for route dampening (Doc 1 §8). */
+    /* Flap accounting for route dampening. */
     uint32_t     flap_count;
     hh_time_ms_t flap_window_start;
 
@@ -80,7 +80,7 @@ typedef struct {
     size_t    count;
 
     /* Node-wide observations used to tell "my radio died" and "the channel is
-     * jammed" apart from "one neighbor went away" (Doc 1 §7). */
+     * jammed" apart from "one neighbor went away". */
     uint32_t     links_with_phy_errors;
     hh_time_ms_t last_any_rx_at;
 
@@ -99,7 +99,7 @@ hh_status_t hh_link_health_remove(hh_link_health_t *lh, hh_node_id_t id);
 hh_status_t hh_link_health_on_sample(hh_link_health_t *lh, const hh_link_sample_t *s,
                                      hh_time_ms_t now);
 
-/* A fresh valid beacon arrived: the Failed -> Recovering trigger (Doc 1 §7). */
+/* A fresh valid beacon arrived: the Failed -> Recovering trigger. */
 hh_status_t hh_link_health_on_beacon(hh_link_health_t *lh, hh_node_id_t id,
                                      hh_time_ms_t now);
 

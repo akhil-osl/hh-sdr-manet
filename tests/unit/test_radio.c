@@ -115,7 +115,7 @@ static void test_mock_models_radio_failure(void)
     memset(&f, 0, sizeof f); memset(&s, 0, sizeof s);
     mock_radio_enqueue_rx(&m, &f, &s, 100);
 
-    /* Own-radio failure: no tx, no rx, status reports it (Doc 1 §7). */
+    /* Own-radio failure: no tx, no rx, status reports it. */
     m.operational = false;
     HH_ASSERT_ERR(hh_radio_transmit(&r, &f), HH_ERR_IO);
     hh_radio_poll(&r, 200);

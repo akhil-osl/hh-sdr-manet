@@ -1,5 +1,5 @@
 /*
- * Routing Engine tests (Doc 1 §6, §8, §10).
+ * Routing Engine tests.
  *
  * Covers the selection rule, two-phase invalidation, alternate-route promotion,
  * route aging, dampening, and the snapshot contract the forwarder depends on.
@@ -82,7 +82,7 @@ static void test_neighbor_up_installs_one_hop_route(void)
 static void test_route_rejected_without_valid_next_hop_neighbor(void)
 {
     fix_t f; obs_t o; fix_init(&f, &o);
-    /* Doc 1 §6: "a route is only as valid as its next-hop neighbor entry". */
+    /* "a route is only as valid as its next-hop neighbor entry". */
     HH_ASSERT_ERR(hh_routing_offer(&f.rt, 5, 2, 10, 2, 0.1f, f.vc.now), HH_ERR_NOTFOUND);
     HH_ASSERT_EQ_INT(hh_routing_count(&f.rt), 0);
 }
@@ -126,7 +126,7 @@ static void test_equal_sequence_better_metric_wins_after_holddown(void)
     HH_ASSERT_EQ_INT(hh_routing_get(&f.rt, 9)->next_hop, 2);
 
     /* Inside the hold-down window a fresh route is protected from replacement
-     * at equal sequence (Doc 1 §8). */
+     * at equal sequence. */
     HH_ASSERT_ERR(hh_routing_offer(&f.rt, 9, 3, 20, 2, 0.0f, f.vc.now), HH_ERR_AGAIN);
     HH_ASSERT_EQ_INT(hh_routing_get(&f.rt, 9)->next_hop, 2);
 
@@ -267,7 +267,7 @@ static void test_degraded_link_loses_to_healthy_alternate_via_metric(void)
     for (int i = 0; i < 20; i++) hh_link_health_on_sample(&f.lh, &bad, f.vc.now);
     HH_ASSERT_EQ_INT(hh_link_health_state(&f.lh, 2), HH_LINK_DEGRADED);
 
-    /* Doc 1 §8: degradation is handled inside the metric — the degraded link
+    /* degradation is handled inside the metric — the degraded link
      * simply loses the comparison, with no invalidation and no event storm. */
     vclock_advance(&f.vc, f.cfg.hold_down_ms + 1);
     HH_ASSERT_OK(hh_routing_offer(&f.rt, 9, 3, 20, 2, 0.0f, f.vc.now));
@@ -351,7 +351,7 @@ static void test_older_snapshot_stays_consistent_after_republish(void)
     hh_routing_offer(&f.rt, 9, 2, 20, 2, 0.0f, f.vc.now);
 
     /* A reader holding a snapshot must keep a coherent view even as the writer
-     * publishes a new one — the fast-path invariant from Doc 1 §10. */
+     * publishes a new one — the fast-path invariant. */
     held = hh_routing_snapshot(&f.rt);
     HH_ASSERT_EQ_INT(held->count, 1);
 

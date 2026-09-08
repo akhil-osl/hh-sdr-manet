@@ -45,6 +45,18 @@ typedef struct {
     bool         used;
 } sim_node_t;
 
+/*
+ * Frame observation hook. Called for every frame the virtual medium actually
+ * moves or drops, so a caller can trace real hops rather than modelling them
+ * separately. `delivered` is false when the link's loss model dropped it.
+ */
+typedef void (*netsim_frame_fn)(hh_node_id_t from, hh_node_id_t to,
+                                const hh_frame_t *f, bool delivered,
+                                hh_time_ms_t now, void *ctx);
+
+/* Called when a node's tick completes, for per-step observation. */
+typedef void (*netsim_step_fn)(hh_time_ms_t now, void *ctx);
+
 typedef struct {
     vclock_t   vc;
     sim_node_t nodes[SIM_MAX_NODES];
@@ -54,7 +66,25 @@ typedef struct {
     uint64_t   rng;
     uint64_t   frames_delivered;
     uint64_t   frames_dropped;
+
+    /* Observation hooks. Purely additive: when unset the simulator behaves
+     * exactly as before, so existing scenario tests are unaffected. */
+    netsim_frame_fn on_frame;
+    void           *on_frame_ctx;
+    netsim_step_fn  on_step;
+    void           *on_step_ctx;
+
+    /* Id of the node currently being ticked, so an observer can attribute a
+     * log record to its emitter. HH_NODE_ID_INVALID outside a tick. */
+    hh_node_id_t current_node;
 } netsim_t;
+
+void netsim_set_frame_observer(netsim_t *s, netsim_frame_fn fn, void *ctx);
+void netsim_set_step_observer(netsim_t *s, netsim_step_fn fn, void *ctx);
+
+/* Advance exactly one step (tick every node, then move frames). Lets a driver
+ * interleave its own work between steps, which netsim_run() cannot. */
+void netsim_step(netsim_t *s, uint32_t step_ms);
 
 void netsim_init(netsim_t *s, uint64_t seed);
 

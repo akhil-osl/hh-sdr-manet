@@ -26,7 +26,7 @@ void hh_config_defaults(hh_config_t *cfg)
     cfg->lh_ewma_shift         = 2;
     cfg->lh_suspect_hold_ms    = 2000;
     cfg->lh_recover_hold_ms    = 3000;
-    cfg->lh_min_signals_suspect = 2;      /* Doc 1 §7: ">= 2 independent signals" */
+    cfg->lh_min_signals_suspect = 2;      /* : ">= 2 independent signals" */
 
     cfg->route_active_timeout_ms  = 6000;
     cfg->route_delete_period_ms   = 6000;
@@ -62,7 +62,7 @@ hh_status_t hh_config_validate(const hh_config_t *cfg)
     if (cfg->neighbor_allowed_loss == 0) return HH_ERR_INVAL;
     if (cfg->max_neighbors == 0 || cfg->max_routes == 0) return HH_ERR_INVAL;
     /* Hysteresis is the point of these two thresholds: recover must be strictly
-     * stricter than degrade, else a link can oscillate on noise (Doc 1 §7). */
+     * stricter than degrade, else a link can oscillate on noise. */
     if (!(cfg->lh_recover_threshold > cfg->lh_degrade_threshold)) return HH_ERR_INVAL;
     if (cfg->lh_degrade_threshold < 0.0f || cfg->lh_recover_threshold > 1.0f) return HH_ERR_INVAL;
     if (cfg->lh_min_signals_suspect == 0) return HH_ERR_INVAL;

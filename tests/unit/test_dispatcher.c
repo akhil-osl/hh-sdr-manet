@@ -1,7 +1,7 @@
 /*
  * Event dispatcher tests.
  *
- * These verify the architectural guarantees Doc 1 §11 relies on, not merely that
+ * These verify the architectural guarantees relies on, not merely that
  * events arrive: per-subscriber queue isolation, type filtering, boundedness
  * under overload, and non-reentrant delivery.
  */
@@ -43,7 +43,7 @@ static void test_publish_delivers_only_on_drain(void)
 
     HH_ASSERT_OK(hh_dispatcher_publish(&d, &ev));
     /* Publishing must not run handlers inline: that is what keeps a slow
-     * subscriber off the publisher's latency path (Doc 1 §3, §11). */
+     * subscriber off the publisher's latency path. */
     HH_ASSERT_EQ_INT(r.count, 0);
     HH_ASSERT_EQ_INT(hh_dispatcher_pending(&d), 1);
 

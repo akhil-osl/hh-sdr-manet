@@ -1,5 +1,5 @@
 /*
- * Integration tests: the wiring between components (task §6).
+ * Integration tests: the wiring between components.
  *
  * Each test drives one component's real output and asserts the downstream
  * component reacted, exercising the event-bus path rather than calling the
@@ -154,7 +154,7 @@ static void test_routing_to_topology(void)
     HH_ASSERT(!hh_topology_node(&n1->node.topology, 3)->is_neighbor);
 }
 
-/* ---- Lifecycle ordering (SCA, Doc 1 §3) ---- */
+/* ---- Lifecycle ordering (SCA) ---- */
 static void test_lifecycle_ordering_enforced(void)
 {
     netsim_t s;
@@ -214,7 +214,7 @@ static void test_link_health_drives_discovery_cadence(void)
 }
 
 /*
- * The full Doc 1 §8 pipeline must actually run on a link failure:
+ * The full pipeline must actually run on a link failure:
  * detection -> classification -> confirmation -> recovery.
  *
  * This exists because a demonstration run showed routes rerouting correctly

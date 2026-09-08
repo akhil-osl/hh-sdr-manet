@@ -1,18 +1,18 @@
 /*
- * Route table snapshot (Doc 1 §6, §10, §12; HTI-08).
+ * Route table snapshot.
  *
  * THE fast-path contract: "the only thing the data plane ever reads from the
  * control plane is a pointer to the current route-table snapshot, swapped
  * atomically. The data plane never takes a lock the control plane can also
  * hold, never waits on a control-plane computation, and never blocks on an IPC
- * round-trip." (Doc 1 §10)
+ * round-trip."
  *
  * A snapshot is IMMUTABLE once published. The Routing Engine is the sole writer:
  * it builds a new snapshot off to the side and swaps the pointer in one atomic
  * store. Readers take no lock at all — a reader holding an older snapshot keeps
  * a consistent view rather than seeing a half-updated table.
  *
- * Forwarding is a flat next-hop lookup. It never walks a graph (Doc 1 §3).
+ * Forwarding is a flat next-hop lookup. It never walks a graph.
  */
 #ifndef HHSDR_MANET_ROUTE_TABLE_H
 #define HHSDR_MANET_ROUTE_TABLE_H
@@ -29,7 +29,7 @@ typedef struct {
     hh_seq_t     sequence_no;
     uint8_t      hop_count;
     bool         valid;         /* false == marked invalid, awaiting delete   */
-    /* Warm standby (Doc 1 §6): the second-best next hop, so Self-Healing can
+    /* Warm standby: the second-best next hop, so Self-Healing can
      * switch without a full recompute. */
     hh_node_id_t alt_next_hop;
     float        alt_metric;

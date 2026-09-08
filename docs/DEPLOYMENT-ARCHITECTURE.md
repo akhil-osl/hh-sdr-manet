@@ -48,7 +48,7 @@ Exactly four things ship. Nothing else is required at runtime.
 | `/usr/bin/hh-manet` | Node daemon | ELF, stripped | The only executable |
 | `/etc/hh-manet/node.conf` | Node configuration | Text `key = value` | Per-node; `node_id` differs per unit |
 | `/lib/systemd/system/hh-manet.service` | Service unit | systemd unit | Boot integration |
-| `/usr/lib/libhhsdr_radio_hw.so` | **FPGA radio adapter** | Shared object | **Does not exist yet** — see §7 |
+| `/usr/lib/libhhsdr_radio_hw.so` | **FPGA radio adapter** | Shared object | **Does not exist yet** — see |
 
 **Deliberately not shipped:** headers, the static library, the test binaries, the
 simulator, `demo_selfheal`, and CMake files. The target carries a daemon and its
@@ -79,7 +79,7 @@ that guarantee rather than having to police it — it simply never builds
 `tests/`.
 
 Host validation runs on x86-64 because the logic is architecture-independent.
-Cross-architecture confidence comes from §5.
+Cross-architecture confidence comes from.
 
 ---
 
@@ -97,7 +97,7 @@ src/dataplane/  src/sca/        src/adapters/     src/main.c
 **Static linkage of the project's own code is intentional**: the daemon is one
 self-contained binary with no internal `.so` versioning to manage in the field.
 The only dynamic dependency is the C library, plus — in future — the FPGA
-adapter, which is dynamic *by design* (§7).
+adapter, which is dynamic *by design*.
 
 ### Toolchain
 The PetaLinux/Yocto SDK cross-toolchain for the target (ARM Cortex-A). The
@@ -116,7 +116,7 @@ Two decisions to make when the recipe is written:
    clean — but it must be compiled and the warnings read, not assumed.
 2. `hh_node_t` static footprint shrinks on ARM32 (fewer pointer bytes) — confirm
    it fits the target's memory budget.
-3. Confirm no `__atomic_*` libcalls are emitted (§1).
+3. Confirm no `__atomic_*` libcalls are emitted.
 
 ---
 
@@ -270,7 +270,7 @@ things the architecture deliberately decoupled.
 
 ### Bitstream
 The FPGA bitstream is a separate artifact on its own lifecycle, loaded before
-the service starts (§7). Its packaging is a PetaLinux/Vivado concern outside
+the service starts. Its packaging is a PetaLinux/Vivado concern outside
 this stack's scope, but the **version relationship between bitstream and adapter
 must be explicit**, since a mismatched pair is exactly the failure this
 separation is meant to make obvious rather than mysterious.
@@ -298,4 +298,4 @@ separation is meant to make obvious rather than mysterious.
 6. **libatomic** — confirm not needed on the specific toolchain.
 7. **Bitstream ↔ adapter version compatibility** expression.
 8. **Whether the production image ships the service enabled** — it must not,
-   until the radio adapter is real (§7).
+   until the radio adapter is real.

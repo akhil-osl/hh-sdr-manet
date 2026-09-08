@@ -27,7 +27,25 @@ hh_add_test(test_integration integration/test_integration.c)
 hh_add_test(test_scenarios  scenario/test_scenarios.c)
 hh_add_test(test_telemetry_sca unit/test_telemetry_sca.c)
 
+# Tests for the simulation tooling itself. Needs the tools/sim sources, which
+# are development tooling and never linked into the production library.
+add_executable(test_simui unit/test_simui.c ${CMAKE_SOURCE_DIR}/tools/sim/simui.c)
+target_include_directories(test_simui PRIVATE ${CMAKE_SOURCE_DIR}/tools/sim)
+target_link_libraries(test_simui PRIVATE hhsdr_core hhsim)
+add_test(NAME test_simui COMMAND test_simui)
+
 # Demonstration binary: prints network behavior for a human reader.
 # Not registered as a test; it is a tool for inspecting the stack by eye.
 add_executable(demo_selfheal ${CMAKE_SOURCE_DIR}/tools/demo_selfheal.c)
 target_link_libraries(demo_selfheal PRIVATE hhsdr_core hhsim)
+
+# hh-manet-sim: the multi-node simulation driver. Development tooling only --
+# it links the production library plus the test simulator, and is never linked
+# into the hh-manet daemon.
+add_executable(hh-manet-sim
+  ${CMAKE_SOURCE_DIR}/tools/sim/hh_manet_sim.c
+  ${CMAKE_SOURCE_DIR}/tools/sim/simui.c)
+target_include_directories(hh-manet-sim PRIVATE ${CMAKE_SOURCE_DIR}/tools/sim)
+target_link_libraries(hh-manet-sim PRIVATE hhsdr_core hhsim)
+set_target_properties(hh-manet-sim PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})

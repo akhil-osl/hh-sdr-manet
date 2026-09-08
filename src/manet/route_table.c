@@ -28,7 +28,7 @@ void hh_route_publisher_commit(hh_route_publisher_t *p, hh_route_snapshot_t *dra
 {
     if (!p || !draft) return;
     /* The entire publish is one atomic pointer store: the fast path never
-     * observes a partially-built table and never blocks (Doc 1 §10). */
+     * observes a partially-built table and never blocks. */
     atomic_store(&p->current, draft);
     p->next_buffer ^= 1u;
 }

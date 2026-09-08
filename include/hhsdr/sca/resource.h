@@ -1,11 +1,11 @@
 /*
- * SCA 2.2.2 compatibility layer (Doc 1 §3, §12, §14).
+ * SCA 2.2.2 compatibility layer.
  *
  * ==========================================================================
  * WHAT THIS IS, AND WHAT IT IS NOT
  * ==========================================================================
  * This is SCA-COMPATIBLE ARCHITECTURE, not an SCA implementation and not a
- * conformance claim. The distinction matters and Doc 1 §14 draws it explicitly.
+ * conformance claim. The distinction matters and the architecture draws it explicitly.
  *
  * IMPLEMENTED HERE:
  *  - The CF::LifeCycle / CF::Resource state sequence as an explicit boundary
@@ -13,11 +13,11 @@
  *    configure -> start -> stop -> releaseObject, with the ordering ENFORCED
  *    rather than merely documented.
  *  - A CF::PropertySet-shaped property surface (configure/query) over the
- *    tunables Doc 1 names, each with a stable string property id and a kind.
- *  - A CF::TestableObject-shaped runTest hook, which Doc 1 §12 notes may
+ *    tunables the architecture names, each with a stable property id and kind.
+ *  - A CF::TestableObject-shaped runTest hook, which the architecture notes may
  *    conformantly raise UnknownTest for every id.
  *  - Component classification (Resource / Device / outside-the-graph) matching
- *    Doc 1 §3 exactly.
+ *     exactly.
  *
  * DELIBERATELY NOT IMPLEMENTED (would require inventing what does not exist):
  *  - CORBA ORB, IDL-generated stubs/skeletons, Naming or Event Service. SCA
@@ -37,7 +37,7 @@
 #include "hhsdr/core/config.h"
 #include "hhsdr/core/types.h"
 
-/* SCA CF component classification (Doc 1 §3). */
+/* SCA CF component classification. */
 typedef enum {
     HH_SCA_RESOURCE = 0,   /* CF::Resource, deployed by the Application    */
     HH_SCA_DEVICE,         /* CF::Device, owned by the Device Manager      */
@@ -45,7 +45,7 @@ typedef enum {
     HH_SCA_OUTSIDE_GRAPH   /* explicitly outside the SCA Resource graph    */
 } hh_sca_class_t;
 
-/* CF::LifeCycle / CF::Resource state sequence (Doc 1 §3). */
+/* CF::LifeCycle / CF::Resource state sequence. */
 typedef enum {
     HH_SCA_UNINITIALIZED = 0,
     HH_SCA_INITIALIZED,
@@ -59,7 +59,7 @@ typedef enum {
 const char *hh_sca_class_str(hh_sca_class_t c);
 const char *hh_sca_lifecycle_str(hh_sca_lifecycle_t s);
 
-/* PRF property kinds (Doc 1 §12). */
+/* PRF property kinds. */
 typedef enum {
     HH_PROP_CONFIGURE = 0,   /* runtime-tunable via configure()    */
     HH_PROP_EXECPARAM,       /* set at launch                      */
@@ -82,7 +82,7 @@ typedef struct {
     const char    *description;
 } hh_sca_property_t;
 
-/* The property surface, derived from the tunables Doc 1 §§4-8 name. */
+/* The property surface, derived from the tunables the architecture name. */
 const hh_sca_property_t *hh_sca_properties(size_t *count);
 const hh_sca_property_t *hh_sca_property_find(const char *id);
 
@@ -126,7 +126,7 @@ hh_status_t hh_sca_start(hh_sca_resource_t *r);
 hh_status_t hh_sca_stop(hh_sca_resource_t *r);
 hh_status_t hh_sca_release(hh_sca_resource_t *r);
 
-/* CF::TestableObject::runTest. Doc 1 §12 records that a component without a
+/* CF::TestableObject::runTest. the architecture records that a component without a
  * meaningful built-in test may conformantly raise UnknownTest for every id. */
 #define HH_SCA_TEST_SELF_CHECK 1u
 hh_status_t hh_sca_run_test(const hh_sca_resource_t *r, uint32_t test_id,

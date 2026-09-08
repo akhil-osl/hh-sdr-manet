@@ -235,7 +235,12 @@ static void deliver_frames(netsim_t *s, hh_time_ms_t now)
                 if (!l->up) continue;
                 /* Unicast frames only reach the addressed next hop. */
                 if (f->dst != HH_NODE_ID_INVALID && f->dst != rx->id) continue;
-                if (rng_drop(s, l->loss)) { s->frames_dropped++; continue; }
+                if (rng_drop(s, l->loss)) {
+                    s->frames_dropped++;
+                    if (s->on_frame) s->on_frame(tx->id, rx->id, f, false, now,
+                                                 s->on_frame_ctx);
+                    continue;
+                }
 
                 memset(&m, 0, sizeof m);
                 m.neighbor_id = tx->id;
@@ -248,10 +253,43 @@ static void deliver_frames(netsim_t *s, hh_time_ms_t now)
 
                 mock_radio_enqueue_rx(&rx->mock, f, &m, now + l->delay_ms);
                 s->frames_delivered++;
+                if (s->on_frame) s->on_frame(tx->id, rx->id, f, true, now,
+                                             s->on_frame_ctx);
             }
         }
         mock_radio_clear_tx_log(&tx->mock);
     }
+}
+
+void netsim_set_frame_observer(netsim_t *s, netsim_frame_fn fn, void *ctx)
+{
+    if (!s) return;
+    s->on_frame = fn;
+    s->on_frame_ctx = ctx;
+}
+
+void netsim_set_step_observer(netsim_t *s, netsim_step_fn fn, void *ctx)
+{
+    if (!s) return;
+    s->on_step = fn;
+    s->on_step_ctx = ctx;
+}
+
+void netsim_step(netsim_t *s, uint32_t step_ms)
+{
+    if (!s) return;
+    if (step_ms == 0) step_ms = 10;
+
+    for (size_t i = 0; i < s->node_count; i++) {
+        sim_node_t *n = &s->nodes[i];
+        if (!n->used || !n->alive) continue;
+        s->current_node = n->id;
+        hh_node_tick(&n->node, s->vc.now);
+    }
+    s->current_node = HH_NODE_ID_INVALID;
+    deliver_frames(s, s->vc.now);
+    if (s->on_step) s->on_step(s->vc.now, s->on_step_ctx);
+    vclock_advance(&s->vc, step_ms);
 }
 
 void netsim_run(netsim_t *s, uint32_t duration_ms, uint32_t step_ms)
@@ -260,12 +298,7 @@ void netsim_run(netsim_t *s, uint32_t duration_ms, uint32_t step_ms)
     if (step_ms == 0) step_ms = 10;
 
     while (elapsed < duration_ms) {
-        for (size_t i = 0; i < s->node_count; i++) {
-            sim_node_t *n = &s->nodes[i];
-            if (n->used && n->alive) hh_node_tick(&n->node, s->vc.now);
-        }
-        deliver_frames(s, s->vc.now);
-        vclock_advance(&s->vc, step_ms);
+        netsim_step(s, step_ms);
         elapsed += step_ms;
     }
 }

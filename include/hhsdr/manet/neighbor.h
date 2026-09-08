@@ -1,5 +1,5 @@
 /*
- * Neighbor Manager (Doc 1 §3, §4; SCA class: Resource).
+ * Neighbor Manager.
  *
  * THE authoritative source of one-hop neighbor information. It is the sole
  * writer of the Neighbor Table; every other component reads snapshots and
@@ -12,7 +12,7 @@
  *
  * Expiry is by cadence, not wall-clock: a neighbor is expired after
  * neighbor_allowed_loss missed beacons at the interval that neighbor was last
- * observed to use, which is what Doc 1 §4 specifies. The table is bounded with
+ * observed to use, which is what the architecture specifies. The table is bounded with
  * LRU eviction (MAX_NEIGHBOUR_TABLE_ENTRIES lineage).
  */
 #ifndef HHSDR_MANET_NEIGHBOR_H
@@ -78,7 +78,7 @@ hh_status_t hh_neighbor_on_beacon(hh_neighbor_mgr_t *nm, const hh_beacon_t *b,
  * NeighborDown for each. Returns how many expired.
  *
  * `confirmed_failed` is an optional predicate asking the Link Health Monitor
- * whether a neighbor's link has reached Failed. Doc 1 §4 requires a silent
+ * whether a neighbor's link has reached Failed. the architecture requires a silent
  * neighbor to transition through the link-health state machine rather than
  * being deleted by a timer, so while the predicate says "not yet failed" the
  * entry is retained past its nominal deadline and the state machine is allowed

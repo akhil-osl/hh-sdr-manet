@@ -1,10 +1,10 @@
 /*
- * Packet Forwarder — Data Plane (Doc 1 §3, §10; HTI-08/09 destination).
+ * Packet Forwarder — Data Plane.
  *
  * Owns route-table lookup and per-packet transmission. It "never decides which
- * route is correct, only reads the table Routing Engine publishes" (Doc 1 §3).
+ * route is correct; it only reads the table the Routing Engine publishes.
  *
- * SCA: deliberately OUTSIDE the SCA Resource graph (Doc 1 §14) — the descriptor
+ * SCA: deliberately OUTSIDE the SCA Resource graph — the descriptor
  * -driven deployment model governs component lifecycle and interconnection, not
  * sub-microsecond forwarding-path timing.
  *
@@ -13,7 +13,7 @@
  *    route snapshot pointer. No lock, no blocking, no IPC round trip.
  *  - Performs NO routing computation. On a route miss it buffers briefly or
  *    drops, and lets the control plane resolve the route asynchronously — the
- *    pattern Doc 1 §10 specifies.
+ *    pattern the architecture specifies.
  *  - Emits no telemetry synchronously: counters are plain increments read by
  *    the management plane out of band.
  */
@@ -37,7 +37,7 @@ typedef struct {
     hh_radio_t                 *radio;
     const hh_route_publisher_t *routes;   /* read-only snapshot source */
 
-    /* Bounded pending queue for route misses. Doc 1 §10: "a route miss is
+    /* Bounded pending queue for route misses.: "a route miss is
      * buffered briefly or dropped while control plane resolves it
      * asynchronously". */
     hh_pending_packet_t pending[HH_FWD_QUEUE_MAX];

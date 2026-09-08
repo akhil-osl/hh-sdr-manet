@@ -1,14 +1,14 @@
 /*
- * Management / Telemetry (Doc 1 §10; HTI-01, HTI-02, HTI-15).
+ * Management / Telemetry.
  *
- * Read-only export of node, neighbor, link, route, and radio state. Doc 1 §10
+ * Read-only export of node, neighbor, link, route, and radio state. 
  * requires that this "never sits on any layer's critical path": nothing here is
  * called from the forwarding path, and it only reads state other components
  * already own. It takes no lock the control plane can hold.
  *
  * Output is line-oriented key=value, the same shape as the structured log, so
  * an operator console or an automated test can consume it without a parser.
- * The HW/SW spec §12 item 13 records the NodeStatus payload schema as TBD; this
+ * The architecture records the NodeStatus payload schema as TBD; this
  * is a concrete interim schema, not a specification contract.
  */
 #ifndef HHSDR_MANET_TELEMETRY_H

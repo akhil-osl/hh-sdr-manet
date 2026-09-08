@@ -1,5 +1,5 @@
 /*
- * Structured logging (Doc 1 §11 observability requirement).
+ * Structured logging.
  *
  * Emits one key=value record per line so both operators and automated tests can
  * consume it. Tests assert on these records rather than on internal state, which

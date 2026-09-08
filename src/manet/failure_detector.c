@@ -40,7 +40,7 @@ hh_status_t hh_fd_on_link_state(hh_failure_detector_t *fd,
     if (!e) return HH_ERR_NOMEM;
 
     if (ev->new_state == HH_LINK_SUSPECTED_FAILURE) {
-        /* Suspicion is recorded but never announced: Doc 1 §8 is explicit that
+        /* Suspicion is recorded but never announced: the architecture is explicit that
          * "Degradation Detected alone, without confirmation, never reaches
          * route invalidation." */
         if (!e->suspected_at) e->suspected_at = now;

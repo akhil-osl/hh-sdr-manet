@@ -1,5 +1,5 @@
 /*
- * Multi-node MANET scenarios (task §6, items 1-14).
+ * Multi-node MANET scenarios.
  *
  * Every scenario runs the real production stack across virtual nodes and
  * asserts observable network behavior -- routes converging, next hops changing,
@@ -131,7 +131,7 @@ static void test_05_link_degradation(void)
     HH_ASSERT_EQ_INT(hh_link_health_state(&n1->node.link_health, 2), HH_LINK_HEALTHY);
 
     /* Degrade one signal only: the link must degrade but NOT be torn down,
-     * since no single signal may move a link past Degraded (Doc 1 §7). */
+     * since no single signal may move a link past Degraded. */
     netsim_link_set_quality(&s, 1, 2, -90.0f, 22.0f, 0.02f);
     netsim_run(&s, 2000, STEP_MS);
 

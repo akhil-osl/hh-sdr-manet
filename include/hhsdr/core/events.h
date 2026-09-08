@@ -32,7 +32,7 @@ typedef enum {
 
 const char *hh_event_type_str(hh_event_type_t t);
 
-/* ---- HTI-04: DiscoveryBeacon (field list Defined in Doc 1 §4) ---- */
+/* ---- HTI-04: DiscoveryBeacon (field list Defined) ---- */
 typedef struct {
     hh_node_id_t node_id;
     uint16_t     protocol_version;
@@ -43,7 +43,7 @@ typedef struct {
     float        channel_freq;
     uint32_t     supported_waveforms;  /* encoding TBD                        */
     bool         routing_capable;
-    /* Optional fields — must degrade gracefully when absent (Doc 1 §4). */
+    /* Optional fields — must degrade gracefully when absent. */
     bool  position_valid;
     float position_x, position_y, position_z;
     bool  power_valid;
@@ -55,7 +55,7 @@ typedef struct {
  * format, since a sender cannot measure the receiver's RSSI. */
 typedef struct {
     hh_node_id_t neighbor_id;
-    float    rssi;            /* dBm; units TBD (HTI spec §12 item 2)         */
+    float    rssi;            /* dBm; units TBD */
     float    snr;             /* dB;  units TBD                               */
     float    per;             /* 0..1 packet error rate; units TBD            */
     uint32_t retransmit_count;
@@ -84,7 +84,7 @@ typedef struct {
     uint32_t     changed_attributes;   /* HH_NBR_ATTR_* bit-field */
 } hh_ev_neighbor_changed_t;
 
-/* ---- HTI-07: LinkStateChanged (signature Defined in Doc 1 §7) ---- */
+/* ---- HTI-07: LinkStateChanged (signature Defined) ---- */
 typedef struct {
     hh_node_id_t    neighbor;
     hh_link_state_t old_state;
@@ -96,7 +96,7 @@ typedef struct {
 typedef struct {
     hh_node_id_t destination;
     hh_node_id_t next_hop;
-    float        metric;        /* composite (Doc 1 §6): lower is better */
+    float        metric;        /* composite: lower is better */
     hh_seq_t     sequence_no;
     uint8_t      hop_count;
 } hh_ev_route_installed_t;

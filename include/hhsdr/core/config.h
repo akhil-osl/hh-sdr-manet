@@ -1,13 +1,13 @@
 /*
- * Node configuration (Doc 1 §10 / task §10: configuration separated from
- * implementation; no topology or scenario hard-coded into production code).
+ * Node configuration: configuration is separated from implementation, with no
+ * topology or scenario hard-coded into production code.
  *
- * Every value here is a tunable Doc 1 names but does not assign a number to
- * (HTI spec §12 item 4 records all timer/threshold values as TBD). The defaults
- * below are this implementation's chosen operating point, not a specification
- * value, and each is overridable from a config file at runtime.
+ * Every value here is a tunable the architecture names but does not assign a
+ * number to. The defaults below are this implementation's chosen operating
+ * point, not a specification value, and each is overridable from a config file
+ * at runtime.
  *
- * These fields are also the SCA PRF property surface (Doc 1 §12): each maps to a
+ * These fields are also the SCA PRF property surface: each maps to a
  * `configure`-kind property applied via CF::PropertySet::configure.
  */
 #ifndef HHSDR_CORE_CONFIG_H
@@ -22,18 +22,18 @@ typedef struct {
     uint32_t     capabilities;        /* HH_CAP_* bit-field                     */
     bool         routing_capable;
 
-    /* ---- discovery (Doc 1 §4) ---- */
+    /* ---- discovery ---- */
     uint32_t beacon_interval_acq_ms;  /* fast acquisition cadence at startup    */
     uint32_t beacon_interval_ms;      /* steady-state cadence                   */
     uint32_t beacon_interval_min_ms;  /* adaptive-cadence lower bound (HTI-16)  */
     uint32_t beacon_interval_max_ms;  /* adaptive-cadence upper bound           */
     uint32_t acquisition_timeout_ms;  /* bounded timeout leaving acquisition    */
 
-    /* ---- neighbor management (Doc 1 §4) ---- */
+    /* ---- neighbor management ---- */
     uint32_t neighbor_allowed_loss;   /* missed beacons tolerated (by cadence)  */
     uint32_t max_neighbors;           /* bounded table, LRU eviction            */
 
-    /* ---- link health (Doc 1 §7) ---- */
+    /* ---- link health ---- */
     float    lh_degrade_threshold;    /* enter Degraded below this fused score  */
     float    lh_recover_threshold;    /* high-water mark to return Healthy      */
     uint32_t lh_ewma_shift;           /* EWMA smoothing (score >>= shift)       */
@@ -41,7 +41,7 @@ typedef struct {
     uint32_t lh_recover_hold_ms;      /* Recovering -> Healthy hold-down        */
     uint32_t lh_min_signals_suspect;  /* independent signals to reach Suspected */
 
-    /* ---- routing (Doc 1 §6) ---- */
+    /* ---- routing ---- */
     uint32_t route_active_timeout_ms; /* ACTIVE_ROUTE_TIMEOUT analogue          */
     uint32_t route_delete_period_ms;  /* DELETE_PERIOD grace before removal     */
     uint32_t route_update_interval_ms;/* proactive update cadence               */
@@ -51,7 +51,7 @@ typedef struct {
     float    metric_w_hop;
     float    metric_w_age;
 
-    /* ---- recovery (Doc 1 §8) ---- */
+    /* ---- recovery ---- */
     uint32_t hold_down_ms;            /* new route stability window             */
     uint32_t merge_hold_down_ms;      /* trust merged routes as primary after   */
     uint32_t dampening_flap_threshold;/* flaps in window before penalty         */

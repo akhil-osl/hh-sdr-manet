@@ -51,7 +51,7 @@ static void publish_recovery(hh_self_healing_t *sh, hh_event_type_t type,
 }
 
 /*
- * RF-interference path (Doc 1 §8): "where the cause-hint indicates interference
+ * RF-interference path: "where the cause-hint indicates interference
  * rather than a node problem, Self-Healing prefers a channel/frequency change
  * over route churn."
  * Returns true when the channel change was accepted.
@@ -74,7 +74,8 @@ static bool try_channel_change(hh_self_healing_t *sh, hh_time_ms_t now)
         return true;
     }
 
-    /* HW/SW spec §12 item 11 leaves channel-change failure behavior TBD. This
+    /* Channel-change failure behavior is left undefined by the interface
+     * specification. This
      * stack falls back to route-based recovery and records the decision rather
      * than treating the recovery as failed. */
     sh->channel_change_failures++;
@@ -120,7 +121,7 @@ hh_status_t hh_sh_on_failure(hh_self_healing_t *sh, const hh_ev_failure_t *ev,
     affected = hh_routing_invalidate_via(sh->routing, failed,
                                          HH_WITHDRAW_FAILURE_CASCADE, now);
 
-    /* Penalise a next hop that has been flapping (Doc 1 §8 route dampening). */
+    /* Penalise a next hop that has been flapping. */
     hh_routing_damp(sh->routing, failed, now);
 
     route = hh_routing_get(sh->routing, failed);
@@ -144,7 +145,7 @@ void hh_sh_on_partition(hh_self_healing_t *sh, const hh_ev_partition_t *ev,
                         hh_time_ms_t now)
 {
     if (!sh || !ev) return;
-    /* Doc 1 §8: each partition continues operating fully within itself, and no
+    /* Each partition continues operating fully within itself, and no
      * cross-partition route is asserted on stale information — those entries
      * age out normally. So there is deliberately no forced flush here. */
     HH_LOGW(COMP, "partition_response", "branch_root=%u unreachable=%u "
@@ -155,7 +156,7 @@ void hh_sh_on_partition(hh_self_healing_t *sh, const hh_ev_partition_t *ev,
 void hh_sh_on_merge(hh_self_healing_t *sh, const hh_ev_merged_t *ev, hh_time_ms_t now)
 {
     if (!sh || !ev) return;
-    /* Doc 1 §8: a hold-down delays trusting newly-merged routes as primary
+    /* A hold-down delays trusting newly-merged routes as primary
      * until sequence-number freshness has settled across both halves. The
      * Topology Manager owns the window; recovery records that it is in force. */
     HH_LOGI(COMP, "merge_response", "rejoined_neighbor=%u hold_down_until=%llu",
@@ -178,7 +179,7 @@ size_t hh_sh_tick(hh_self_healing_t *sh, hh_time_ms_t now)
         route = hh_routing_get(sh->routing, r->target);
 
         /* Connectivity restored: stabilize under hold-down before the route is
-         * trusted as primary (Doc 1 §8). */
+         * trusted as primary. */
         if (route && route->valid) {
             hold_down = now < route->hold_down_until;
             r->completed = true;

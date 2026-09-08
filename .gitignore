@@ -3,3 +3,16 @@ build/
 *.a
 __pycache__/
 *.pyc
+build-asan/
+Testing/
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+Makefile
+cmake_install.cmake
+compile_commands.json
+/hh-manet
+/hh-manet-sim
+tests/test_*
+!tests/test_*.c
+tests/demo_selfheal

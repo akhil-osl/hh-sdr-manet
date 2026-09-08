@@ -1,12 +1,8 @@
 /*
  * HH-SDR MANET — core shared types.
  *
- * Traceability: HH-SDR-Self-Healing-MANET-Architecture.md (Doc 1) and
- * docs/HH-SDR-Network-Topology-HWSW-Interface-Specification.md (HTI spec).
- *
- * Types marked TBD carry a placeholder representation taken from the HTI spec's
- * IDL module; the placeholder is Recommended, not Defined, until a HW/PHY
- * decision fixes it (HTI spec Section 12).
+ * Types marked TBD carry a placeholder representation; the placeholder is
+ * recommended, not defined, until a HW/PHY decision fixes it.
  */
 #ifndef HHSDR_CORE_TYPES_H
 #define HHSDR_CORE_TYPES_H
@@ -41,7 +37,7 @@ typedef enum {
 const char *hh_status_str(hh_status_t s);
 
 /*
- * Link health state machine (Doc 1 §7, HTI-07 old_state/new_state).
+ * Link health state machine.
  * Order is significant: worse states compare greater.
  */
 typedef enum {
@@ -55,9 +51,9 @@ typedef enum {
 const char *hh_link_state_str(hh_link_state_t s);
 
 /*
- * Failure cause classification (Doc 1 §7 "Distinguishing failure causes").
- * HTI spec Section 12 item 3 records the exact enumeration as TBD; this is the
- * closed set derived from Doc 1's five described patterns.
+ * Failure cause classification.
+ * The exact enumeration is TBD; this is the closed set derived from the five
+ * described failure patterns.
  */
 typedef enum {
     HH_CAUSE_UNKNOWN = 0,
@@ -70,7 +66,7 @@ typedef enum {
 
 const char *hh_cause_hint_str(hh_cause_hint_t c);
 
-/* Capability bit-field (HTI spec Section 12 item 7: encoding TBD).
+/* Capability bit-field (encoding TBD).
  * These bits are this implementation's encoding, not a hardware contract. */
 #define HH_CAP_ROUTING_CAPABLE (1u << 0)
 #define HH_CAP_LEAF_ONLY       (1u << 1)

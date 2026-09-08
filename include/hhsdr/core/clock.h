@@ -1,7 +1,7 @@
 /*
  * Clock abstraction.
  *
- * Doc 1 §11 requires timers that "fire exactly when due via timerfd" rather than
+ * the architecture requires timers that "fire exactly when due via timerfd" rather than
  * a poll loop. Production binds this to CLOCK_MONOTONIC; tests bind it to a
  * virtual clock so scenario timing is deterministic and reproducible without
  * sleeping. No production component reads wall-clock time directly.

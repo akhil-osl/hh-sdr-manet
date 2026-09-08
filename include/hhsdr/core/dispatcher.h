@@ -1,12 +1,12 @@
 /*
- * Event dispatcher — typed, bounded-queue publish/subscribe (Doc 1 §11).
+ * Event dispatcher — typed, bounded-queue publish/subscribe.
  *
- * Design constraints taken directly from Doc 1:
+ * Design constraints taken directly from the architecture:
  *  - "Every subscriber reads from its own queue off the same dispatcher — a slow
  *    consumer never backs up another's queue." Each subscription owns a private
  *    ring; publish copies the event into every interested ring.
  *  - No global lock. Publishing never runs subscriber callbacks inline, so a slow
- *    subsystem's latency is never coupled into a fast one's path (Doc 1 §3).
+ *    subsystem's latency is never coupled into a fast one's path.
  *  - Bounded: a full ring drops the event and counts the drop rather than
  *    growing without limit, which on an embedded target is the safer failure.
  *

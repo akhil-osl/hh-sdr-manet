@@ -4,7 +4,7 @@
 
 #define COMP "linkhealth"
 
-/* Signal quality thresholds. HTI spec §12 items 2/4 record units and thresholds
+/* Signal quality thresholds. the architecture record units and thresholds
  * as TBD; these are this implementation's operating point over the float values
  * the radio abstraction carries, not specification values. */
 #define RSSI_GOOD_DBM   (-70.0f)
@@ -70,7 +70,7 @@ hh_status_t hh_link_health_remove(hh_link_health_t *lh, hh_node_id_t id)
 }
 
 /*
- * Classify the failure cause from the observed pattern (Doc 1 §7).
+ * Classify the failure cause from the observed pattern.
  * This is a diagnostic hint, deliberately not a verdict: the Failure Detector
  * confirms, and Self-Healing chooses a strategy from it.
  */
@@ -93,7 +93,7 @@ static hh_cause_hint_t classify(const hh_link_health_t *lh, const hh_link_t *l,
         return HH_CAUSE_MOBILITY;
 
     /* Beacons landing but data ACKs failing => asymmetric link/contention,
-     * which Doc 1 §7 says stays Degraded rather than reading as failure. */
+     * which the architecture says stays Degraded rather than reading as failure. */
     if ((l->bad_signals & HH_SIG_ACK) && !(l->bad_signals & HH_SIG_BEACON))
         return HH_CAUSE_ASYMMETRIC_LINK;
 
@@ -114,7 +114,7 @@ static void transition(hh_link_health_t *lh, hh_link_t *l, hh_link_state_t next,
     if (prev == next) return;
     cause = classify(lh, l, now);
 
-    /* Flap accounting for route dampening (Doc 1 §8): count Failed->Recovering
+    /* Flap accounting for route dampening: count Failed->Recovering
      * cycles in a rolling window. */
     if (prev == HH_LINK_FAILED && next == HH_LINK_RECOVERING) {
         if (now - l->flap_window_start > lh->cfg->dampening_window_ms) {
@@ -190,7 +190,7 @@ static float fuse(hh_link_t *l, const hh_link_sample_t *s)
         if (s->per >= PER_BAD) bad |= HH_SIG_PER;
     }
     /* PHY/decode errors — distinct from MAC loss, and the key discriminator
-     * between RF interference and a node simply going away (Doc 1 §7). */
+     * between RF interference and a node simply going away. */
     if (s->phy_errors > 0) bad |= HH_SIG_PHY_ERR;
 
     /* Data-plane ACK outcome, only when the adapter can report it. */
@@ -242,7 +242,7 @@ static void reevaluate(hh_link_health_t *lh, hh_link_t *l, hh_time_ms_t now)
 
     case HH_LINK_DEGRADED:
         /* ">= 2 independent signals miss" — no single signal may push a link
-         * past Degraded, however bad that one signal is (Doc 1 §7). */
+         * past Degraded, however bad that one signal is. */
         if (nbad >= c->lh_min_signals_suspect)
             transition(lh, l, HH_LINK_SUSPECTED_FAILURE, now);
         /* Hysteresis: recovery needs the stricter high-water mark. */
@@ -320,7 +320,7 @@ hh_status_t hh_link_health_on_sample(hh_link_health_t *lh, const hh_link_sample_
         lh->links_with_phy_errors--;
 
     /* EWMA so a single bad sample cannot move the state: "requires sustained
-     * evidence, not one bad sample" (Doc 1 §7). */
+     * evidence, not one bad sample". */
     if (!l->score_primed) {
         l->score = raw;
         l->score_primed = true;
@@ -350,7 +350,7 @@ hh_status_t hh_link_health_on_beacon(hh_link_health_t *lh, hh_node_id_t id,
     lh->last_any_rx_at = now;
     l->bad_signals &= ~HH_SIG_BEACON;
 
-    /* Doc 1 §7: "Failed -> Recovering: fresh valid beacon received." */
+    /* Failed -> Recovering: a fresh valid beacon was received. */
     if (l->state == HH_LINK_FAILED)
         transition(lh, l, HH_LINK_RECOVERING, now);
 
@@ -392,7 +392,7 @@ size_t hh_link_health_tick(hh_link_health_t *lh, hh_time_ms_t now)
          * Without this a silent link stalls at Degraded, and the neighbor is
          * eventually deleted by expiry before the state machine ever reaches
          * Failed -- which would bypass the whole confirmation and recovery
-         * pipeline that Doc 1 §8 specifies.
+         * pipeline that the architecture specifies.
          */
         if (silence > (hh_time_ms_t)miss_deadline &&
             l->state != HH_LINK_FAILED && l->state != HH_LINK_RECOVERING) {

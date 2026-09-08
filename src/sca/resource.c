@@ -31,7 +31,7 @@ const char *hh_sca_lifecycle_str(hh_sca_lifecycle_t s)
 }
 
 /* ---------------------------------------------------------------------------
- * PRF property surface. Every entry corresponds to a tunable Doc 1 §§4-8 names
+ * PRF property surface. Every entry corresponds to a tunable the architecture names
  * and binds to the matching hh_config_t key, so configure() drives the real
  * configuration rather than a parallel copy.
  * ------------------------------------------------------------------------- */
@@ -159,15 +159,15 @@ static const hh_sca_component_t g_components[] = {
     { "LinkHealthMonitor",  HH_SCA_RESOURCE, PORTS(link_health_ports),      false },
     { "FailureDetector",    HH_SCA_RESOURCE, PORTS(failure_detector_ports), false },
     { "TopologyManager",    HH_SCA_RESOURCE, PORTS(topology_ports),         false },
-    /* Doc 1 §3/§14: the Routing Engine is the SAD assembly controller, since
+    /* the Routing Engine is the SAD assembly controller, since
      * every other control-plane Resource's output ultimately feeds it. */
     { "RoutingEngine",      HH_SCA_RESOURCE, PORTS(routing_ports),          true  },
     { "SelfHealingManager", HH_SCA_RESOURCE, PORTS(self_healing_ports),     false },
-    /* Owned by the Device Manager, not the Application (Doc 1 §3). */
+    /* Owned by the Device Manager, not the Application. */
     { "RadioSdrInterface",  HH_SCA_DEVICE,   PORTS(radio_ports),            false },
-    /* Doc 1 §14 places the data plane outside the SCA Resource graph. */
+    /* the architecture places the data plane outside the SCA Resource graph. */
     { "PacketForwarder",    HH_SCA_OUTSIDE_GRAPH, NULL, 0,                  false },
-    /* Doc 1 §10/§14: telemetry/logging half of the split Management role. */
+    /* telemetry/logging half of the split Management role. */
     { "ManagementTelemetry",HH_SCA_SERVICE,  NULL, 0,                       false },
 };
 
@@ -186,7 +186,7 @@ const hh_sca_component_t *hh_sca_component_find(const char *name)
 }
 
 /* ---------------------------------------------------------------------------
- * Lifecycle guard. The ordering Doc 1 §3 specifies is enforced here.
+ * Lifecycle guard. The ordering the architecture specifies is enforced here.
  * ------------------------------------------------------------------------- */
 
 void hh_sca_resource_init_guard(hh_sca_resource_t *r, const char *component)
@@ -208,7 +208,7 @@ hh_status_t hh_sca_initialize(hh_sca_resource_t *r)
 hh_status_t hh_sca_connect_ports(hh_sca_resource_t *r)
 {
     if (!r) return HH_ERR_INVAL;
-    /* Doc 1 §3 step 3: wiring must complete before configuration. */
+    /*  step 3: wiring must complete before configuration. */
     if (r->state != HH_SCA_INITIALIZED) return HH_ERR_STATE;
     r->state = HH_SCA_PORTS_CONNECTED;
     return HH_OK;
@@ -221,7 +221,7 @@ hh_status_t hh_sca_configure(hh_sca_resource_t *r, hh_config_t *cfg,
     hh_status_t st;
 
     if (!r || !cfg || !property_id || !value) return HH_ERR_INVAL;
-    /* Doc 1 §3 step 4: configuration follows wiring, and may be reapplied while
+    /*  step 4: configuration follows wiring, and may be reapplied while
      * configured or stopped, but never before ports are connected. */
     if (r->state != HH_SCA_PORTS_CONNECTED && r->state != HH_SCA_CONFIGURED &&
         r->state != HH_SCA_STOPPED)
@@ -293,7 +293,7 @@ hh_status_t hh_sca_query(const hh_sca_resource_t *r, const hh_config_t *cfg,
 hh_status_t hh_sca_start(hh_sca_resource_t *r)
 {
     if (!r) return HH_ERR_INVAL;
-    /* Doc 1 §3 step 5: configuration must precede start. */
+    /*  step 5: configuration must precede start. */
     if (r->state != HH_SCA_CONFIGURED && r->state != HH_SCA_STOPPED)
         return HH_ERR_STATE;
     r->state = HH_SCA_STARTED;
@@ -327,7 +327,7 @@ hh_status_t hh_sca_run_test(const hh_sca_resource_t *r, uint32_t test_id,
                  r->component, hh_sca_lifecycle_str(r->state));
         return HH_OK;
     }
-    /* Doc 1 §12: raising UnknownTest for an unrecognised id is itself a
+    /* Raising UnknownTest for an unrecognised id is itself a
      * conformant implementation of CF::TestableObject. */
     snprintf(result, cap, "UnknownTest id=%u", test_id);
     return HH_ERR_NOTFOUND;

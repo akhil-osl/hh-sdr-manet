@@ -1,11 +1,11 @@
 /*
- * Failure Detector (Doc 1 §7; SCA class: Resource).
+ * Failure Detector.
  *
  * Owns debounced, hysteresis-guarded suspected->confirmed failure transitions.
  * It explicitly "doesn't recompute routes" — it only confirms, and publishes
  * FailureDetected (HTI-10) for Self-Healing and Routing to act on.
  *
- * Node-failure confirmation (Doc 1 §8): a node is removed from the aggregate
+ * Node-failure confirmation: a node is removed from the aggregate
  * topology only once every neighbor that could see it independently confirms,
  * so one bad link cannot delete a still-reachable node. Locally this component
  * confirms what THIS node observes; the corroboration count is tracked so the

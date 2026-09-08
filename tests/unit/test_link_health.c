@@ -1,11 +1,11 @@
 /*
- * Link Health Monitor tests (Doc 1 §7).
+ * Link Health Monitor tests.
  *
  * The properties that matter architecturally, each tested for real behavior:
  *  - hysteresis: a link cannot oscillate on noise
  *  - no single signal alone moves a link past Degraded
  *  - hold-down actually gates SuspectedFailure -> Failed
- *  - cause classification distinguishes the five patterns Doc 1 describes
+ *  - cause classification distinguishes the five described failure patterns
  *  - absent metrics are excluded from fusion, not read as zero
  */
 #include "hhsdr/manet/link_health.h"
@@ -88,7 +88,7 @@ static void test_single_bad_sample_does_not_transition(void)
 {
     fix_t f; obs_t o; fix_init(&f, &o);
     feed(&f, sample(2, -50.0f, 25.0f, 0.0f), 10, 100);
-    /* One terrible sample: EWMA must absorb it (Doc 1 §7 requires sustained
+    /* One terrible sample: EWMA must absorb it (the architecture requires sustained
      * evidence, not one bad sample). */
     feed(&f, sample(2, -95.0f, 1.0f, 0.9f), 1, 100);
     HH_ASSERT_EQ_INT(hh_link_health_state(&f.lh, 2), HH_LINK_HEALTHY);
@@ -114,7 +114,7 @@ static void test_single_signal_cannot_pass_degraded(void)
     /* RSSI alone catastrophically bad, everything else perfect. */
     feed(&f, sample(2, -99.0f, 30.0f, 0.0f), 40, 100);
 
-    /* Doc 1 §7: "No single signal alone can move a link past Degraded." */
+    /* "No single signal alone can move a link past Degraded." */
     HH_ASSERT_EQ_INT(hh_link_health_state(&f.lh, 2), HH_LINK_DEGRADED);
 }
 
@@ -211,7 +211,7 @@ static void test_relapse_during_recovering_returns_to_failed(void)
     }
     HH_ASSERT_EQ_INT(hh_link_health_state(&f.lh, 2), HH_LINK_FAILED);
     /* One completed Failed -> Recovering cycle counts as one flap, which is
-     * what route dampening later penalises (Doc 1 §8). */
+     * what route dampening later penalises. */
     HH_ASSERT_EQ_INT(hh_link_health_get(&f.lh, 2)->flap_count, 1);
 }
 
@@ -262,7 +262,7 @@ static void test_cause_hint_rf_interference_when_multiple_links_show_phy_errors(
 static void test_cause_hint_mobility_on_falling_rssi_with_loss(void)
 {
     fix_t f; obs_t o; fix_init(&f, &o);
-    /* RSSI trending down with PER rising in step (Doc 1 §7 mobility pattern). */
+    /* RSSI trending down with PER rising in step. */
     for (int i = 0; i < 12; i++) {
         hh_link_sample_t s = sample(2, -55.0f - (float)i * 4.0f, 20.0f - (float)i,
                                     0.02f * (float)i);
@@ -282,7 +282,7 @@ static void test_cause_hint_asymmetric_when_beacons_land_but_acks_fail(void)
     s.ack_success = false;      /* data ACKs failing, beacons fine */
 
     feed(&f, s, 20, 100);
-    /* Doc 1 §7: this stays Degraded rather than reading as a full failure. */
+    /* this stays Degraded rather than reading as a full failure. */
     HH_ASSERT_EQ_INT(hh_link_health_state(&f.lh, 2), HH_LINK_DEGRADED);
     hh_dispatcher_drain(&f.bus);
     HH_ASSERT_EQ_INT(o.last.cause_hint, HH_CAUSE_ASYMMETRIC_LINK);

@@ -1,9 +1,9 @@
 /*
- * Topology Manager (Doc 1 §5; SCA class: Resource).
+ * Topology Manager.
  *
  * Owns a derived, eventually-consistent graph view for management and telemetry.
  * It is A READ MODEL, never a dependency of the forwarding path and never in the
- * routing engine's decision path (Doc 1 §3, §5). It only reads from the Neighbor
+ * routing engine's decision path. It only reads from the Neighbor
  * Manager; it never sits between Neighbor Manager and Routing Engine.
  *
  * It is built from the same events the routing engine already consumes
@@ -12,9 +12,9 @@
  *
  * Detects partition (HTI-12) and merge (HTI-13):
  *  - Partition: "flagged when an entire neighbor branch, not just one
- *    destination, becomes unreachable" (Doc 1 §5).
+ *    destination, becomes unreachable".
  *  - Merge: renewed beacon exchange across a previously-severed edge, with a
- *    hold-down before newly-merged routes are trusted as primary (Doc 1 §8).
+ *    hold-down before newly-merged routes are trusted as primary.
  */
 #ifndef HHSDR_MANET_TOPOLOGY_H
 #define HHSDR_MANET_TOPOLOGY_H

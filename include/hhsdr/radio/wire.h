@@ -1,8 +1,8 @@
 /*
  * Beacon wire format — fixed binary encode/decode.
  *
- * Doc 1 §2 rejects the prototype's ASCII pipe-delimited wire format; this is the
- * fixed-layout binary replacement. The HW/SW Interface Specification §12 item 1
+ * the architecture rejects the prototype's ASCII pipe-delimited wire format; this is the
+ * fixed-layout binary replacement. The 
  * records the byte layout as TBD pending a PHY decision, so THIS LAYOUT IS THIS
  * IMPLEMENTATION'S CHOICE, not a specification contract. It is versioned
  * (protocol_version) so it can be replaced without ambiguity once the PHY
@@ -27,7 +27,7 @@ size_t hh_beacon_encode(const hh_beacon_t *b, uint8_t *buf, size_t cap);
  * HH_ERR_UNSUPPORTED when protocol_version does not match. */
 hh_status_t hh_beacon_decode(const uint8_t *buf, size_t len, hh_beacon_t *out);
 
-/* Routing update (OGM-style, Doc 1 §6: originator-style, bounded to one hop). */
+/* Routing update (OGM-style,: originator-style, bounded to one hop). */
 typedef struct {
     hh_node_id_t originator;   /* node this entry describes    */
     hh_seq_t     sequence_no;

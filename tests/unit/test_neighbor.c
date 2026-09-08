@@ -1,5 +1,5 @@
 /*
- * Neighbor Manager tests (Doc 1 §3, §4).
+ * Neighbor Manager tests.
  *
  * Verifies the architectural claim that this is the authoritative one-hop
  * source: it is the only writer, its expiry is cadence-based rather than a
@@ -159,7 +159,7 @@ static void test_neighbor_survives_allowed_losses(void)
     hh_beacon_t b = mk_beacon(2, 1);
 
     hh_neighbor_on_beacon(&f.nm, &b, &s, f.vc.now);
-    /* Doc 1 §4: a neighbor is not deleted on the first miss. */
+    /* a neighbor is not deleted on the first miss. */
     vclock_advance(&f.vc, f.cfg.beacon_interval_ms * f.cfg.neighbor_allowed_loss);
     HH_ASSERT_EQ_INT(hh_neighbor_tick(&f.nm, f.vc.now), 0);
     HH_ASSERT_EQ_INT(hh_neighbor_count(&f.nm), 1);

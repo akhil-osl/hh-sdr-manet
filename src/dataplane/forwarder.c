@@ -165,7 +165,7 @@ size_t hh_forwarder_flush(hh_forwarder_t *fw, hh_time_ms_t now, uint32_t max_wai
         if (!p->used) continue;
 
         if (now - p->queued_at > max_wait_ms) {
-            /* Buffered "briefly", not indefinitely (Doc 1 §10). */
+            /* Buffered "briefly", not indefinitely. */
             HH_LOGD(COMP, "dropped", "reason=pending_timeout waited_ms=%llu",
                     (unsigned long long)(now - p->queued_at));
             p->used = false;

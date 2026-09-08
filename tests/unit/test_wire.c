@@ -56,7 +56,7 @@ static void test_optional_fields_degrade_gracefully(void)
     uint8_t buf[HH_BEACON_WIRE_LEN];
     hh_beacon_t in = sample_beacon(), out;
 
-    /* Doc 1 §4: position and power are optional and must degrade gracefully. */
+    /* position and power are optional and must degrade gracefully. */
     in.position_valid = false;
     in.power_valid = false;
     HH_ASSERT(hh_beacon_encode(&in, buf, sizeof buf) > 0);

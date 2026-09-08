@@ -42,7 +42,7 @@ size_t hh_beacon_encode(const hh_beacon_t *b, uint8_t *buf, size_t cap)
     put_u8(&p, flags);                          /*  1 */
 
     /* Optional fields occupy their slots regardless, keeping the frame fixed
-     * length; the flags above say whether they carry meaning (Doc 1 §4:
+     * length; the flags above say whether they carry meaning (
      * "must degrade gracefully when absent"). */
     put_u16(&p, (uint16_t)enc_dbm(b->position_x));  /* 2 */
     put_u16(&p, (uint16_t)enc_dbm(b->position_y));  /* 2 */

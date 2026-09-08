@@ -17,7 +17,7 @@ hh_status_t hh_discovery_init(hh_discovery_t *d, const hh_config_t *cfg,
     d->bus   = bus;
     d->radio = radio;
     /* initialize() must leave a known internal state before any wiring or
-     * configuration occurs (Doc 1 §3 lifecycle step 2). */
+     * configuration occurs. */
     d->phase       = HH_DISC_ACQUISITION;
     d->interval_ms = cfg->beacon_interval_acq_ms;
     d->running     = false;
@@ -77,7 +77,7 @@ hh_status_t hh_discovery_tick(hh_discovery_t *d, hh_time_ms_t now)
     if (!d || !d->running) return HH_ERR_STATE;
 
     /* Bounded acquisition: drop to steady state on timeout even if no neighbor
-     * was heard, so an isolated node does not beacon fast forever (Doc 1 §4). */
+     * was heard, so an isolated node does not beacon fast forever. */
     if (d->phase == HH_DISC_ACQUISITION &&
         now - d->started_at >= d->cfg->acquisition_timeout_ms) {
         d->phase       = HH_DISC_STEADY;
@@ -165,7 +165,7 @@ hh_status_t hh_discovery_on_frame(hh_discovery_t *d, const hh_frame_t *f,
     slot = seen_slot(d, b.node_id);
     first_from_src = (d->seen[slot].seq == 0);
 
-    /* Doc 1 §4: "A beacon not newer than the last accepted one is dropped."
+    /* A beacon not newer than the last accepted one is dropped.
      * Serial comparison so a wrapped counter is still ordered correctly. */
     if (!first_from_src && !hh_seq_gt(b.sequence_no, d->seen[slot].seq)) {
         d->beacons_rx_duplicate++;
@@ -176,7 +176,7 @@ hh_status_t hh_discovery_on_frame(hh_discovery_t *d, const hh_frame_t *f,
     d->seen[slot].seq = b.sequence_no;
     d->beacons_rx_accepted++;
 
-    /* Hearing any neighbor ends acquisition early (Doc 1 §4). */
+    /* Hearing any neighbor ends acquisition early. */
     hh_discovery_notify_neighbor_heard(d);
 
     memset(&ev, 0, sizeof ev);
@@ -208,7 +208,7 @@ void hh_discovery_apply_cadence_hint(hh_discovery_t *d, const hh_ev_cadence_hint
     if (!d || !hint || !d->cfg) return;
     c = d->cfg;
 
-    /* Doc 1 §4: tighten on instability for faster reconvergence, relax when
+    /* Tighten on instability for faster reconvergence, relax when
      * stable to bound control overhead. Always clamped to the configured
      * bounds so a runaway hint cannot flood the channel. */
     if (hint->unstable) {

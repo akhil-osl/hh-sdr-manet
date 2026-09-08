@@ -38,7 +38,7 @@ static void publish_neighbor_event(hh_neighbor_mgr_t *nm, hh_event_type_t type,
 }
 
 /* LRU eviction: the least recently heard entry loses its slot. Bounded table
- * size is a hard requirement on the embedded target (Doc 1 §4). */
+ * size is a hard requirement on the embedded target. */
 static hh_neighbor_t *evict_lru(hh_neighbor_mgr_t *nm, hh_time_ms_t now)
 {
     hh_neighbor_t *victim = NULL;
@@ -94,7 +94,7 @@ hh_status_t hh_neighbor_on_beacon(hh_neighbor_mgr_t *nm, const hh_beacon_t *b,
         is_new = true;
     } else {
         /* Estimate the sender's cadence from observed arrivals, so expiry can
-         * be by cadence rather than a fixed wall-clock timeout (Doc 1 §4). */
+         * be by cadence rather than a fixed wall-clock timeout. */
         if (now > n->last_heard) {
             uint32_t gap = (uint32_t)(now - n->last_heard);
             n->observed_interval_ms = n->observed_interval_ms
@@ -184,7 +184,7 @@ size_t hh_neighbor_tick_ex(hh_neighbor_mgr_t *nm, hh_time_ms_t now,
                                           : nm->cfg->beacon_interval_ms;
         deadline = cadence * (nm->cfg->neighbor_allowed_loss + 1);
 
-        /* Doc 1 §4: let the link-health state machine reach its verdict rather
+        /* Let the link-health state machine reach its verdict rather
          * than deleting the neighbor out from under it. Deleting first drops
          * the link from Link Health, so the Failure Detector never confirms and
          * the Self-Healing pipeline never runs. */

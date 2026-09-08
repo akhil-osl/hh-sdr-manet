@@ -1,6 +1,6 @@
 # Hardware Dependency Tracking
 
-Per task §15. This is the authoritative list of what runs today, what is
+Per. This is the authoritative list of what runs today, what is
 simulated for testing, what exists only as an interface, and what is blocked on
 hardware. It is updated as functionality lands.
 
@@ -37,7 +37,7 @@ FPGA/PL integration must supply:
 No AXI register map, DMA descriptor/buffer API, PHY or modem control API, RF
 transceiver/tuner API, sample-streaming interface, or modulation/RCC engine
 interface appears anywhere in this repository. The HW/SW Interface Specification
-§12 item 5 records the Radio/SDR Interface C ABI as TBD; none of it is guessed at.
+ records the Radio/SDR Interface C ABI as TBD; none of it is guessed at.
 
 The unit of exchange at the boundary is a **frame**, not a sample buffer. The
 MANET control plane has no use for baseband samples, so every DSP/PHY decision
@@ -94,11 +94,11 @@ no simulation-specific branches in production code.
 ### HARDWARE-DEPENDENT / TBD
 | Item | Spec reference | Notes |
 |---|---|---|
-| Radio/SDR C ABI backend | HTI spec §12.5 | The adapter implementation itself |
-| Metric units and encodings (RSSI, SNR, PER, retransmits, latency) | HTI spec §12.2 | Stack carries them as floats; units unconfirmed |
-| Beacon wire byte layout | HTI spec §12.1 | This repo defines a versioned interim layout |
-| `capabilities`/`radio_caps`/`supported_waveforms` bit-fields | HTI spec §12.7 | Interim encoding in `core/types.h` |
-| `position` / `power` field formats | HTI spec §12.8 | Carried as optional, flagged present/absent |
+| Radio/SDR C ABI backend |.5 | The adapter implementation itself |
+| Metric units and encodings (RSSI, SNR, PER, retransmits, latency) |.2 | Stack carries them as floats; units unconfirmed |
+| Beacon wire byte layout |.1 | This repo defines a versioned interim layout |
+| `capabilities`/`radio_caps`/`supported_waveforms` bit-fields |.7 | Interim encoding in `core/types.h` |
+| `position` / `power` field formats |.8 | Carried as optional, flagged present/absent |
 | Max frame size | — | `HH_RADIO_MAX_FRAME` is a placeholder bound |
-| Channel-change failure fallback | HTI spec §12.11 | This stack falls back to route-based recovery |
-| Timer/threshold values | HTI spec §12.4 | Config defaults are an operating point, not spec values |
+| Channel-change failure fallback |.11 | This stack falls back to route-based recovery |
+| Timer/threshold values |.4 | Config defaults are an operating point, not spec values |

@@ -17,10 +17,10 @@
  *
  * Those belong below this line, inside a hardware adapter, and cannot be
  * specified until the PL contract exists. The HW/SW Interface Specification
- * §12 item 5 records the Radio/SDR Interface C ABI as TBD for exactly this
+ *  records the Radio/SDR Interface C ABI as TBD for exactly this
  * reason: "the source names the categories, not the API".
  *
- * Doc 1 §3 constrains this layer to "no MANET semantics, metric/byte plumbing
+ * the architecture constrains this layer to "no MANET semantics, metric/byte plumbing
  * only" — so nothing here interprets a beacon, scores a link, or knows what a
  * route is. It moves opaque frames and reports measured metrics.
  *
@@ -28,7 +28,7 @@
  * has no use for baseband samples, and choosing frames keeps every DSP/PHY
  * decision below the boundary where it belongs.
  *
- * SCA 2.2.2: this interface is the Device façade (Doc 1 §3 classifies the
+ * SCA 2.2.2: this interface is the Device façade ( classifies the
  * Radio/SDR Interface as a CF::Device). See include/hhsdr/sca/ for the
  * lifecycle and capacity model layered over it.
  * ==========================================================================
@@ -60,13 +60,13 @@ typedef struct {
 
 /*
  * Radio operational status (HTI-02).
- * Payload schema is Recommended, not Defined — HTI spec §12 item 13.
+ * Payload schema is Recommended, not Defined —.
  */
 typedef struct {
-    bool     operational;      /* false => own-radio failure (Doc 1 §7)      */
+    bool     operational;      /* false => own-radio failure */
     uint32_t channel;          /* logical channel index; mapping to RF TBD   */
     float    frequency_hz;     /* 0 when unknown to the adapter              */
-    uint32_t waveform_id;      /* encoding TBD (HTI spec §12 item 7)         */
+    uint32_t waveform_id;      /* encoding TBD */
     uint64_t frames_tx;
     uint64_t frames_rx;
     uint64_t tx_errors;
@@ -109,9 +109,9 @@ typedef struct hh_radio_ops {
                                     hh_link_sample_t *out);
 
     /* HTI-14: request a channel change. Self-Healing prefers this over route
-     * churn when the cause hint is RF interference (Doc 1 §8). Adapters without
+     * churn when the cause hint is RF interference. Adapters without
      * channel agility return HH_ERR_UNSUPPORTED, and the caller falls back to
-     * route-based recovery (HTI spec §12 item 11 records that fallback as TBD;
+     * route-based recovery (the architecture records that fallback as TBD;
      * this stack chooses route-based recovery and logs the decision). */
     hh_status_t (*set_channel)(void *self, uint32_t channel);
 

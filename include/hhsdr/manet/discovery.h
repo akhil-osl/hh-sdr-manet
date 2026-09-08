@@ -1,12 +1,12 @@
 /*
- * Discovery Manager (Doc 1 §4; SCA class: Resource).
+ * Discovery Manager.
  *
  * Owns beacon tx/rx scheduling, initial and periodic discovery, and capability
  * advertisement. It explicitly does NOT own neighbor state validity — that is
  * the Neighbor Manager's, and this component only publishes validated beacon
  * events for it to consume.
  *
- * Lifecycle (Doc 1 §4):
+ * Lifecycle:
  *   - Acquisition: beacon at a fast interval until either a neighbor is heard
  *     or acquisition_timeout_ms elapses, then drop to steady-state cadence.
  *   - Steady state: beacons double as the liveness heartbeat, so discovery and
@@ -15,7 +15,7 @@
  *     stable, always clamped to [beacon_interval_min_ms, beacon_interval_max_ms].
  *
  * Duplicate detection: a beacon not newer than the last accepted sequence number
- * for that node is dropped (Doc 1 §4), using wraparound-safe comparison.
+ * for that node is dropped, using wraparound-safe comparison.
  */
 #ifndef HHSDR_MANET_DISCOVERY_H
 #define HHSDR_MANET_DISCOVERY_H

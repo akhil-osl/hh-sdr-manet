@@ -1,5 +1,5 @@
 /*
- * Packet Forwarder tests (Doc 1 §3, §10).
+ * Packet Forwarder tests.
  *
  * The architectural claims under test: forwarding reads the published snapshot
  * and makes no routing decision of its own; a route miss buffers or drops
@@ -95,7 +95,7 @@ static void test_route_miss_buffers_without_blocking(void)
     fix_t f; fix_init(&f);
     uint8_t payload[] = { 1 };
 
-    /* Doc 1 §10: a miss is buffered while the control plane resolves it
+    /* a miss is buffered while the control plane resolves it
      * asynchronously — the forwarder must not compute a route itself. */
     HH_ASSERT_ERR(hh_forwarder_send(&f.fw, 9, payload, sizeof payload, 8, f.vc.now),
                   HH_ERR_AGAIN);

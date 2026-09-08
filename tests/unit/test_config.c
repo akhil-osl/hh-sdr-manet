@@ -20,7 +20,7 @@ static void test_hysteresis_invariant_enforced(void)
     hh_config_t cfg;
     hh_config_defaults(&cfg);
     cfg.node_id = 1;
-    /* Doc 1 §7: exit threshold must be stricter than entry, else a link can
+    /* exit threshold must be stricter than entry, else a link can
      * oscillate across the boundary on noise alone. */
     HH_ASSERT(cfg.lh_recover_threshold > cfg.lh_degrade_threshold);
     cfg.lh_recover_threshold = cfg.lh_degrade_threshold;

@@ -2,7 +2,7 @@
  * Node — the assembled MANET control plane plus data plane.
  *
  * Owns the ten components and wires them through the event dispatcher, never
- * through direct nested calls between subsystems (Doc 1 §3, §11). Each component
+ * through direct nested calls between subsystems. Each component
  * subscribes to the event types it consumes; the node's job is the wiring, the
  * lifecycle, and the periodic tick, not any MANET logic of its own.
  *
@@ -17,7 +17,7 @@
  *   Topo       -> SelfHealing       (HTI-12/13)
  *   Route      -> Forwarder/Topo    (HTI-08/09)
  *
- * SCA lifecycle (Doc 1 §3): initialize -> connect ports -> configure -> start
+ * SCA lifecycle: initialize -> connect ports -> configure -> start
  * -> stop -> release. hh_node_init performs initialize and port connection;
  * hh_node_configure applies properties; hh_node_start begins operation.
  */
@@ -74,7 +74,7 @@ hh_status_t hh_node_release(hh_node_t *n);
 /* One control-loop iteration: service the radio, run timers, drain events. */
 hh_status_t hh_node_tick(hh_node_t *n, hh_time_ms_t now);
 
-/* Application data entry point (payload is opaque bytes, per Doc 1 §12). */
+/* Application data entry point (payload is opaque bytes). */
 hh_status_t hh_node_send(hh_node_t *n, hh_node_id_t dst, const uint8_t *payload,
                          uint16_t len, hh_time_ms_t now);
 

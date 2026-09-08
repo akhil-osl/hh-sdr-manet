@@ -2,9 +2,9 @@
  * Telemetry (HTI-01/02/15) and SCA 2.2.2 compatibility tests.
  *
  * Telemetry must report honestly -- especially that no radio backend exists --
- * and must not sit on the fast path. The SCA layer must ENFORCE the Doc 1 §3
+ * and must not sit on the fast path. The SCA layer must ENFORCE the 
  * lifecycle ordering rather than merely documenting it, and must classify
- * components exactly as Doc 1 §3 does.
+ * components exactly as does.
  */
 #include "hhsdr/manet/telemetry.h"
 #include "hhsdr/radio/hw_adapter.h"
@@ -121,7 +121,7 @@ static void test_component_classification_matches_doc1(void)
     size_t count;
 
     hh_sca_components(&count);
-    HH_ASSERT_EQ_INT(count, 10);   /* the ten components of Doc 1 §3 */
+    HH_ASSERT_EQ_INT(count, 10);   /* the ten components of */
 
     /* All seven control-plane components are Resources. */
     const char *resources[] = { "DiscoveryManager", "NeighborManager",
@@ -157,7 +157,7 @@ static void test_routing_engine_is_the_only_assembly_controller(void)
             controllers++;
             HH_ASSERT_EQ_STR(all[i].name, "RoutingEngine");
         }
-    /* Doc 1 §14: exactly one assembly controller, and it is the Routing Engine. */
+    /* exactly one assembly controller, and it is the Routing Engine. */
     HH_ASSERT_EQ_INT(controllers, 1);
 }
 
@@ -187,7 +187,7 @@ static void test_lifecycle_ordering_is_enforced(void)
     cfg.node_id = 1;
     hh_sca_resource_init_guard(&r, "RoutingEngine");
 
-    /* Configure before ports are connected must fail (Doc 1 §3 step 3 -> 4). */
+    /* Configure before ports are connected must fail. */
     HH_ASSERT_ERR(hh_sca_configure(&r, &cfg, "hh::routing::max_hop_count", "8"),
                   HH_ERR_STATE);
     /* Start before configure must fail (step 4 -> 5). */
@@ -203,7 +203,7 @@ static void test_lifecycle_ordering_is_enforced(void)
     HH_ASSERT_EQ_INT(r.state, HH_SCA_STARTED);
 
     /* stop() halts without discarding configuration, so restart needs no
-     * reconfigure (Doc 1 §3 step 6). */
+     * reconfigure. */
     HH_ASSERT_OK(hh_sca_stop(&r));
     HH_ASSERT_EQ_INT(cfg.max_hop_count, 8);
     HH_ASSERT_OK(hh_sca_start(&r));
@@ -295,7 +295,7 @@ static void test_run_test_reports_unknown_test_conformantly(void)
     HH_ASSERT_OK(hh_sca_run_test(&r, HH_SCA_TEST_SELF_CHECK, out, sizeof out));
     HH_ASSERT(strstr(out, "result=pass") != NULL);
 
-    /* Doc 1 §12: UnknownTest for an unrecognised id is conformant. */
+    /* UnknownTest for an unrecognised id is conformant. */
     HH_ASSERT_ERR(hh_sca_run_test(&r, 9999, out, sizeof out), HH_ERR_NOTFOUND);
     HH_ASSERT(strstr(out, "UnknownTest") != NULL);
 }

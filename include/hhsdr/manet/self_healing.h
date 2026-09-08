@@ -1,11 +1,11 @@
 /*
- * Self-Healing / Recovery Manager (Doc 1 §8; SCA class: Resource).
+ * Self-Healing / Recovery Manager.
  *
  * Orchestrates local repair, alternate routes, rediscovery, and partition/merge
  * handling. It does NOT do per-packet forwarding and does not itself compute
  * routes — it drives the Routing Engine and, for an RF cause, the radio.
  *
- * Recovery pipeline (Doc 1 §8), entered on a confirmed failure:
+ * Recovery pipeline, entered on a confirmed failure:
  *   detection -> classification -> confirmation -> event -> topology update ->
  *   route invalidation -> local repair / alternate route -> rediscovery ->
  *   stabilization
@@ -13,7 +13,7 @@
  * Strategy selection by cause hint:
  *  - RF interference  -> prefer a channel change over route churn (HTI-14).
  *    When the radio cannot retune, fall back to route-based recovery. The HW/SW
- *    spec §12 item 11 leaves that fallback TBD; this stack chooses route-based
+ *    spec leaves that fallback TBD; this stack chooses route-based
  *    recovery and logs the decision rather than failing the recovery.
  *  - anything else    -> invalidation cascade, then a warm alternate if one
  *    exists, else bounded rediscovery with backoff.

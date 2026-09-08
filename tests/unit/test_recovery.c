@@ -1,5 +1,5 @@
 /*
- * Failure Detector, Topology Manager, and Self-Healing tests (Doc 1 §5, §7, §8).
+ * Failure Detector, Topology Manager, and Self-Healing tests.
  *
  * The pipeline these implement is: detection -> classification -> confirmation
  * -> event -> topology update -> route invalidation -> alternate/rediscovery ->
@@ -98,7 +98,7 @@ static void test_suspicion_alone_never_confirms(void)
 
     HH_ASSERT_OK(hh_fd_on_link_state(&f.fd, &ev, f.vc.now));
     hh_dispatcher_drain(&f.bus);
-    /* Doc 1 §8: "Degradation Detected alone, without confirmation, never
+    /* "Degradation Detected alone, without confirmation, never
      * reaches route invalidation." */
     HH_ASSERT_EQ_INT(o.failures, 0);
     HH_ASSERT(!hh_fd_is_failed(&f.fd, 2));
@@ -156,7 +156,7 @@ static void test_node_failure_requires_corroboration_count(void)
                                       HH_CAUSE_NODE_FAILURE);
 
     hh_fd_on_link_state(&f.fd, &fail, f.vc.now);
-    /* Our own observation counts as one; Doc 1 §8 requires every neighbor that
+    /* Our own observation counts as one; the architecture requires every neighbor that
      * could see the node to confirm before it leaves the aggregate topology. */
     HH_ASSERT_EQ_INT(hh_fd_corroborations(&f.fd, 7), 1);
     hh_fd_corroborate(&f.fd, 7);
@@ -281,7 +281,7 @@ static void test_rf_interference_prefers_channel_change_over_route_churn(void)
     ev.cause_hint = HH_CAUSE_RF_INTERFERENCE;
     hh_sh_on_failure(&f.sh, &ev, f.vc.now);
 
-    /* Doc 1 §8: prefer a channel change over route churn for an RF cause. */
+    /* prefer a channel change over route churn for an RF cause. */
     HH_ASSERT(f.mock.channel != before_channel);
     HH_ASSERT_EQ_INT(f.sh.channel_changes, 1);
     /* Routes stay intact: the link may return on the new channel. */
@@ -394,7 +394,7 @@ static void test_partition_does_not_flush_routes(void)
     pev.unreachable_count = 1;
     hh_sh_on_partition(&f.sh, &pev, f.vc.now);
 
-    /* Doc 1 §8: each partition keeps operating within itself, and stale
+    /* each partition keeps operating within itself, and stale
      * cross-partition entries age out normally rather than being flushed. */
     HH_ASSERT(hh_routing_get(&f.rt, 9)->valid);
 }

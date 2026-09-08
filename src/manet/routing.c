@@ -95,7 +95,7 @@ static void publish_withdrawn(hh_routing_t *r, hh_node_id_t dst, hh_node_id_t nh
 }
 
 /*
- * Composite metric (Doc 1 §6). Lower is better.
+ * Composite metric. Lower is better.
  *
  * Terms: link quality from the Link Health score (which already fuses RSSI,
  * SNR, PER, retransmits and latency), a bounded hop-count penalty, and a route
@@ -116,7 +116,7 @@ static float composite_metric(const hh_routing_t *r, hh_node_id_t next_hop,
         if (l) {
             quality = l->score;
             /* A Degraded link loses the comparison to a healthier alternate
-             * before it fails outright — Doc 1 §8's "prefer proactive route
+             * before it fails outright — the "prefer proactive route
              * replacement" path, handled entirely inside the metric. */
             if (l->state == HH_LINK_DEGRADED)           quality *= 0.5f;
             else if (l->state == HH_LINK_SUSPECTED_FAILURE) quality *= 0.2f;
@@ -137,7 +137,7 @@ static float composite_metric(const hh_routing_t *r, hh_node_id_t next_hop,
 }
 
 /*
- * Doc 1 §6 selection rule, generalized from the prototype's hop-count-only
+ *  selection rule, generalized from the prototype's hop-count-only
  * _should_replace_route: strictly fresher sequence always wins; at equal
  * sequence, the better composite metric wins.
  */
@@ -149,11 +149,11 @@ static bool should_replace(const hh_route_t *cur, hh_seq_t seq, float metric,
     if (hh_seq_lt(seq, cur->sequence_no)) return false;   /* stale */
 
     /* Equal sequence: a hold-down window protects a freshly installed route
-     * from being replaced again immediately (Doc 1 §8). */
+     * from being replaced again immediately. */
     if (now < cur->hold_down_until) return false;
 
     /* Compare against the incumbent's metric recomputed at CURRENT link health,
-     * not the value frozen at install time. Doc 1 §8 requires a degraded link to
+     * not the value frozen at install time. the architecture requires a degraded link to
      * "lose the comparison to a healthier alternate on the next update"; that
      * cannot happen if the incumbent is still judged by how good its link was
      * when the route was installed. */
@@ -191,7 +191,7 @@ hh_status_t hh_routing_offer(hh_routing_t *r, hh_node_id_t destination,
     }
     if (hop_count >= r->cfg->max_hop_count) return HH_ERR_INVAL;
 
-    /* A route is only as valid as its next-hop neighbor entry (Doc 1 §6). */
+    /* A route is only as valid as its next-hop neighbor entry. */
     if (r->neighbors && !hh_neighbor_get(r->neighbors, via_neighbor))
         return HH_ERR_NOTFOUND;
 
@@ -277,7 +277,7 @@ size_t hh_routing_invalidate_via(hh_routing_t *r, hh_node_id_t next_hop,
 
         /* Promote the warm alternate immediately if it does not also depend on
          * the failed next hop — this is the "switch without full recompute"
-         * path (Doc 1 §6/§8). */
+         * path. */
         if (rt->has_alt && rt->alt_next_hop != next_hop &&
             (!r->neighbors || hh_neighbor_get(r->neighbors, rt->alt_next_hop))) {
             HH_LOGI(COMP, "route_switched_to_alternate",
@@ -292,7 +292,7 @@ size_t hh_routing_invalidate_via(hh_routing_t *r, hh_node_id_t next_hop,
             publish_installed(r, rt, now);
         } else {
             /* Two-phase invalidation: mark invalid now so forwarding stops
-             * immediately, delete after the grace window (Doc 1 §6). */
+             * immediately, delete after the grace window. */
             rt->valid = false;
             rt->invalidated_at = now;
             rt->has_alt = false;

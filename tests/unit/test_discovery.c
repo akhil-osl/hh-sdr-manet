@@ -1,5 +1,5 @@
 /*
- * Discovery Manager tests (Doc 1 §4).
+ * Discovery Manager tests.
  *
  * Behavior verified, not just execution: acquisition-to-steady transition on
  * both triggers, beacon cadence actually gating transmission, sequence-based
@@ -119,7 +119,7 @@ static void test_acquisition_ends_when_neighbor_heard(void)
     HH_ASSERT_EQ_INT(f.disc.phase, HH_DISC_ACQUISITION);
 
     HH_ASSERT_OK(hh_discovery_on_frame(&f.disc, &fr, &s));
-    /* Doc 1 §4: hearing a neighbor drops the node to steady-state cadence. */
+    /* hearing a neighbor drops the node to steady-state cadence. */
     HH_ASSERT_EQ_INT(f.disc.phase, HH_DISC_STEADY);
     HH_ASSERT_EQ_INT(hh_discovery_interval(&f.disc), f.cfg.beacon_interval_ms);
 }
@@ -243,7 +243,7 @@ static void test_tx_failure_counted_and_schedule_advances(void)
 static void test_tick_before_start_is_rejected(void)
 {
     fix_t f; fix_init(&f, 1);
-    /* Lifecycle: no beaconing before start() (Doc 1 §3). */
+    /* Lifecycle: no beaconing before start. */
     HH_ASSERT_ERR(hh_discovery_tick(&f.disc, f.vc.now), HH_ERR_STATE);
     hh_discovery_start(&f.disc);
     HH_ASSERT_OK(hh_discovery_tick(&f.disc, f.vc.now));

@@ -1,7 +1,7 @@
 /*
- * Routing Engine (Doc 1 §6; SCA class: Resource, and the SAD assembly controller).
+ * Routing Engine.
  *
- * Proactive, distance-vector, sequence-numbered, RF-metric-weighted — Doc 1 §6's
+ * Proactive, distance-vector, sequence-numbered, RF-metric-weighted — the architecture's
  * recommendation. Routes are maintained by periodic sequence-numbered
  * originator-style updates bounded to one hop's neighbors, plus event-triggered
  * updates fired immediately on a confirmed link state change.
@@ -15,7 +15,7 @@
  * equal sequence number, the better composite metric wins. Hop count is a
  * bounded penalty term, never the primary metric.
  *
- * Invalidation is two-phase (Doc 1 §6): mark invalid immediately so forwarding
+ * Invalidation is two-phase: mark invalid immediately so forwarding
  * stops at once, delete after a grace window so a returning route is not
  * confused with a brand-new one.
  */
@@ -47,7 +47,7 @@ typedef struct {
     hh_time_ms_t installed_at;
     hh_time_ms_t last_used;
     hh_time_ms_t invalidated_at;   /* start of the DELETE_PERIOD grace window */
-    hh_time_ms_t hold_down_until;  /* not replaceable before this (Doc 1 §8)  */
+    hh_time_ms_t hold_down_until;  /* not replaceable before this */
 
     hh_node_id_t alt_next_hop;
     float        alt_metric;
@@ -71,7 +71,7 @@ typedef struct {
     hh_seq_t     own_seq;              /* our originator sequence number */
     hh_time_ms_t last_update_sent;
 
-    /* Dampening: next-hops penalised for repeated flapping (Doc 1 §8). */
+    /* Dampening: next-hops penalised for repeated flapping. */
     struct { hh_node_id_t id; hh_time_ms_t until; bool used; } damped[32];
 
     uint64_t installs;
@@ -106,7 +106,7 @@ size_t hh_routing_invalidate_via(hh_routing_t *r, hh_node_id_t next_hop,
 size_t hh_routing_tick(hh_routing_t *r, hh_time_ms_t now);
 
 /*
- * Build the proactive update this node broadcasts (Doc 1 §6).
+ * Build the proactive update this node broadcasts.
  *
  * Applies split horizon with poisoned reverse: a route learned from a neighbor
  * is never advertised back to that neighbor as reachable, and is instead sent
@@ -124,7 +124,7 @@ size_t hh_routing_build_update(const hh_routing_t *r, hh_route_update_t *out);
 /* Hop count marking a destination as unreachable (poisoned reverse). */
 #define HH_HOP_INFINITY 255u
 
-/* Penalise a next-hop that has flapped repeatedly (Doc 1 §8 route dampening). */
+/* Penalise a next-hop that has flapped repeatedly. */
 void hh_routing_damp(hh_routing_t *r, hh_node_id_t next_hop, hh_time_ms_t now);
 bool hh_routing_is_damped(const hh_routing_t *r, hh_node_id_t next_hop, hh_time_ms_t now);
 

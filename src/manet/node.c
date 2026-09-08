@@ -19,8 +19,8 @@ static void on_beacon_rx(const hh_event_t *ev, void *ctx)
     /* Discovery -> Neighbor Manager (validated beacon). */
     hh_neighbor_on_beacon(&n->neighbors, b, s, ev->timestamp);
 
-    /* The beacon is also the heartbeat, so it feeds link health directly
-     * (Doc 1 §4: discovery and heartbeat are one message stream). */
+    /* The beacon is also the heartbeat, so it feeds link health directly:
+     * discovery and heartbeat are one message stream, not two. */
     hh_link_health_on_beacon(&n->link_health, b->node_id, ev->timestamp);
     hh_link_health_on_sample(&n->link_health, s, ev->timestamp);
 }
@@ -43,7 +43,7 @@ static void on_neighbor_down(const hh_event_t *ev, void *ctx)
     hh_node_id_t id = ev->u.neighbor.neighbor_id;
 
     hh_topology_on_neighbor_down(&n->topology, id, ev->timestamp);
-    /* Neighbor expiry cascades route invalidation (Doc 1 §6). */
+    /* Neighbor expiry cascades route invalidation. */
     hh_routing_invalidate_via(&n->routing, id, HH_WITHDRAW_FAILURE_CASCADE,
                               ev->timestamp);
     hh_link_health_remove(&n->link_health, id);
@@ -97,7 +97,7 @@ static void on_merged(const hh_event_t *ev, void *ctx)
 }
 
 /* Expiry predicate: has this neighbor's link reached a confirmed failure?
- * Lets neighbor expiry defer to the link-health state machine (Doc 1 §4). */
+ * Lets neighbor expiry defer to the link-health state machine. */
 static bool node_link_failed(void *ctx, hh_node_id_t neighbor)
 {
     const hh_node_t *n = ctx;
@@ -343,7 +343,7 @@ hh_status_t hh_node_tick(hh_node_t *n, hh_time_ms_t now)
     /* 2. Discovery beacon, if due. */
     hh_discovery_tick(&n->discovery, now);
 
-    /* 3. Proactive route update stream (Doc 1 §6). */
+    /* 3. Proactive route update stream. */
     if (now - n->last_route_update_at >= n->cfg.route_update_interval_ms) {
         send_route_update(n, now);
         n->last_route_update_at = now;
@@ -352,7 +352,7 @@ hh_status_t hh_node_tick(hh_node_t *n, hh_time_ms_t now)
     /*
      * 4. Timers, ordered so each stage sees the previous stage's events.
      *
-     * Link health runs BEFORE neighbor expiry. Doc 1 §4 requires a silent
+     * Link health runs BEFORE neighbor expiry. the architecture requires a silent
      * neighbor to "transition through the link-health state machine rather than
      * being deleted", so the machine must be given the chance to reach Failed
      * and let the Failure Detector confirm. Running expiry first deletes the
