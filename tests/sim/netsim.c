@@ -2,6 +2,7 @@
 #include <string.h>
 
 /* Seeded xorshift: deterministic, so a scenario replays identically. */
+/*temp cpmmit*/
 static uint32_t rng_next(netsim_t *s)
 {
     uint64_t x = s->rng;
