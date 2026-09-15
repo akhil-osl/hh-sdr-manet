@@ -26,6 +26,7 @@ hh_add_test(test_recovery   unit/test_recovery.c)
 hh_add_test(test_integration integration/test_integration.c)
 hh_add_test(test_scenarios  scenario/test_scenarios.c)
 hh_add_test(test_topology_scenarios scenario/test_topology_scenarios.c)
+hh_add_test(test_route_verification scenario/test_route_verification.c)
 hh_add_test(test_telemetry_sca unit/test_telemetry_sca.c)
 hh_add_test(test_node        unit/test_node.c)
 
