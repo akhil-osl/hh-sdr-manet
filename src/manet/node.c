@@ -35,6 +35,30 @@ static void on_neighbor_up(const hh_event_t *ev, void *ctx)
     hh_link_health_add(&n->link_health, id, ev->timestamp);
     hh_topology_on_neighbor_up(&n->topology, id, ev->timestamp);
     hh_routing_on_neighbor_up(&n->routing, id, ev->timestamp);
+
+    /*
+     * hh_link_health_add() gives a freshly (re)tracked id a brand-new,
+     * Healthy link_t rather than walking it through Failed -> Recovering ->
+     * Healthy, so no HH_EV_LINK_STATE_CHANGED is published for this specific
+     * transition. When the neighbor had previously been confirmed failed and
+     * fully removed (NeighborDown -> hh_link_health_remove wipes its link_t
+     * entirely), the Failure Detector's hh_fd_on_link_state() -- the ONLY
+     * place that ever clears hh_fd_entry_t.confirmed -- never runs for this
+     * re-add, so hh_fd_is_failed() would otherwise keep reporting a fully
+     * recovered, reachable node as failed forever. hh_fd_on_link_state()
+     * already documents the intended guarantee ("a returning node must not
+     * stay permanently marked failed"); this call reaches that existing
+     * retraction path for the one case that was silently bypassing it. A
+     * neighbor the FD never marked failed is unaffected (e->confirmed is
+     * already false, so the retraction branch is a no-op). */
+    {
+        hh_ev_link_state_t synth;
+        synth.neighbor = id;
+        synth.old_state = HH_LINK_FAILED;
+        synth.new_state = HH_LINK_HEALTHY;
+        synth.cause_hint = HH_CAUSE_UNKNOWN;
+        hh_fd_on_link_state(&n->failure_detector, &synth, ev->timestamp);
+    }
 }
 
 static void on_neighbor_down(const hh_event_t *ev, void *ctx)

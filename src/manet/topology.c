@@ -102,7 +102,13 @@ void hh_topology_on_neighbor_down(hh_topology_t *t, hh_node_id_t id, hh_time_ms_
     if (!n) return;
 
     n->is_neighbor = false;
-    n->reachable   = false;
+    /* reachable is documented as "has a live route OR is a neighbor" — losing
+     * direct adjacency must not clobber a multi-hop route learned via a
+     * different next hop. hop_count > 1 can only have been set by
+     * hh_topology_on_route_installed (a direct neighbor is always hop_count
+     * == 1), so it is exactly the signal that such a route is still current;
+     * hh_topology_on_route_withdrawn is symmetric with this same check. */
+    if (n->hop_count <= 1) n->reachable = false;
     n->link_state  = HH_LINK_FAILED;
     n->last_seen   = now;
 
