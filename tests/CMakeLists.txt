@@ -26,6 +26,7 @@ hh_add_test(test_recovery   unit/test_recovery.c)
 hh_add_test(test_integration integration/test_integration.c)
 hh_add_test(test_scenarios  scenario/test_scenarios.c)
 hh_add_test(test_telemetry_sca unit/test_telemetry_sca.c)
+hh_add_test(test_node        unit/test_node.c)
 
 # Tests for the simulation tooling itself. Needs the tools/sim sources, which
 # are development tooling and never linked into the production library.
@@ -48,4 +49,17 @@ add_executable(hh-manet-sim
 target_include_directories(hh-manet-sim PRIVATE ${CMAKE_SOURCE_DIR}/tools/sim)
 target_link_libraries(hh-manet-sim PRIVATE hhsdr_core hhsim)
 set_target_properties(hh-manet-sim PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+# hh-manet-telemetry-serve: long-running netsim driver that serves telemetry
+# over TCP for the MA-OI GUI integration (docs/GUI-INTEGRATION-PLAN.md).
+# Development tooling only -- same status as hh-manet-sim above, never
+# linked into the hh-manet daemon. Reuses simui.c only for node-id naming.
+add_executable(hh-manet-telemetry-serve
+  ${CMAKE_SOURCE_DIR}/tools/sim/telemetry_serve.c
+  ${CMAKE_SOURCE_DIR}/tools/sim/telemetry_server.c
+  ${CMAKE_SOURCE_DIR}/tools/sim/simui.c)
+target_include_directories(hh-manet-telemetry-serve PRIVATE ${CMAKE_SOURCE_DIR}/tools/sim)
+target_link_libraries(hh-manet-telemetry-serve PRIVATE hhsdr_core hhsim)
+set_target_properties(hh-manet-telemetry-serve PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})

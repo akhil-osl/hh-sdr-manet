@@ -16,3 +16,5 @@ compile_commands.json
 tests/test_*
 !tests/test_*.c
 tests/demo_selfheal
+logs/
+*.log

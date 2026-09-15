@@ -109,10 +109,13 @@ stack changes.
   metric units/encodings, beacon wire byte layout, and channel/waveform
   encodings — all intentionally left open pending a defined hardware
   contract. See [docs/HARDWARE-DEPENDENCIES.md](docs/HARDWARE-DEPENDENCIES.md).
-- **Not yet implemented:** QoS queueing, security/crypto interfaces, an
-  operator console UI (the telemetry export it would consume already
-  exists), and deployment packaging (designed in
-  [docs/DEPLOYMENT-ARCHITECTURE.md](docs/DEPLOYMENT-ARCHITECTURE.md)).
+- **Not yet implemented:** QoS queueing, security/crypto interfaces, and
+  deployment packaging (designed in
+  [docs/DEPLOYMENT-ARCHITECTURE.md](docs/DEPLOYMENT-ARCHITECTURE.md)). A
+  development-only telemetry bridge to an external operator console GUI
+  exists (`hh-manet-telemetry-serve`, plaintext, simulator-only so far —
+  see [GUI integration](#gui-integration)); nothing wired to the
+  production daemon yet.
 
 ---
 
@@ -139,6 +142,8 @@ tests/
 
 tools/
   sim/                    hh-manet-sim — an interactive simulation driver
+                          hh-manet-telemetry-serve — long-running driver that
+                          serves live telemetry over TCP (see GUI integration)
 
 config/node.example.conf   every tunable, documented
 docs/                       hardware, SCA, and deployment documentation
@@ -177,6 +182,14 @@ All commands assume you are in `build/`.
 ./hh-manet-sim --scenario multihop --trace   # per-packet, per-hop tracing
 ./hh-manet-sim --scenario recovery --trace   # link failure and self-healing
 ./hh-manet-sim --help                    # all options
+```
+
+**Live telemetry for a GUI** — a long-running simulator that serves node/
+topology telemetry over TCP as JSON, for the MA-OI operator console (see
+[GUI integration](#gui-integration) below):
+
+```sh
+./hh-manet-telemetry-serve --port 5566 --nodes 4 --step-ms 100
 ```
 
 **Daemon:**
@@ -242,6 +255,74 @@ seed replays identically.
 
 ---
 
+## GUI Integration
+
+Live node/topology telemetry can be streamed to the MA-OI PyQt6 operator
+console (a separate repository) for visualization during development and
+testing. Full design and scope is in
+[docs/GUI-INTEGRATION-PLAN.md](docs/GUI-INTEGRATION-PLAN.md) — this is the
+short version to get it running.
+
+**What talks to what:**
+
+```
+hh-manet-telemetry-serve  ──TCP, newline-delimited JSON──►  MA-OI (PyQt6 GUI)
+(this repo, no hardware needed)                              network panel
+```
+
+Plaintext only today — see the plan's §5a-1 for the open transport-security
+decision before using this beyond local development.
+
+### 1. Build this repo
+
+```sh
+mkdir -p build && cd build
+cmake ..
+make -j4 hh-manet-telemetry-serve
+```
+
+### 2. Start the telemetry server
+
+```sh
+./hh-manet-telemetry-serve --port 5566 --nodes 4 --step-ms 100
+```
+
+Runs a small line-topology simulation indefinitely (real production MANET
+stack, virtual radio, no hardware) and serves each node's telemetry to any
+TCP client connecting on `127.0.0.1:5566`. Leave it running; `Ctrl-C` to
+stop. Run `./hh-manet-telemetry-serve --help` for all options.
+
+### 3. Point MA-OI at it
+
+In the MA-OI repo, set the network source to live in
+`config/settings.yaml` (or via the Settings dialog once exposed there):
+
+```yaml
+network:
+  network_source: live_socket
+  manet_telemetry_host: 127.0.0.1
+  manet_telemetry_port: 5566
+```
+
+Then run MA-OI as usual (see that repo's own README/Docker setup). Its
+Network Topology panel will show the live nodes/links from step 2 instead
+of the built-in simulated topology — no other MA-OI configuration changes.
+
+### 4. Confirm it's working
+
+With the server from step 2 running, a quick manual check without the GUI:
+
+```sh
+# from this repo
+nc 127.0.0.1 5566 | head -1
+```
+
+Each line is one node's status as JSON (`node_id`, `state`, neighbor/route
+counts, per-neighbor `link_state`, …). If nothing arrives, confirm the
+server is still running and the port matches on both sides.
+
+---
+
 ## Hardware integration
 
 Everything RF-facing sits behind the `hh_radio_ops_t` interface. Connecting
@@ -265,3 +346,4 @@ Deployment packaging is designed in
 - [docs/SCA-COMPATIBILITY.md](docs/SCA-COMPATIBILITY.md) — SCA 2.2.2 compatibility scope and gaps
 - [docs/DEPLOYMENT-ARCHITECTURE.md](docs/DEPLOYMENT-ARCHITECTURE.md) — deployment packaging design
 - [docs/IMPLEMENTATION-WALKTHROUGH.md](docs/IMPLEMENTATION-WALKTHROUGH.md) — a guided tour of the implementation
+- [docs/GUI-INTEGRATION-PLAN.md](docs/GUI-INTEGRATION-PLAN.md) — connecting the MA-OI operator console for live visualization
