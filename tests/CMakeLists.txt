@@ -30,8 +30,10 @@ hh_add_test(test_route_verification scenario/test_route_verification.c)
 hh_add_test(test_status_scenarios scenario/test_status_scenarios.c)
 hh_add_test(test_failure_recovery_chain scenario/test_failure_recovery_chain.c)
 hh_add_test(test_telemetry_sca unit/test_telemetry_sca.c)
+hh_add_test(test_telemetry_verification unit/test_telemetry_verification.c)
 hh_add_test(test_node        unit/test_node.c)
 hh_add_test(test_status_events unit/test_status_events.c)
+hh_add_test(test_interface_compliance unit/test_interface_compliance.c)
 
 # Tests for the simulation tooling itself. Needs the tools/sim sources, which
 # are development tooling and never linked into the production library.
