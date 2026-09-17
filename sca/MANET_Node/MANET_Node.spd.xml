@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE softpkg PUBLIC "-//JTRS//DTD SCA V2.2.2 SPD//EN" "softpkg.dtd">
+<!--
+  Software Package Descriptor (SPD) for the MANET_Node SCA Resource.
+
+  Package namespace: hh.sdr.manet -- mirrors this repository's existing C
+  namespace (include/hhsdr/... , hh_* symbol prefix) rather than inventing an
+  unrelated one. Component id below is a placeholder UUID generated for this
+  package; it has no meaning beyond uniquely identifying this SPD within a
+  domain and should be treated as stable once any DomainManager/SAD ever
+  references it (neither exists yet in this repository).
+
+  This SPD names ONE implementation: a plain-C adapter (adapter/) linked
+  against libhhsdr_core.a, the SAME static library src/CMakeLists.txt
+  already builds for the hh-manet daemon. No REDHAWK/CORBA/ORB dependency is
+  declared or required by this implementation entry, per this phase's scope
+  (SCA 2.2.2 component-model conformance only, no Core Framework).
+-->
+<softpkg name="MANET_Node" id="DCE:8f2b6b1a-6b3e-4b8a-9a3e-9b2f7e6d5c41" type="sca_compliant">
+
+  <title>MANET_Node</title>
+
+  <author>
+    <name>hh-sdr-manet project</name>
+  </author>
+
+  <description>
+    SCA 2.2.2 CF::Resource wrapping the assembled MANET control/data-plane
+    node (hh_node_t, include/hhsdr/manet/node.h) from the hh-sdr-manet C
+    implementation. Adapts the existing SCA-shaped lifecycle/property/port
+    content basis already present in src/sca/resource.c to the CF::LifeCycle,
+    CF::TestableObject, CF::PropertySet, CF::PortSupplier, and CF::Resource
+    interfaces defined in SCA 2.2.2 Appendix C. Contains no CORBA/ORB
+    binding, no DomainManager/DeviceManager/ApplicationFactory dependency,
+    and no REDHAWK-specific API usage -- see MANET_Node.scd.xml and
+    adapter/manet_sca_adapter.h for the exact interface surface implemented
+    and docs/SCA-COMPATIBILITY.md for the full list of what is deliberately
+    not implemented at this phase.
+  </description>
+
+  <propertyfile type="PRF">
+    <localfile name="MANET_Node.prf.xml"/>
+  </propertyfile>
+
+  <descriptor>
+    <localfile name="MANET_Node.scd.xml"/>
+  </descriptor>
+
+  <implementation id="MANET_Node_cpp_impl">
+    <description>
+      Reference (non-CORBA) implementation: a plain-C adapter layer
+      (adapter/manet_sca_adapter.c) that translates SCA CF interface
+      operations (initialize/releaseObject/configure/query/runTest/getPort/
+      start/stop) onto the existing hh_node_t lifecycle and
+      hh_sca_resource_t lifecycle guard (src/sca/resource.c), then delegates
+      all MANET behavior to the unmodified production code in
+      libhhsdr_core.a. No ORB skeleton/stub code is generated or linked in
+      this phase; wiring this adapter to a live CF::Resource CORBA servant
+      is future work explicitly out of scope here (see README.md in this
+      directory).
+    </description>
+
+    <code type="SharedLibrary">
+      <localfile name="libmanet_sca_adapter.so"/>
+      <entrypoint>MANET_Node_adapter_entrypoint</entrypoint>
+    </code>
+
+    <compiler name="gcc" version="11.4"/>
+    <programminglanguage name="C"/>
+
+    <humanlanguage name="EN"/>
+
+    <os name="Linux"/>
+    <processor name="x86_64"/>
+
+    <dependency type="SharedLibrary">
+      <localfile name="../../build/libhhsdr_core.a"/>
+    </dependency>
+  </implementation>
+
+</softpkg>

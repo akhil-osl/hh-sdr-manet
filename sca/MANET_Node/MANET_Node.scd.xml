@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE softwarecomponent PUBLIC "-//JTRS//DTD SCA V2.2.2 SCD//EN" "softwarecomponent.dtd">
+<!--
+  Software Component Descriptor (SCD) for the MANET_Node SCA Resource.
+
+  COMPONENT BOUNDARY: this descriptor wraps the assembled node (hh_node_t,
+  include/hhsdr/manet/node.h), not the individual internal modules
+  (Discovery/Neighbor/LinkHealth/FailureDetector/Topology/Routing/
+  SelfHealing). Those seven modules are wired to each other exclusively
+  through an in-process event dispatcher (src/core/dispatcher.c) using direct
+  C struct calls -- never CORBA, never inter-process -- so they are not
+  separate SCA component boundaries today. src/sca/resource.c's per-module
+  classification table remains the correct content basis for a *future*,
+  finer-grained decomposition (see docs/SCA-COMPATIBILITY.md open item 4:
+  "each mesh node being a full SCA domain" is explicitly unresolved); this
+  phase wraps the one boundary the C code actually has.
+
+  PORTS: derived only from hh_node_t's real external entry points
+  (include/hhsdr/manet/node.h) and the radio contract it depends on
+  (include/hhsdr/radio/radio.h):
+
+    - hh_node_on_frame(node, frame, metrics)   -- inbound path: a frame plus
+      its measured link sample arrives from the radio/SDR boundary. This is
+      the same HTI-04/HTI-05 pairing the radio vtable documents
+      ("both are properties of the same reception").
+    - hh_radio_transmit() via hh_forwarder / hh_node's owned hh_radio_t --
+      outbound path: framed messages (beacon, data, routing) leave toward
+      the radio/SDR boundary (HTI-03).
+    - hh_node_send(node, dst, payload, len, now) -- application data
+      injected into the MANET stack for delivery (data-plane payload, not a
+      radio frame; the node's forwarder frames it internally).
+    - hh_telemetry_node_status() / hh_telemetry_dump() (telemetry.h) --
+      read-only status export, off the fast path, matching the
+      ManagementTelemetry Service classification in src/sca/resource.c.
+
+  No RF/IQ/sample-level port exists here: HH_RADIO_MAX_FRAME/hh_frame_t is
+  framed data, not baseband samples (radio.h is explicit that this is a
+  deliberate boundary choice). A future OpenCPI/FPGA integration attaches
+  BELOW the Radio/SDR Interface boundary this component's uses-port faces,
+  per docs/diagrams/redhawk-opencpi-integration.drawio -- that integration is
+  explicitly out of scope for this phase.
+
+  IDL repIds below use a placeholder namespace (IDL:HHSDR/MANET/...) because
+  no IDL module defining frame/status/config structures has been authored or
+  compiled in this repository. This SCD intentionally names ports and
+  directions without inventing a working IDL binding -- see the "AMBIGUITIES"
+  note at the end of this file.
+-->
+<softwarecomponent>
+
+  <corbaversion>2.2</corbaversion>
+  <componentrepid repid="IDL:CF/Resource:1.0"/>
+  <componenttype>resource</componenttype>
+
+  <componentfeatures>
+    <supportsinterface repid="IDL:CF/LifeCycle:1.0" supportsname="LifeCycle"/>
+    <supportsinterface repid="IDL:CF/TestableObject:1.0" supportsname="TestableObject"/>
+    <supportsinterface repid="IDL:CF/PropertySet:1.0" supportsname="PropertySet"/>
+    <supportsinterface repid="IDL:CF/PortSupplier:1.0" supportsname="PortSupplier"/>
+    <supportsinterface repid="IDL:CF/Resource:1.0" supportsname="Resource"/>
+
+    <ports>
+      <!-- Inbound: framed reception + measured link metrics from the
+           Radio/SDR Interface boundary (radio.h hh_radio_rx_fn, HTI-04/05). -->
+      <provides repid="IDL:HHSDR/MANET/FrameConsumer:1.0" providesname="radio_frame_in">
+        <description>
+          Inbound path for hh_node_on_frame(): one over-the-air frame
+          (hh_frame_t, radio.h) plus the hh_link_sample_t metrics measured for
+          it. Pairs HTI-04 (DiscoveryBeacon receipt) and HTI-05 (link metric
+          sample) exactly as the radio adapter reports them together.
+        </description>
+      </provides>
+
+      <!-- Outbound: framed transmission toward the Radio/SDR Interface
+           boundary (HTI-03). -->
+      <uses repid="IDL:HHSDR/MANET/FrameProducer:1.0" usesname="radio_frame_out">
+        <description>
+          Outbound path used by the Packet Forwarder and control-plane
+          components (Discovery beacons, Routing updates, data-plane frames)
+          to hand a framed message (hh_frame_t) to the radio/SDR boundary via
+          hh_radio_transmit(). Also carries HTI-14 channel_control requests
+          (hh_radio_set_channel) issued by Self-Healing, since both are
+          operations on the same hh_radio_t contract this component depends
+          on -- not a separate port, because the C code does not separate
+          them.
+        </description>
+      </uses>
+
+      <!-- Application data plane: opaque payload in/out via hh_node_send(). -->
+      <provides repid="IDL:HHSDR/MANET/DataConsumer:1.0" providesname="app_data_in">
+        <description>
+          Inbound path for hh_node_send(node, dst, payload, len, now):
+          opaque application payload to be delivered toward a MANET
+          destination node id. This is a distinct entry point from
+          radio_frame_in -- payload here has not yet been framed.
+        </description>
+      </provides>
+
+      <!-- Read-only management/telemetry export (Service-classified in
+           src/sca/resource.c; never on the forwarding path). -->
+      <provides repid="IDL:HHSDR/MANET/StatusQuery:1.0" providesname="status_out">
+        <description>
+          Read-only export of hh_node_status_t (telemetry.h) and the
+          formatted neighbor/route/topology reports
+          (hh_telemetry_format_*()). Matches the ManagementTelemetry Service
+          classification: no mandated CF::Resource lifecycle of its own,
+          read-only, off the critical path.
+        </description>
+      </provides>
+    </ports>
+  </componentfeatures>
+
+  <interfaces>
+    <interface repid="IDL:CF/LifeCycle:1.0" name="LifeCycle"/>
+    <interface repid="IDL:CF/TestableObject:1.0" name="TestableObject"/>
+    <interface repid="IDL:CF/PropertySet:1.0" name="PropertySet"/>
+    <interface repid="IDL:CF/PortSupplier:1.0" name="PortSupplier"/>
+    <interface repid="IDL:CF/Resource:1.0" name="Resource"/>
+  </interfaces>
+
+</softwarecomponent>
+
+<!--
+  AMBIGUITIES:
+
+  1. No compiled IDL exists in this repository for frame/status/config
+     structures (docs/SCA-COMPATIBILITY.md gap #2: "the HW/SW spec supplies
+     IDL struct definitions; no IDL compiler output or ORB binding exists").
+     The repIds above (IDL:HHSDR/MANET/*) name the port *semantics* this
+     component actually has without inventing a binding for data that has no
+     IDL today. Authoring HHSDR.idl (structs for hh_frame_t, hh_link_sample_t,
+     hh_node_status_t, and the CF::Properties mapping for hh_config_t) is
+     required before these ports can be realized as real CORBA ports, and is
+     left for a follow-up phase rather than invented here.
+
+  2. hh_forwarder_t (dataplane/forwarder.c) is explicitly OUTSIDE the SCA
+     Resource graph per src/sca/resource.c and its own header comment
+     ("deliberately OUTSIDE the SCA Resource graph ... sub-microsecond
+     forwarding-path timing"). This SCD nonetheless exposes radio_frame_out
+     as a single uses-port for the whole node, because from the perspective
+     of anything outside hh_node_t, the forwarder's transmissions and the
+     control plane's beacon/routing transmissions leave through the same
+     hh_radio_t the node owns -- there is no separate external seam between
+     them today. A future finer-grained decomposition (ambiguity noted in the
+     header above) would need to decide whether the fast path gets its own
+     port with different QoS/threading assumptions.
+
+  3. RadioSdrInterface is classified HH_SCA_DEVICE in src/sca/resource.c
+     ("Owned by the Device Manager, not the Application"). This SCD does not
+     attempt to describe that Device or its DCD/DeviceManager relationship --
+     out of scope per explicit instruction (no DomainManager/DeviceManager/
+     Application deployment in this phase). radio_frame_in/radio_frame_out
+     above describe only the boundary this component presents outward; what
+     sits on the other side of that boundary is not this file's concern.
+-->
