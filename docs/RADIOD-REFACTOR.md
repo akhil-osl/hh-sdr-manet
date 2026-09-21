@@ -45,7 +45,7 @@ Every phase must satisfy all of these before it is committed:
 
 1. The build succeeds with **zero warnings** under
    `-Wall -Wextra -Wshadow -Wpointer-arith -Wcast-qual -Wstrict-prototypes`.
-2. **All tests pass** (28 at baseline; the count only grows — 30 as of Phase 7).
+2. **All tests pass** (28 at baseline; the count only grows — 31 as of Phase 8).
 3. Behaviour is unchanged unless the phase explicitly states otherwise.
 4. Dependencies flow one way only. In particular `librc` must never depend on
    `hhsdr_radiod`.
@@ -66,7 +66,7 @@ Every phase must satisfy all of these before it is committed:
 | 5 | Split `hhsdr_core` into base and MANET libraries | **DONE** |
 | 6a | Relocate `hw_adapter` into `radiod/src/backends/` | **DONE** |
 | 7 | radiod configuration file and daemon hardening | **DONE** |
-| 8 | Event/fault registry (in-process) | pending |
+| 8 | Event/fault registry (in-process) | **DONE** |
 | 9 | Empty labelled scaffolding for drivers/workers/fpga | pending |
 
 Phase **6b** — severing `hh-manet`'s link to the PL adapter, which is what
@@ -348,6 +348,61 @@ line-accurate error reporting.
 Confirmed against a live daemon: the config file is honoured, `-s` overrides
 it, a bad key reports `at line 3` and exits 1, and the socket is unlinked on
 release. **30/30** passing, 0 warnings, clean under ASan + UBSan.
+
+---
+
+## Phase 8 — Fault registry (DONE)
+
+The architecture assigns "Events, fault registry" to radiod. Previously radiod
+had a five-value enum and a single hook — no record of what had gone wrong or
+when. Added `hh_radiod_faults_t`
+(`radiod/include/hhsdr/radiod/events.h`, `radiod/src/events.c`).
+
+Per fault kind it records: active flag, occurrence count, first-seen,
+last-seen, and cleared-at. Globally it keeps a `generation` counter plus
+assert/clear totals.
+
+### Built only on what is known
+
+The registry covers **exactly the five fault kinds the protocol already
+defines** — `none`, `tx_failure`, `rx_silence`, `hw_fault`, `backend_io`.
+
+Deliberately absent, because U-05 leaves them unspecified: severity levels,
+fault classes, hardware fault codes, latch-versus-transient policy, clear
+authority, and history depth.
+
+### Two design decisions worth recording
+
+**Re-assertion is not a new event.** A backend re-reporting a standing
+condition on every poll advances `count` and `last_seen` but leaves
+`first_seen` and `generation` alone — otherwise a single stuck fault would
+look like a storm, and the onset time would be lost.
+
+**History survives a clear.** After clearing, `count` and `first_seen` remain,
+so "it happened once and recovered" stays distinguishable from "it never
+happened". The `generation` counter changes on both assert and clear, letting
+a polling client detect a flap it did not directly observe — which matters
+precisely because there is no push channel.
+
+### Wiring
+
+The registry is fed from four places in `radiod/src/radiod.c`: `INJECT_FAULT`,
+`CLEAR_FAULT` (which clears all kinds, since the command carries none), a
+failed `START` (recorded as `hw_fault`), and a failed `SET_CHANNEL` (recorded
+as `backend_io`). The last two mean a real failure is now recorded, not merely
+reflected in the lifecycle state.
+
+### Not exposed over the wire
+
+`hh_radiod_faults()` gives an in-process read-only view; the registry is
+**not** reported over the control protocol. Doing so needs either a new
+response payload or an asynchronous event, and neither wire format is
+specified (U-01, U-05). The data is maintained and tested now so it is ready
+when a format exists.
+
+`test_radiod_faults` adds 11 cases across both the registry in isolation and
+the registry as radiod drives it. **31/31** passing, 0 warnings, clean under
+ASan + UBSan.
 
 ---
 

@@ -21,6 +21,7 @@ hh_status_t hh_radiod_init(hh_radiod_t *d, hh_radio_t *radio, const hh_clock_t *
     d->node_id    = HH_NODE_ID_INVALID;
     d->listen_fd  = -1;
     for (int i = 0; i < HH_RADIOD_MAX_CLIENTS; i++) d->clients[i].fd = -1;
+    hh_radiod_faults_init(&d->faults);
     return HH_OK;
 }
 
@@ -159,8 +160,10 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
                               hh_rc_response_t *resp)
 {
     hh_status_t st;
+    hh_time_ms_t now;
 
     if (!d || !req || !resp) return;
+    now = hh_now(d->clock);
     memset(resp, 0, sizeof *resp);
     resp->cmd = req->cmd;
     d->requests_total++;
@@ -196,6 +199,9 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
     case HH_RC_CMD_START:
         st = hh_radio_open(d->radio);
         if (st != HH_OK) {
+            /* A backend that will not open is a hardware fault, and the
+             * registry is what records that it happened and when. */
+            hh_radiod_faults_assert(&d->faults, HH_RC_FAULT_HW_FAULT, now);
             d->state = HH_RC_STATE_FAULTED;
             resp->ok = false;
             resp->reason = st;
@@ -230,6 +236,7 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
     case HH_RC_CMD_SET_CHANNEL:
         st = hh_radio_set_channel(d->radio, req->channel);
         if (st != HH_OK) {
+            hh_radiod_faults_assert(&d->faults, HH_RC_FAULT_BACKEND_IO, now);
             resp->ok = false;
             resp->reason = st;
             break;
@@ -240,6 +247,7 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
 
     case HH_RC_CMD_INJECT_FAULT:
         if (d->fault_fn) d->fault_fn(d->fault_ctx, req->fault);
+        hh_radiod_faults_assert(&d->faults, req->fault, now);
         if (req->fault == HH_RC_FAULT_HW_FAULT) d->state = HH_RC_STATE_FAULTED;
         resp->ok = true;
         fill_status(d, resp);
@@ -247,6 +255,8 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
 
     case HH_RC_CMD_CLEAR_FAULT:
         if (d->fault_fn) d->fault_fn(d->fault_ctx, HH_RC_FAULT_NONE);
+        /* The command carries no kind, so it clears everything. */
+        hh_radiod_faults_clear_all(&d->faults, now);
         if (d->state == HH_RC_STATE_FAULTED) d->state = HH_RC_STATE_RUNNING;
         resp->ok = true;
         fill_status(d, resp);
@@ -265,6 +275,11 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
 bool hh_radiod_shutdown_requested(const hh_radiod_t *d)
 {
     return d && d->state == HH_RC_STATE_RELEASED;
+}
+
+const hh_radiod_faults_t *hh_radiod_faults(const hh_radiod_t *d)
+{
+    return d ? &d->faults : NULL;
 }
 
 /* ---- socket servicing ---- */

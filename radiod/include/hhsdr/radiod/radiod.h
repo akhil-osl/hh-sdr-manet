@@ -30,6 +30,7 @@
 #include "hhsdr/protocol/rc.h"
 #include "hhsdr/radio/radio.h"
 #include "hhsdr/radiod/config.h"
+#include "hhsdr/radiod/events.h"
 #include <poll.h>
 
 #define HH_RADIOD_MAX_CLIENTS 16
@@ -71,6 +72,9 @@ typedef struct {
 
     /* Idle-client timeout, copied from configuration. Zero disables it. */
     uint32_t           client_idle_timeout_ms;
+
+    /* Fault registry: what is wrong, how often, and since when. */
+    hh_radiod_faults_t faults;
 
     uint64_t requests_total;
     uint64_t requests_rejected;
@@ -120,5 +124,14 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
 /* True once SHUTDOWN has been accepted and the daemon should exit its
  * process loop after finishing the current tick. */
 bool hh_radiod_shutdown_requested(const hh_radiod_t *d);
+
+/* Read-only view of the fault registry.
+ *
+ * Not yet exposed over the control protocol: reporting it would need either a
+ * new response payload or an asynchronous event, and the wire format for
+ * neither is specified (unknown.md, U-01 and U-05). The registry is
+ * maintained and observable in-process so that the data exists and is tested
+ * when a wire format does. */
+const hh_radiod_faults_t *hh_radiod_faults(const hh_radiod_t *d);
 
 #endif /* HHSDR_RADIOD_H */

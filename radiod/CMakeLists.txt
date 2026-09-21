@@ -20,6 +20,7 @@
 add_library(hhsdr_radiod STATIC
   src/radiod.c
   src/config.c
+  src/events.c
   src/backends/mock_backend.c
 )
 
@@ -47,6 +48,11 @@ if(HH_BUILD_TESTS)
   target_link_libraries(test_radiod_config PRIVATE hhsdr_radiod)
   target_include_directories(test_radiod_config PRIVATE ${CMAKE_SOURCE_DIR}/tests)
   add_test(NAME test_radiod_config COMMAND test_radiod_config)
+
+  add_executable(test_radiod_faults tests/test_radiod_faults.c)
+  target_link_libraries(test_radiod_faults PRIVATE hhsdr_radiod)
+  target_include_directories(test_radiod_faults PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+  add_test(NAME test_radiod_faults COMMAND test_radiod_faults)
 
   add_executable(test_radiod_state_machine tests/test_radiod_state_machine.c)
   target_link_libraries(test_radiod_state_machine PRIVATE hhsdr_radiod)
