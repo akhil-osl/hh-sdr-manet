@@ -67,7 +67,7 @@ Every phase must satisfy all of these before it is committed:
 | 6a | Relocate `hw_adapter` into `radiod/src/backends/` | **DONE** |
 | 7 | radiod configuration file and daemon hardening | **DONE** |
 | 8 | Event/fault registry (in-process) | **DONE** |
-| 9 | Empty labelled scaffolding for drivers/workers/fpga | pending |
+| 9 | Empty labelled scaffolding for drivers/workers/fpga | **DONE** |
 
 Phase **6b** — severing `hh-manet`'s link to the PL adapter, which is what
 fully enforces the drawing's Note 1 — is **deliberately not in this round**. It
@@ -403,6 +403,27 @@ when a format exists.
 `test_radiod_faults` adds 11 cases across both the registry in isolation and
 the registry as radiod drives it. **31/31** passing, 0 warnings, clean under
 ASan + UBSan.
+
+---
+
+## Phase 9 — Scaffolding (DONE)
+
+Created `drivers/`, `workers/` and `fpga/`, each containing **only** a
+`README.md`. No skeleton code, no headers, no build targets — a stub would be
+an invented contract, and the point of these directories is to make the shape
+of the target visible without pretending any of it exists.
+
+Each README states what belongs there, which unknown blocks it, who owns that
+unknown, and what the repository actually contains today (in every case:
+nothing, confirmed by an explicit symbol sweep).
+
+The `fpga/` README additionally records the two PL constraints that bind
+software rather than HDL: MANET STROBE as sole RF state authority (radiod must
+never drive T/R switching), and frequency hopping being PL-autonomous at
+1000 hop/s (radiod can at most select a hopset).
+
+The README's repository-structure section was updated to show the new layout
+and the one-way dependency rule.
 
 ---
 
