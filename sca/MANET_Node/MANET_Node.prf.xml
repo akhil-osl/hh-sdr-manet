@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties PUBLIC "-//JTRS//DTD SCA V2.2.2 PRF//EN" "properties.dtd">
+<!--
+  Properties File (PRF) for the MANET_Node SCA Resource.
+
+  SOURCE OF TRUTH: every <simple> element below is a direct, 1:1 transcription
+  of one entry in g_props[] in src/sca/resource.c, cross-checked against the
+  corresponding field in hh_config_t (include/hhsdr/core/config.h). No
+  property, id, type, or default here was invented for this file: the id,
+  name, description and default text are copied from resource.c and
+  config.h's own inline comments. See the "AMBIGUITIES" note at the bottom of
+  this file for the one open question about kind mapping.
+
+  PRF `kind` values used:
+    configure  -- CF::PropertySet::configure()-settable at runtime.
+    execparam  -- fixed at Application launch (component instantiation);
+                  not retunable afterward. SCA 2.2.2 App D, execparam kind.
+    allocation -- deployment-time allocation/matching property.
+
+  Mapping from hh_sca_property_t.kind (src/sca/resource.c):
+    HH_PROP_CONFIGURE  -> kind="configure"
+    HH_PROP_EXECPARAM  -> kind="execparam"
+    HH_PROP_ALLOCATION -> kind="allocation"  (see AMBIGUITIES: SCA allocation
+                          properties are conventionally paired with
+                          <allocationproperties> matching semantics that this
+                          MANET stack's "bounded table size" meaning does not
+                          use; kept as allocation kind only because
+                          resource.c already classifies it that way.)
+
+  Mapping from hh_sca_property_t.type:
+    HH_PROP_U32    -> type="ulong"
+    HH_PROP_F32    -> type="float"
+    HH_PROP_BOOL   -> type="boolean"
+    HH_PROP_STRING -> type="string"
+-->
+<properties>
+
+  <!-- ================= identity ================= -->
+  <simple id="hh::node_id" type="ulong" name="node_id">
+    <description>Node identity; fixed at launch</description>
+    <kind kindtype="execparam"/>
+    <action type="external"/>
+  </simple>
+
+  <!-- ================= discovery ================= -->
+  <simple id="hh::discovery::beacon_interval_ms" type="ulong" name="beacon_interval_ms">
+    <description>Steady-state beacon cadence</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::discovery::beacon_interval_min_ms" type="ulong" name="beacon_interval_min_ms">
+    <description>Adaptive cadence lower bound</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::discovery::beacon_interval_max_ms" type="ulong" name="beacon_interval_max_ms">
+    <description>Adaptive cadence upper bound</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::discovery::acquisition_timeout_ms" type="ulong" name="acquisition_timeout_ms">
+    <description>Bounded acquisition phase timeout</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <!-- ================= neighbor management ================= -->
+  <simple id="hh::neighbor::allowed_loss" type="ulong" name="neighbor_allowed_loss">
+    <description>Missed beacons tolerated before expiry</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::neighbor::max_entries" type="ulong" name="max_neighbors">
+    <description>Bounded neighbor table size</description>
+    <kind kindtype="allocation"/>
+    <action type="external"/>
+  </simple>
+
+  <!-- ================= link health ================= -->
+  <simple id="hh::linkhealth::degrade_threshold" type="float" name="lh_degrade_threshold">
+    <description>Fused score entering Degraded</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::linkhealth::recover_threshold" type="float" name="lh_recover_threshold">
+    <description>High-water mark returning to Healthy</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::linkhealth::suspect_hold_ms" type="ulong" name="lh_suspect_hold_ms">
+    <description>SuspectedFailure to Failed hold-down</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::linkhealth::recover_hold_ms" type="ulong" name="lh_recover_hold_ms">
+    <description>Recovering to Healthy hold-down</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::linkhealth::min_signals_suspect" type="ulong" name="lh_min_signals_suspect">
+    <description>Independent bad signals to suspect</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <!-- ================= routing ================= -->
+  <simple id="hh::routing::active_timeout_ms" type="ulong" name="route_active_timeout_ms">
+    <description>Route inactivity expiry</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::routing::delete_period_ms" type="ulong" name="route_delete_period_ms">
+    <description>Grace window before route deletion</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::routing::update_interval_ms" type="ulong" name="route_update_interval_ms">
+    <description>Proactive route update cadence</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::routing::max_routes" type="ulong" name="max_routes">
+    <description>Bounded route table size</description>
+    <kind kindtype="allocation"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::routing::max_hop_count" type="ulong" name="max_hop_count">
+    <description>Hop-count bound</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <!-- ================= recovery ================= -->
+  <simple id="hh::recovery::hold_down_ms" type="ulong" name="hold_down_ms">
+    <description>New-route stability window</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::recovery::merge_hold_down_ms" type="ulong" name="merge_hold_down_ms">
+    <description>Hold-down before trusting merged routes</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::recovery::dampening_flap_threshold" type="ulong" name="dampening_flap_threshold">
+    <description>Flaps in window before penalty</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::recovery::rediscovery_max_retries" type="ulong" name="rediscovery_max_retries">
+    <description>Bounded rediscovery attempts</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <!-- ================= observability / radio selection ================= -->
+  <simple id="hh::mgmt::log_level" type="string" name="log_level">
+    <description>Logging verbosity</description>
+    <kind kindtype="configure"/>
+    <action type="external"/>
+  </simple>
+
+  <simple id="hh::radio::adapter" type="string" name="radio_adapter">
+    <description>Radio adapter selection</description>
+    <kind kindtype="execparam"/>
+    <action type="external"/>
+  </simple>
+
+</properties>
+
+<!--
+  AMBIGUITIES (not silently resolved, recorded per instructions):
+
+  1. PRF `kind="allocation"` conventionally implies the property participates
+     in SCA/REDHAWK allocation-property matching (a Device/Component is
+     selected because it satisfies a numeric allocation request from a
+     Domain). hh::neighbor::max_entries and hh::routing::max_routes are
+     classified HH_PROP_ALLOCATION in src/sca/resource.c because they bound
+     fixed-size tables (LRU eviction, bounded route table) -- a capacity
+     property, not a deployment-matching property. Whether these should also
+     carry PRF <allocationproperties> matching semantics, or whether
+     "allocation" here means only "fixed capacity, not runtime-tunable," is
+     unresolved and left as the architecture's own open question (see
+     docs/SCA-COMPATIBILITY.md open item 2).
+
+  2. hh::node_id and hh::radio::adapter are HH_PROP_EXECPARAM in the C code
+     ("set at launch"/"fixed at launch"). This PRF marks them kind="execparam"
+     accordingly. Because no Application Factory/DomainManager exists in this
+     phase (per explicit instruction), nothing yet enforces that an execparam
+     is supplied only at construction -- that enforcement today lives solely
+     in hh_sca_configure()'s state check (src/sca/resource.c), which the
+     adapter in this component preserves. See adapter/manet_sca_adapter.c.
+-->
