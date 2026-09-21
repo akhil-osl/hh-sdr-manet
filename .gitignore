@@ -18,3 +18,4 @@ tests/test_*
 tests/demo_selfheal
 logs/
 *.log
+.vscode/
