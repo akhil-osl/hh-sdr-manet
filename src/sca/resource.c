@@ -49,7 +49,7 @@ static const hh_sca_property_t g_props[] = {
     { "hh::neighbor::allowed_loss", "neighbor_allowed_loss",
       HH_PROP_CONFIGURE, HH_PROP_U32, "Missed beacons tolerated before expiry" },
     { "hh::neighbor::max_entries", "max_neighbors",
-      HH_PROP_ALLOCATION, HH_PROP_U32, "Bounded neighbor table size" },
+      HH_PROP_CONFIGURE, HH_PROP_U32, "Bounded neighbor table size" },
     { "hh::linkhealth::degrade_threshold", "lh_degrade_threshold",
       HH_PROP_CONFIGURE, HH_PROP_F32, "Fused score entering Degraded" },
     { "hh::linkhealth::recover_threshold", "lh_recover_threshold",
@@ -67,7 +67,7 @@ static const hh_sca_property_t g_props[] = {
     { "hh::routing::update_interval_ms", "route_update_interval_ms",
       HH_PROP_CONFIGURE, HH_PROP_U32, "Proactive route update cadence" },
     { "hh::routing::max_routes", "max_routes",
-      HH_PROP_ALLOCATION, HH_PROP_U32, "Bounded route table size" },
+      HH_PROP_CONFIGURE, HH_PROP_U32, "Bounded route table size" },
     { "hh::routing::max_hop_count", "max_hop_count",
       HH_PROP_CONFIGURE, HH_PROP_U32, "Hop-count bound" },
     { "hh::recovery::hold_down_ms", "hold_down_ms",
@@ -222,14 +222,31 @@ hh_status_t hh_sca_configure(hh_sca_resource_t *r, hh_config_t *cfg,
 
     if (!r || !cfg || !property_id || !value) return HH_ERR_INVAL;
     /*  step 4: configuration follows wiring, and may be reapplied while
-     * configured or stopped, but never before ports are connected. */
+     * configured or stopped, but never before ports are connected.
+     *
+     * Step 8: HH_SCA_STARTED is also permitted for a HH_PROP_CONFIGURE-kind
+     * property (checked below, once the property is known). Every
+     * HH_PROP_CONFIGURE property in g_props[] is read live via a pointer
+     * into hh_config_t by its owning component (traced in the Step 8
+     * investigation: discovery/neighbor/link-health/routing/self-healing
+     * all re-read cfg-> fields on each evaluation, never caching a value at
+     * start time), so applying a new value has the same effect whether the
+     * node is running or not -- it changes the value the next evaluation
+     * sees, with no structural/memory dependency on when it is applied.
+     * This matches REDHAWK 2.2.10's own CF::PropertySet::configure()
+     * (PropertySet_impl.cpp), which has no started/stopped lifecycle guard
+     * at all. HH_PROP_EXECPARAM properties remain blocked outside
+     * PORTS_CONNECTED regardless of this state check, via the kind-specific
+     * guard below -- this change does not affect them. */
     if (r->state != HH_SCA_PORTS_CONNECTED && r->state != HH_SCA_CONFIGURED &&
-        r->state != HH_SCA_STOPPED)
+        r->state != HH_SCA_STOPPED && r->state != HH_SCA_STARTED)
         return HH_ERR_STATE;
 
     p = hh_sca_property_find(property_id);
     if (!p) return HH_ERR_NOTFOUND;
-    /* An execparam is fixed at launch and must not be retuned at runtime. */
+    /* An execparam is fixed at launch and must not be retuned at runtime,
+     * in any state -- including HH_SCA_STARTED, which the check above now
+     * permits only for non-execparam properties. */
     if (p->kind == HH_PROP_EXECPARAM && r->state != HH_SCA_PORTS_CONNECTED)
         return HH_ERR_STATE;
 

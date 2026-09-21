@@ -8,19 +8,25 @@
  * manet_sca_adapter.h for the full scope statement.
  */
 #include "manet_sca_adapter.h"
+#include "hhsdr/core/log.h"
 #include <stdio.h>
 #include <string.h>
 
 static const char *COMPONENT_NAME = "MANET_Node";
 
-hh_status_t manet_sca_initialize(manet_sca_adapter_t *a, const hh_clock_t *clock,
-                                 hh_radio_t *radio)
+hh_status_t manet_sca_initialize(manet_sca_adapter_t *a, hh_node_id_t node_id,
+                                 const hh_clock_t *clock, hh_radio_t *radio)
 {
     if (!a || !clock || !radio) return HH_ERR_INVAL;
+    /* node_id is the one execparam hh_node_init() cannot proceed without
+     * (hh_config_validate() rejects HH_NODE_ID_INVALID); reject it here,
+     * at construction, rather than opaquely inside hh_node_init(). */
+    if (node_id == HH_NODE_ID_INVALID) return HH_ERR_INVAL;
 
     memset(a, 0, sizeof *a);
     hh_sca_resource_init_guard(&a->guard, COMPONENT_NAME);
     hh_config_defaults(&a->cfg);
+    a->cfg.node_id = node_id;
     a->cfg_seeded = true;
 
     hh_status_t st = hh_sca_initialize(&a->guard);
@@ -69,13 +75,63 @@ hh_status_t manet_sca_configure(manet_sca_adapter_t *a,
     }
 
     /*
-     * hh_sca_configure() writes into a->cfg but hh_node_t already copied
-     * its own hh_config_t by value in hh_node_init() (node.h: `hh_config_t
-     * cfg;` is a member, not a pointer). Push the updated values into the
-     * node the same way hh_node_configure() documents: applying properties
-     * follows port connection and precedes start.
+     * hh_sca_configure() writes into a->cfg but hh_node_t already copied its
+     * own hh_config_t by value in hh_node_init() (node.h: `hh_config_t cfg;`
+     * is a member, not a pointer). Push the updated values into the node.
+     *
+     * hh_node_configure() itself is only callable from HH_NODE_INITIALIZED
+     * or HH_NODE_STOPPED (src/manet/node.c) -- it is the FIRST configure
+     * transition for a given configured/running cycle, not a repeatable
+     * "apply properties" operation. Real REDHAWK's own CF::PropertySet::
+     * configure() (redhawk-core-framework/redhawk/src/base/framework/
+     * PropertySet_impl.cpp) has no such one-shot restriction: it is an
+     * ordinary property setter, callable any number of times, updating only
+     * the properties supplied in a given call. This adapter's own SCA guard
+     * (hh_sca_resource_t) already permits repeated configure() while
+     * PORTS_CONNECTED/CONFIGURED/STOPPED (src/sca/resource.c) -- so a
+     * second call reaching this point with the node already CONFIGURED is a
+     * legitimate SCA-level operation that hh_node_configure()'s narrower
+     * one-shot guard would incorrectly reject.
+     *
+     * hh_node_t's seven control-plane sub-components are each initialized
+     * in hh_node_init() with a pointer to &n->cfg, not a private copy
+     * (src/manet/node.c), so a later `n->cfg = *cfg` is already exactly how
+     * hh_node_configure() itself applies an update -- a plain, safe struct
+     * assignment all sub-components observe immediately, needing no
+     * reinitialization. Calling hh_node_configure() only for the FIRST
+     * transition (from INITIALIZED or STOPPED) and applying the identical
+     * validated assignment directly for a subsequent CONFIGURED->CONFIGURED
+     * update reuses that same safe mechanism without re-running (or
+     * duplicating) hh_node_configure()'s one-shot transition guard.
      */
-    return hh_node_configure(&a->node, &a->cfg);
+    if (a->node.state == HH_NODE_INITIALIZED || a->node.state == HH_NODE_STOPPED)
+        return hh_node_configure(&a->node, &a->cfg);
+
+    /*
+     * HH_NODE_CONFIGURED and HH_NODE_RUNNING (Step 8: hh_sca_configure()
+     * now permits HH_PROP_CONFIGURE properties while HH_SCA_STARTED, which
+     * corresponds to HH_NODE_RUNNING here) both apply the identical safe,
+     * validated assignment directly rather than going through
+     * hh_node_configure()'s one-shot INITIALIZED/STOPPED-only transition --
+     * see the comment above for why this is safe in both states: every
+     * sub-component reads n->cfg through a live pointer, so the update is
+     * visible immediately with no reinitialization needed, whether or not
+     * the control loop is currently ticking.
+     */
+    if (a->node.state == HH_NODE_CONFIGURED || a->node.state == HH_NODE_RUNNING) {
+        hh_status_t st = hh_config_validate(&a->cfg);
+        if (st != HH_OK) return st;
+        a->node.cfg = a->cfg;
+        hh_log_set_level(a->node.cfg.log_level);
+        return HH_OK;
+    }
+
+    /* Any other node state (e.g. RELEASED) is not reachable here in
+     * practice, since hh_sca_configure()'s own guard already rejected
+     * HH_SCA_RELEASED above -- this mirrors hh_node_configure()'s own
+     * HH_ERR_STATE for an out-of-order call rather than silently
+     * succeeding. */
+    return HH_ERR_STATE;
 }
 
 hh_status_t manet_sca_query(const manet_sca_adapter_t *a, const char *property_id,

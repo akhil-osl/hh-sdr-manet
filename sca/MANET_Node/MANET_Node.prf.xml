@@ -76,7 +76,7 @@
 
   <simple id="hh::neighbor::max_entries" type="ulong" name="max_neighbors">
     <description>Bounded neighbor table size</description>
-    <kind kindtype="allocation"/>
+    <kind kindtype="configure"/>
     <action type="external"/>
   </simple>
 
@@ -132,7 +132,7 @@
 
   <simple id="hh::routing::max_routes" type="ulong" name="max_routes">
     <description>Bounded route table size</description>
-    <kind kindtype="allocation"/>
+    <kind kindtype="configure"/>
     <action type="external"/>
   </simple>
 
@@ -185,17 +185,55 @@
 <!--
   AMBIGUITIES (not silently resolved, recorded per instructions):
 
-  1. PRF `kind="allocation"` conventionally implies the property participates
-     in SCA/REDHAWK allocation-property matching (a Device/Component is
-     selected because it satisfies a numeric allocation request from a
-     Domain). hh::neighbor::max_entries and hh::routing::max_routes are
-     classified HH_PROP_ALLOCATION in src/sca/resource.c because they bound
-     fixed-size tables (LRU eviction, bounded route table) -- a capacity
-     property, not a deployment-matching property. Whether these should also
-     carry PRF <allocationproperties> matching semantics, or whether
-     "allocation" here means only "fixed capacity, not runtime-tunable," is
-     unresolved and left as the architecture's own open question (see
-     docs/SCA-COMPATIBILITY.md open item 2).
+  1. RESOLVED (Step 3 investigation, Step 6 correction applied). Real
+     REDHAWK 2.2.10 usage of kindtype="allocation" was checked directly
+     against the local /home/ospl/redhawk-src/redhawk-2.2.10 source tree,
+     not assumed, and re-verified independently in Step 6 before this fix
+     was applied:
+       - Every simple-property kindtype="allocation" example found across
+         the tree (GPP.prf.xml, USRP_UHD.prf.xml, RTL2832U.prf.xml,
+         DeviceManager.prf.xml, and the allocation-focused test devices
+         under redhawk/src/testing/sdr/dev/devices/) appears on a
+         componenttype="device" (or executabledevice/loadabledevice) SCD —
+         never on a componenttype="resource" SCD. (One structsequence
+         property in a synthetic test fixture, TestComponentProperty,
+         carries configurationkind kindtype="allocation" on a resource, but
+         exercises DTD generality rather than demonstrating a real design
+         pattern — it is a single outlier against the rule, not a
+         counter-convention.)
+       - Framework-side, allocation-kind properties are consumed
+         specifically through CF::Device::allocateCapacity() /
+         deallocateCapacity() (redhawk-core-framework/redhawk/src/base/
+         framework/Device_impl.cpp), invoked by the Domain Manager's
+         AllocationManager_impl.cpp when matching a Device to a resource
+         request. Step 6 additionally confirmed CF::Resource's own base
+         class (redhawk-core-framework/redhawk/src/base/include/ossie/
+         Resource_impl.h) declares no allocateCapacity/deallocateCapacity
+         method at all — a Resource has no mechanism to participate in
+         allocation-capacity matching in the first place, regardless of how
+         its properties are classified.
+       - hh::neighbor::max_entries and hh::routing::max_routes bound
+         hh_config_t runtime fields that cap usage of fixed-size C arrays
+         (HH_MAX_NEIGHBORS=64 in include/hhsdr/manet/neighbor.h,
+         HH_MAX_ROUTES=256 in include/hhsdr/manet/route_table.h) — compile-
+         time array bounds, unrelated to Device capacity-matching. This is
+         the same shape as hh::routing::max_hop_count, which is already
+         classified HH_PROP_CONFIGURE despite also being "a bound."
+       - Step 6 also confirmed HH_PROP_ALLOCATION was never branched on
+         anywhere in src/sca/resource.c, sca/MANET_Node/adapter/
+         manet_sca_adapter.c, or any test: hh_sca_configure()/hh_sca_query()
+         treat HH_PROP_ALLOCATION and HH_PROP_CONFIGURE identically (the
+         only kind ever checked in code is HH_PROP_EXECPARAM, in
+         hh_sca_configure()'s launch-only guard). Changing the
+         classification therefore has no runtime behavior change anywhere.
+     CONCLUSION AND FIX APPLIED: both properties are reclassified
+     HH_PROP_CONFIGURE in src/sca/resource.c::g_props[] (the source of
+     truth this PRF mirrors) and kindtype="configure" here, matching
+     max_hop_count's existing treatment. Their id, name, type, description,
+     default, and hh_config_t binding are unchanged — only the kind was
+     corrected. docs/SCA-COMPATIBILITY.md open item 2 still describes the
+     now-resolved ambiguity as open and should be updated separately; that
+     documentation file is outside this PRF's/g_props[]'s scope.
 
   2. hh::node_id and hh::radio::adapter are HH_PROP_EXECPARAM in the C code
      ("set at launch"/"fixed at launch"). This PRF marks them kind="execparam"

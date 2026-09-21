@@ -46,6 +46,38 @@ add_library(hhsdr_core STATIC
 )
 target_link_libraries(hhsdr_core PUBLIC m)
 
+# ---------------------------------------------------------------------------
+# hhsdr_core_pic : PIC-enabled static library, same sources as hhsdr_core.
+# Exists only so shared-library consumers outside this build (e.g. the
+# standalone SCA adapter under sca/MANET_Node/) can link against a
+# relocatable archive without making the production hhsdr_core/hh-manet
+# build PIC. Not used by hh-manet, hh-manet-sim, or any test target.
+# ---------------------------------------------------------------------------
+add_library(hhsdr_core_pic STATIC EXCLUDE_FROM_ALL
+  src/core/types.c
+  src/core/clock.c
+  src/core/log.c
+  src/core/config.c
+  src/core/events.c
+  src/core/dispatcher.c
+  src/radio/wire.c
+  src/adapters/hw/hw_adapter.c
+  src/manet/discovery.c
+  src/manet/neighbor.c
+  src/manet/link_health.c
+  src/manet/route_table.c
+  src/manet/routing.c
+  src/dataplane/forwarder.c
+  src/manet/failure_detector.c
+  src/manet/topology.c
+  src/manet/self_healing.c
+  src/manet/node.c
+  src/manet/telemetry.c
+  src/sca/resource.c
+)
+set_target_properties(hhsdr_core_pic PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(hhsdr_core_pic PUBLIC m)
+
 enable_testing()
 add_subdirectory(tests)
 

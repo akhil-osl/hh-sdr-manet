@@ -60,9 +60,32 @@
       directory).
     </description>
 
+    <!--
+      No <entrypoint> is declared here. SCA 2.2.2's softpkg.dtd defines
+      <entrypoint> as optional for SharedLibrary code (entrypoint? under
+      <code>; only Executable code requires it — confirmed against
+      REDHAWK 2.2.10's own SPD validator, ossie/apps/sdrlint, which checks
+      for a missing entrypoint only when code type="Executable"). Real
+      REDHAWK 2.2.10 SharedLibrary components that DO declare one (e.g.
+      redhawk/src/testing/sdr/dom/components/logger/logger.spd.xml,
+      .../BasicShared/BasicShared.spd.xml) use it as a second copy of the
+      <localfile> path for the framework's loader to resolve on disk — it
+      is never a C function/symbol name. This implementation has no such
+      loader-facing entrypoint yet: it exposes no CF::Resource CORBA
+      servant, no ComponentHost-compatible main, and no symbol a REDHAWK
+      loader could call. A previous version of this file declared
+      <entrypoint>MANET_Node_adapter_entrypoint</entrypoint>, but no symbol
+      of that name is defined anywhere in adapter/manet_sca_adapter.c (or
+      exported by libmanet_sca_adapter.so) — that value was incorrect and
+      has been removed rather than replaced, since inventing a
+      REDHAWK-loadable entrypoint for a plain-C adapter with no servant
+      would misrepresent what this implementation can currently do. Adding
+      a correct entrypoint is future work for whichever phase gives this
+      component a real CF::Resource CORBA binding (see README.md, "What
+      remains before a real SCA/REDHAWK runtime can host this component").
+    -->
     <code type="SharedLibrary">
       <localfile name="libmanet_sca_adapter.so"/>
-      <entrypoint>MANET_Node_adapter_entrypoint</entrypoint>
     </code>
 
     <compiler name="gcc" version="11.4"/>
@@ -73,9 +96,25 @@
     <os name="Linux"/>
     <processor name="x86_64"/>
 
-    <dependency type="SharedLibrary">
-      <localfile name="../../build/libhhsdr_core.a"/>
-    </dependency>
+    <!--
+      No <dependency> element is declared here. SCA 2.2.2's softpkg.dtd
+      requires <dependency> to contain one of softpkgref/propertyref/
+      simpleref/simplesequenceref/structref/structsequenceref — it cannot
+      directly contain <localfile> (confirmed against softpkg.dtd: "<!ELEMENT
+      dependency (softpkgref | propertyref | simpleref | simplesequenceref |
+      structref | structsequenceref)>"). A previous version of this file
+      declared <dependency type="SharedLibrary"><localfile
+      name="../../build/libhhsdr_core.a"/></dependency>, which is invalid
+      against that DTD shape regardless of which path it names, and was
+      already stale after this repository's PIC build fix (the standalone
+      adapter now links libhhsdr_core_pic.a, not libhhsdr_core.a — see
+      CMakeLists.txt in this directory). Expressing this dependency
+      correctly requires a softpkgref to a separate dependency SPD for the
+      core library, which is a real, larger piece of SCA authoring work left
+      for a later phase rather than invented here; the actual build
+      dependency is correctly and currently expressed in this directory's
+      CMakeLists.txt via the HHSDR_CORE_LIB variable.
+    -->
   </implementation>
 
 </softpkg>
