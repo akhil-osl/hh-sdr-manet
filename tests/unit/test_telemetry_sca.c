@@ -261,6 +261,97 @@ static void test_property_surface_binds_to_real_configuration(void)
     }
 }
 
+static void test_bounded_table_size_properties_are_configure_not_allocation(void)
+{
+    /*
+     * hh::neighbor::max_entries and hh::routing::max_routes were previously
+     * classified HH_PROP_ALLOCATION even though they are ordinary runtime
+     * bounds (like hh::routing::max_hop_count), not Resource capacity-
+     * allocation requests -- CF::Resource has no allocateCapacity mechanism
+     * at all in real REDHAWK 2.2.10 (only CF::Device does, via
+     * Device_impl::allocateCapacity()), and this repository's own
+     * hh_sca_configure()/hh_sca_query() never branch on HH_PROP_ALLOCATION
+     * vs HH_PROP_CONFIGURE -- the only kind ever checked is
+     * HH_PROP_EXECPARAM. This asserts the corrected classification. */
+    const hh_sca_property_t *p;
+
+    p = hh_sca_property_find("hh::neighbor::max_entries");
+    HH_ASSERT(p != NULL);
+    HH_ASSERT_EQ_INT(p->kind, HH_PROP_CONFIGURE);
+    HH_ASSERT_EQ_STR(p->config_key, "max_neighbors");
+
+    p = hh_sca_property_find("hh::routing::max_routes");
+    HH_ASSERT(p != NULL);
+    HH_ASSERT_EQ_INT(p->kind, HH_PROP_CONFIGURE);
+    HH_ASSERT_EQ_STR(p->config_key, "max_routes");
+
+    /* No property anywhere in the surface is HH_PROP_ALLOCATION anymore --
+     * this component is a Resource, and a Resource has no allocation-kind
+     * property in real REDHAWK usage (Step 6 investigation). */
+    {
+        const hh_sca_property_t *all;
+        size_t count;
+        all = hh_sca_properties(&count);
+        for (size_t i = 0; i < count; i++)
+            HH_ASSERT_MSG(all[i].kind != HH_PROP_ALLOCATION,
+                          "property %s is still classified HH_PROP_ALLOCATION",
+                          all[i].id);
+    }
+}
+
+static void test_bounded_table_size_properties_configure_and_query_correctly(void)
+{
+    /* Reclassifying kind must not change configure()/query() behavior: both
+     * properties must still round-trip through the same mechanism every
+     * other configure-kind property uses. */
+    hh_sca_resource_t r;
+    hh_config_t cfg;
+    char out[64];
+
+    hh_config_defaults(&cfg);
+    cfg.node_id = 1;
+    hh_sca_resource_init_guard(&r, "NeighborManager");
+    hh_sca_initialize(&r);
+    hh_sca_connect_ports(&r);
+
+    HH_ASSERT_OK(hh_sca_configure(&r, &cfg, "hh::neighbor::max_entries", "10"));
+    HH_ASSERT_EQ_INT(cfg.max_neighbors, 10);
+    HH_ASSERT_OK(hh_sca_query(&r, &cfg, "hh::neighbor::max_entries", out, sizeof out));
+    HH_ASSERT_EQ_STR(out, "10");
+
+    HH_ASSERT_OK(hh_sca_configure(&r, &cfg, "hh::routing::max_routes", "20"));
+    HH_ASSERT_EQ_INT(cfg.max_routes, 20);
+    HH_ASSERT_OK(hh_sca_query(&r, &cfg, "hh::routing::max_routes", out, sizeof out));
+    HH_ASSERT_EQ_STR(out, "20");
+
+    /* Both are configure-kind (not execparam), so -- unlike hh::node_id --
+     * they remain retunable after stop(), exactly like any other
+     * HH_PROP_CONFIGURE property. As of Step 8, hh_sca_configure() also
+     * permits HH_PROP_CONFIGURE properties while HH_SCA_STARTED
+     * (src/sca/resource.c): the Step 8 investigation traced every
+     * configure-kind property (including these two) to a live pointer read
+     * with no structural/memory dependency on node state, matching real
+     * REDHAWK 2.2.10's own CF::PropertySet::configure(), which has no
+     * started/stopped restriction at all. Only HH_PROP_EXECPARAM properties
+     * remain blocked outside PORTS_CONNECTED, in every state including
+     * STARTED (see test_execparam_cannot_be_retuned_at_runtime above). */
+    HH_ASSERT_OK(hh_sca_start(&r));
+    HH_ASSERT_OK(hh_sca_configure(&r, &cfg, "hh::neighbor::max_entries", "15"));
+    HH_ASSERT_EQ_INT(cfg.max_neighbors, 15);
+    HH_ASSERT_ERR(hh_sca_configure(&r, &cfg, "hh::node_id", "99"), HH_ERR_STATE);
+
+    HH_ASSERT_OK(hh_sca_stop(&r));
+    HH_ASSERT_OK(hh_sca_configure(&r, &cfg, "hh::neighbor::max_entries", "18"));
+    HH_ASSERT_EQ_INT(cfg.max_neighbors, 18);
+
+    /* hh_config_validate()'s existing zero-rejection is unaffected by the
+     * classification change: it always checked the raw field, never the
+     * PRF kind. */
+    HH_ASSERT_OK(hh_config_validate(&cfg));   /* still valid: node_id, etc. all set */
+    cfg.max_neighbors = 0;
+    HH_ASSERT_ERR(hh_config_validate(&cfg), HH_ERR_INVAL);
+}
+
 static void test_query_round_trips_configured_values(void)
 {
     hh_sca_resource_t r;
@@ -311,6 +402,8 @@ HH_TEST_MAIN_BEGIN("telemetry_sca")
     HH_RUN(test_lifecycle_ordering_is_enforced);
     HH_RUN(test_execparam_cannot_be_retuned_at_runtime);
     HH_RUN(test_property_surface_binds_to_real_configuration);
+    HH_RUN(test_bounded_table_size_properties_are_configure_not_allocation);
+    HH_RUN(test_bounded_table_size_properties_configure_and_query_correctly);
     HH_RUN(test_query_round_trips_configured_values);
     HH_RUN(test_run_test_reports_unknown_test_conformantly);
 HH_TEST_MAIN_END()

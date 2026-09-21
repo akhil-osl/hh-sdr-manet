@@ -35,6 +35,23 @@ hh_add_test(test_node        unit/test_node.c)
 hh_add_test(test_status_events unit/test_status_events.c)
 hh_add_test(test_interface_compliance unit/test_interface_compliance.c)
 
+# SCA adapter (sca/MANET_Node/adapter/) -- plain-C, REDHAWK-agnostic wrapper
+# around hh_node_t/hh_sca_resource_t. Built here against hhsdr_core exactly
+# like every other test above; this is separate from, and does not replace,
+# the standalone PIC shared-library build in sca/MANET_Node/CMakeLists.txt
+# (Step 1/2), which remains the path that produces libmanet_sca_adapter.so.
+# The adapter source has no dependency of its own beyond hhsdr_core's public
+# headers, so no additional link library is needed.
+add_executable(test_manet_sca_adapter
+  ${CMAKE_SOURCE_DIR}/sca/MANET_Node/adapter/test_manet_sca_adapter.c
+  ${CMAKE_SOURCE_DIR}/sca/MANET_Node/adapter/manet_sca_adapter.c
+)
+target_include_directories(test_manet_sca_adapter PRIVATE
+  ${CMAKE_SOURCE_DIR}/sca/MANET_Node/adapter
+)
+target_link_libraries(test_manet_sca_adapter PRIVATE hhsdr_core hhsim)
+add_test(NAME test_manet_sca_adapter COMMAND test_manet_sca_adapter)
+
 # Tests for the simulation tooling itself. Needs the tools/sim sources, which
 # are development tooling and never linked into the production library.
 add_executable(test_simui unit/test_simui.c ${CMAKE_SOURCE_DIR}/tools/sim/simui.c)

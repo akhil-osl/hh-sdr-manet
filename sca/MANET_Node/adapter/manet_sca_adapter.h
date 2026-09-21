@@ -71,16 +71,43 @@ typedef struct {
 
 /*
  * initialize(): CF::LifeCycle::initialize().
- * Prepares the adapter's internal state (hh_config_defaults + SCA lifecycle
- * guard) but does not yet construct hh_node_t -- construction needs the
- * radio handle and clock, supplied here because no execparam-driven
- * "resource factory" exists in this phase (that is normally an Application
- * Factory's job, explicitly out of scope). Raises no CF::LifeCycle
- * exception type since no ORB/exception mapping exists yet; returns
- * hh_status_t, mirroring every other SCA-adjacent call in this codebase.
+ *
+ * node_id is REQUIRED here, not supplied later through configure(). This
+ * mirrors two independent, already-established patterns in this codebase
+ * and in real REDHAWK 2.2.10, rather than inventing a new one:
+ *
+ *   - src/main.c builds a fully-valid hh_config_t (defaults, then file/CLI
+ *     overrides, then hh_config_validate()) BEFORE ever calling
+ *     hh_node_init() -- node_id is never left at its invalid default when
+ *     hh_node_init() is reached.
+ *   - REDHAWK 2.2.10's own Resource_impl::create_component() (redhawk-
+ *     core-framework/redhawk/src/base/framework/Resource_impl.cpp) extracts
+ *     execparams (COMPONENT_IDENTIFIER and friends) from the command line
+ *     and passes them to the component's CONSTRUCTOR, before CF::LifeCycle
+ *     ::initialize() is ever invoked as a separate, later operation. An
+ *     execparam is real REDHAWK convention to be construction-time input,
+ *     not something initialize() invents a placeholder for.
+ *
+ * hh::node_id is HH_PROP_EXECPARAM in src/sca/resource.c's g_props[] (fixed
+ * at launch, never retunable) -- this parameter is that value's construction
+ * -time home. It is validated (rejected if HH_NODE_ID_INVALID) before
+ * hh_node_init() is attempted, so a bad node_id fails here, at the
+ * construction step, rather than opaquely inside hh_node_init().
+ *
+ * Prepares the adapter's internal state (hh_config_defaults, with node_id
+ * overridden by the caller-supplied value, plus the SCA lifecycle guard)
+ * and constructs hh_node_t with that now-valid configuration -- construction
+ * also needs the radio handle and clock, supplied here because no
+ * execparam-driven "resource factory" exists in this phase (that is
+ * normally an Application Factory's job, explicitly out of scope). Raises
+ * no CF::LifeCycle exception type since no ORB/exception mapping exists
+ * yet; returns hh_status_t, mirroring every other SCA-adjacent call in this
+ * codebase. Returns HH_ERR_INVAL for node_id == HH_NODE_ID_INVALID, the
+ * same sentinel hh_config_defaults()/hh_config_validate() already use, so
+ * this adds no new error convention.
  */
-hh_status_t manet_sca_initialize(manet_sca_adapter_t *a, const hh_clock_t *clock,
-                                 hh_radio_t *radio);
+hh_status_t manet_sca_initialize(manet_sca_adapter_t *a, hh_node_id_t node_id,
+                                 const hh_clock_t *clock, hh_radio_t *radio);
 
 /* releaseObject(): CF::LifeCycle::releaseObject(). Tears the node down via
  * hh_node_release() and marks the SCA guard HH_SCA_RELEASED. */
