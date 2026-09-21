@@ -59,7 +59,7 @@ Every phase must satisfy all of these before it is committed:
 | # | Phase | Status |
 |---|---|---|
 | 0 | Baseline, sanitizer verification, `unknown.md` | **DONE** |
-| 1 | Extract `protocol/` | pending |
+| 1 | Extract `protocol/` | **DONE** |
 | 2 | Extract `librc/` | pending |
 | 3 | Add `radioctl/` CLI | pending |
 | 4 | Create `radiod/`, move the daemon | pending |
@@ -86,6 +86,29 @@ Established the reference point that every later phase is measured against.
 - Authored [`unknown.md`](../unknown.md) — 15 entries (U-01 … U-15)
 
 Rollback: `git checkout pre-radiod-refactor`.
+
+---
+
+## Phase 1 — Extract `protocol/` (DONE)
+
+The control-protocol codec previously lived inside `hhsdr_core`, which meant
+`hh-manet` linked a control protocol it never speaks, and no client library
+could exist without also linking the daemon.
+
+Moved, with history preserved via `git mv`:
+
+| From | To |
+|---|---|
+| `include/hhsdr/radio/rc.h` | `protocol/include/hhsdr/protocol/rc.h` |
+| `src/radio/rc.c` | `protocol/src/rc.c` |
+| `tests/unit/test_rc_protocol.c` | `protocol/tests/test_rc_protocol.c` |
+
+New target `hhsdr_protocol`. The header guard became `HHSDR_PROTOCOL_RC_H`, and
+five files had their include path updated. No symbol was renamed and no
+behaviour changed.
+
+Verified: `hhsdr_core` now exports **zero** `hh_rc_*` codec symbols;
+`hhsdr_protocol` exports **nine**. Build clean, 28/28 passing.
 
 ---
 

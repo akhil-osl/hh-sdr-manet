@@ -34,7 +34,12 @@ hh_add_test(test_telemetry_verification unit/test_telemetry_verification.c)
 hh_add_test(test_node        unit/test_node.c)
 hh_add_test(test_status_events unit/test_status_events.c)
 hh_add_test(test_interface_compliance unit/test_interface_compliance.c)
-hh_add_test(test_rc_protocol unit/test_rc_protocol.c)
+
+# Protocol codec test. Lives with the codec under protocol/, and links
+# hhsdr_protocol rather than reaching into the daemon.
+add_executable(test_rc_protocol ${CMAKE_SOURCE_DIR}/protocol/tests/test_rc_protocol.c)
+target_link_libraries(test_rc_protocol PRIVATE hhsdr_protocol)
+add_test(NAME test_rc_protocol COMMAND test_rc_protocol)
 
 # radiod-specific tests link hhsdr_radiod in addition to hhsdr_core.
 add_executable(test_mock_backend unit/test_mock_backend.c)

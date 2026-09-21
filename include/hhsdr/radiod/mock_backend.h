@@ -17,7 +17,7 @@
 #define HHSDR_RADIOD_MOCK_BACKEND_H
 
 #include "hhsdr/radio/radio.h"
-#include "hhsdr/radio/rc.h"
+#include "hhsdr/protocol/rc.h"
 
 typedef struct {
     bool         opened;

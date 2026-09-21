@@ -16,7 +16,7 @@
 
 #include "hhsdr/core/clock.h"
 #include "hhsdr/radio/radio.h"
-#include "hhsdr/radio/rc.h"
+#include "hhsdr/protocol/rc.h"
 
 #define HH_RADIOD_MAX_CLIENTS 16
 

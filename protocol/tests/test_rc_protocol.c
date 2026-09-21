@@ -1,7 +1,7 @@
 /*
  * rc.h wire-encoding tests: request/response parse and format round trips.
  */
-#include "hhsdr/radio/rc.h"
+#include "hhsdr/protocol/rc.h"
 #include "hh_test.h"
 #include <string.h>
 

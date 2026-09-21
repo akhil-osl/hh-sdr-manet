@@ -9,7 +9,7 @@
 #ifndef HHSDR_RADIOD_RC_CLIENT_H
 #define HHSDR_RADIOD_RC_CLIENT_H
 
-#include "hhsdr/radio/rc.h"
+#include "hhsdr/protocol/rc.h"
 
 typedef struct {
     int fd;

@@ -1,4 +1,4 @@
-#include "hhsdr/radio/rc.h"
+#include "hhsdr/protocol/rc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

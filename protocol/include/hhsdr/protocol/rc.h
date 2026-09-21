@@ -33,8 +33,8 @@
  * than inventing a new serialization layer.
  * ==========================================================================
  */
-#ifndef HHSDR_RADIO_RC_H
-#define HHSDR_RADIO_RC_H
+#ifndef HHSDR_PROTOCOL_RC_H
+#define HHSDR_PROTOCOL_RC_H
 
 #include "hhsdr/core/types.h"
 #include <stddef.h>
@@ -144,4 +144,4 @@ hh_status_t hh_rc_response_parse(const char *line, hh_rc_response_t *out);
  * Returns bytes written excluding the NUL, or 0 if it does not fit. */
 size_t hh_rc_response_format(const hh_rc_response_t *r, char *buf, size_t cap);
 
-#endif /* HHSDR_RADIO_RC_H */
+#endif /* HHSDR_PROTOCOL_RC_H */
