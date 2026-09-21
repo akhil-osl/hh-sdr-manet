@@ -60,7 +60,7 @@ Every phase must satisfy all of these before it is committed:
 |---|---|---|
 | 0 | Baseline, sanitizer verification, `unknown.md` | **DONE** |
 | 1 | Extract `protocol/` | **DONE** |
-| 2 | Extract `librc/` | pending |
+| 2 | Extract `librc/` | **DONE** |
 | 3 | Add `radioctl/` CLI | pending |
 | 4 | Create `radiod/`, move the daemon | pending |
 | 5 | Split `hhsdr_core` into base and MANET libraries | pending |
@@ -109,6 +109,38 @@ behaviour changed.
 
 Verified: `hhsdr_core` now exports **zero** `hh_rc_*` codec symbols;
 `hhsdr_protocol` exports **nine**. Build clean, 28/28 passing.
+
+---
+
+## Phase 2 — Extract `librc/` (DONE)
+
+The client library previously lived *inside* the daemon library
+(`src/radiod/rc_client.c` compiled into `hhsdr_radiod`). Any client wishing to
+talk to radiod therefore had to link the entire daemon — the exact inversion the
+architecture's separate `librc` box rules out.
+
+Moved, with history preserved:
+
+| From | To |
+|---|---|
+| `src/radiod/rc_client.c` | `librc/src/rc_client.c` |
+| `include/hhsdr/radiod/rc_client.h` | `librc/include/hhsdr/librc/rc_client.h` |
+
+New target `librc` (artifact `librc.a`), depending on `hhsdr_protocol` only.
+Header guard became `HHSDR_LIBRC_RC_CLIENT_H`.
+
+The end-to-end daemon test now links **`librc` instead of `hhsdr_radiod`**. That
+is the load-bearing change: the test drives the daemon exactly as an external
+client would, so the separation is enforced by the build rather than merely
+documented.
+
+Verified: `librc.a` exports the three `hh_rc_client_*` symbols;
+`hhsdr_radiod` exports **zero** of them; the e2e test's link line references
+`librc` and not the daemon library. Build clean, 28/28 passing.
+
+**Not done — U-02.** The drawing shows an `rc_*` API. Those signatures are
+unspecified, so the existing `hh_rc_client_*` API is carried forward unchanged
+rather than inventing names.
 
 ---
 

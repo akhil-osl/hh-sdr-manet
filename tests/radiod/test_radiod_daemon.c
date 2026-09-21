@@ -6,7 +6,7 @@
  * mock object) and drives it exclusively through hh_rc_client_t over the
  * socket, exercising the actual IPC framing and the actual daemon binary.
  */
-#include "hhsdr/radiod/rc_client.h"
+#include "hhsdr/librc/rc_client.h"
 #include "hh_test.h"
 #include <signal.h>
 #include <stdio.h>

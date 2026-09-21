@@ -53,6 +53,12 @@ target_link_libraries(hhsdr_core PUBLIC m)
 # ---------------------------------------------------------------------------
 add_subdirectory(protocol)
 
+# ---------------------------------------------------------------------------
+# librc : the radio-control client library. Depends on the protocol codec
+# only — never on the daemon.
+# ---------------------------------------------------------------------------
+add_subdirectory(librc)
+
 # Node daemon. Links only the production library — never the test simulator.
 add_executable(hh-manet src/main.c)
 target_link_libraries(hh-manet PRIVATE hhsdr_core)
@@ -65,7 +71,6 @@ target_link_libraries(hh-manet PRIVATE hhsdr_core)
 add_library(hhsdr_radiod STATIC
   src/radiod/mock_backend.c
   src/radiod/radiod.c
-  src/radiod/rc_client.c
 )
 target_link_libraries(hhsdr_radiod PUBLIC hhsdr_core hhsdr_protocol)
 

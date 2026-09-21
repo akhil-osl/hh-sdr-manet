@@ -51,8 +51,11 @@ target_link_libraries(test_radiod_state_machine PRIVATE hhsdr_radiod)
 add_test(NAME test_radiod_state_machine COMMAND test_radiod_state_machine)
 
 # End-to-end: spawns the real radiod binary and drives it over its socket.
+# Links librc ONLY — not hhsdr_radiod. That is deliberate: the test drives the
+# daemon exactly as an external client would, which proves librc is genuinely
+# independent of the daemon library rather than merely filed separately.
 add_executable(test_radiod_daemon radiod/test_radiod_daemon.c)
-target_link_libraries(test_radiod_daemon PRIVATE hhsdr_radiod)
+target_link_libraries(test_radiod_daemon PRIVATE librc)
 target_compile_definitions(test_radiod_daemon PRIVATE
   RADIOD_BINARY_PATH="$<TARGET_FILE:radiod>")
 add_dependencies(test_radiod_daemon radiod)

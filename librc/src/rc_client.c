@@ -1,4 +1,4 @@
-#include "hhsdr/radiod/rc_client.h"
+#include "hhsdr/librc/rc_client.h"
 #include <errno.h>
 #include <string.h>
 #include <sys/socket.h>
