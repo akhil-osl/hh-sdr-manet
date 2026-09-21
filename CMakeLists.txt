@@ -51,7 +51,16 @@ add_library(hhsdr_core STATIC
   src/core/config.c
   src/core/dispatcher.c
   src/radio/wire.c
-  src/adapters/hw/hw_adapter.c
+  # The PL-facing hardware adapter now lives under radiod/src/backends/, where
+  # the single PL owner will keep its backends. hh-manet still compiles it, so
+  # behaviour is unchanged: with radio_adapter="hw" it still fails honestly at
+  # open() because no PL contract exists.
+  #
+  # Severing this link is what fully enforces the architecture's single-owner
+  # rule, and it is deliberately NOT done here — it changes hh-manet's startup
+  # behaviour and is blocked on unknown.md U-15 (the control/data split of
+  # hh_radio_ops_t).
+  radiod/src/backends/hw_adapter.c
   src/manet/discovery.c
   src/manet/neighbor.c
   src/manet/link_health.c

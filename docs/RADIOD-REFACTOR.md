@@ -64,7 +64,7 @@ Every phase must satisfy all of these before it is committed:
 | 3 | Add `radioctl/` CLI | **DONE** |
 | 4 | Create `radiod/`, move the daemon | **DONE** |
 | 5 | Split `hhsdr_core` into base and MANET libraries | **DONE** |
-| 6a | Relocate `hw_adapter` into `radiod/src/backends/` | pending |
+| 6a | Relocate `hw_adapter` into `radiod/src/backends/` | **DONE** |
 | 7 | radiod configuration file and daemon hardening | pending |
 | 8 | Event/fault registry (in-process) | pending |
 | 9 | Empty labelled scaffolding for drivers/workers/fpga | pending |
@@ -262,6 +262,45 @@ fails at link time instead of silently bloating the daemon. That is worth
 having, but it should not be reported as an optimisation.
 
 Verified: 29/29 passing, 0 warnings.
+
+---
+
+## Phase 6a — Relocate `hw_adapter` (DONE)
+
+The PL-facing hardware adapter now sits where the single PL owner keeps its
+backends:
+
+| From | To |
+|---|---|
+| `src/adapters/hw/hw_adapter.c` | `radiod/src/backends/hw_adapter.c` |
+
+The header stays at `include/hhsdr/radio/hw_adapter.h`. It has five consumers
+(`src/main.c`, `src/manet/telemetry.c`, and three tests); leaving it in place
+means none of them needed an edit, and the header is genuinely shared until the
+ownership question is settled.
+
+**`hh-manet` still compiles and links it, so behaviour is unchanged.** Verified
+by running the daemon: with the hardware adapter selected it still fails at
+`open()` with `ENOTIMPL` and the same diagnostic as before.
+
+### Why the link was not severed
+
+Severing `hh-manet` from the PL-facing adapter is what *fully* enforces the
+architecture's single-owner rule. It is deliberately not done here because:
+
+- It changes `hh-manet`'s startup behaviour, which this refactor is otherwise
+  careful not to do.
+- It touches six files across the MANET stack (`main.c`, `node.c`,
+  `self_healing.c`, `forwarder.c`, `discovery.c`, `telemetry.c`).
+- It is blocked on **U-15** — how the data plane reaches hardware once only
+  radiod may open the PL.
+
+The dual-ownership condition is currently **latent and harmless**: the adapter
+is a stub whose every hardware operation returns `HH_ERR_NOT_IMPLEMENTED`, so
+nothing is actually acquired twice. It becomes a real conflict the moment a
+working backend exists, and must be resolved before then.
+
+Verified: 29/29 passing, 0 warnings, `hh-manet` behaviour byte-identical.
 
 ---
 
