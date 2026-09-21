@@ -45,7 +45,7 @@ Every phase must satisfy all of these before it is committed:
 
 1. The build succeeds with **zero warnings** under
    `-Wall -Wextra -Wshadow -Wpointer-arith -Wcast-qual -Wstrict-prototypes`.
-2. **All tests pass** (28 at baseline; the count only grows).
+2. **All tests pass** (28 at baseline; the count only grows — 29 as of Phase 3).
 3. Behaviour is unchanged unless the phase explicitly states otherwise.
 4. Dependencies flow one way only. In particular `librc` must never depend on
    `hhsdr_radiod`.
@@ -61,7 +61,7 @@ Every phase must satisfy all of these before it is committed:
 | 0 | Baseline, sanitizer verification, `unknown.md` | **DONE** |
 | 1 | Extract `protocol/` | **DONE** |
 | 2 | Extract `librc/` | **DONE** |
-| 3 | Add `radioctl/` CLI | pending |
+| 3 | Add `radioctl/` CLI | **DONE** |
 | 4 | Create `radiod/`, move the daemon | pending |
 | 5 | Split `hhsdr_core` into base and MANET libraries | pending |
 | 6a | Relocate `hw_adapter` into `radiod/src/backends/` | pending |
@@ -141,6 +141,48 @@ Verified: `librc.a` exports the three `hh_rc_client_*` symbols;
 **Not done — U-02.** The drawing shows an `rc_*` API. Those signatures are
 unspecified, so the existing `hh_rc_client_*` API is carried forward unchanged
 rather than inventing names.
+
+---
+
+## Phase 3 — Add `radioctl/` (DONE)
+
+The architecture names a `radioctl` CLI and requires test automation to drive
+the radio through it rather than through private access. No such binary
+existed; this phase adds it. Purely additive — no existing file changed.
+
+Created:
+
+| File | Purpose |
+|---|---|
+| `radioctl/radioctl_main.c` | the CLI |
+| `radioctl/CMakeLists.txt` | target definition |
+| `radioctl/tests/test_radioctl.c` | end-to-end test |
+
+**Subcommands map one-to-one onto the ten verbs the protocol already defines.**
+No verb, parameter or output field is invented. Multi-word verbs accept both
+the hyphenated CLI spelling (`set-channel`) and the wire spelling
+(`set_channel`), so scripts written either way work.
+
+Exit statuses, because a CLI's exit code is its contract with scripts:
+
+| Code | Meaning |
+|---|---|
+| 0 | success |
+| 2 | usage error — refused locally, radiod never contacted |
+| 3 | cannot reach radiod (transport) |
+| 4 | radiod answered and rejected the request |
+
+The distinction between 3 and 4 matters: a rejection is a *successful* exchange
+carrying a refusal, and automation needs to tell that apart from a dead daemon.
+
+`test_radioctl` runs the **real `radioctl` binary against the real `radiod`
+binary** — five cases covering the full lifecycle, the fault cycle, rejection,
+absent daemon, and malformed invocations. It links `librc` only.
+
+Verified manually against a live daemon: lifecycle transitions reported
+correctly, `set-channel 11` persisted into a subsequent `status`, injected
+`hw_fault` flipped `operational` to 0, and the three exit statuses behaved as
+documented. Build clean, **29/29** passing.
 
 ---
 

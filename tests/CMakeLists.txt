@@ -61,6 +61,17 @@ target_compile_definitions(test_radiod_daemon PRIVATE
 add_dependencies(test_radiod_daemon radiod)
 add_test(NAME test_radiod_daemon COMMAND test_radiod_daemon)
 
+# End-to-end through the public CLI: runs the real radioctl binary against the
+# real radiod binary. This is the path the architecture requires test
+# automation to use, so it is exercised exactly as an ATB/BIT script would.
+add_executable(test_radioctl ${CMAKE_SOURCE_DIR}/radioctl/tests/test_radioctl.c)
+target_link_libraries(test_radioctl PRIVATE librc)
+target_compile_definitions(test_radioctl PRIVATE
+  RADIOD_BINARY_PATH="$<TARGET_FILE:radiod>"
+  RADIOCTL_BINARY_PATH="$<TARGET_FILE:radioctl>")
+add_dependencies(test_radioctl radiod radioctl)
+add_test(NAME test_radioctl COMMAND test_radioctl)
+
 # Tests for the simulation tooling itself. Needs the tools/sim sources, which
 # are development tooling and never linked into the production library.
 add_executable(test_simui unit/test_simui.c ${CMAKE_SOURCE_DIR}/tools/sim/simui.c)

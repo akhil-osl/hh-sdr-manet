@@ -77,5 +77,10 @@ target_link_libraries(hhsdr_radiod PUBLIC hhsdr_core hhsdr_protocol)
 add_executable(radiod tools/radiod/radiod_main.c)
 target_link_libraries(radiod PRIVATE hhsdr_radiod)
 
+# ---------------------------------------------------------------------------
+# radioctl : the radio-control CLI. Reaches radiod through librc only.
+# ---------------------------------------------------------------------------
+add_subdirectory(radioctl)
+
 enable_testing()
 add_subdirectory(tests)
