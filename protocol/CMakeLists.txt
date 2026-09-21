@@ -18,5 +18,5 @@ target_include_directories(hhsdr_protocol PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-# hh_status_t / hh_node_id_t come from core types.
-target_link_libraries(hhsdr_protocol PUBLIC hhsdr_core)
+# hh_status_t / hh_node_id_t come from the shared core primitives.
+target_link_libraries(hhsdr_protocol PUBLIC hhsdr_core_base)

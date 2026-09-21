@@ -63,7 +63,7 @@ Every phase must satisfy all of these before it is committed:
 | 2 | Extract `librc/` | **DONE** |
 | 3 | Add `radioctl/` CLI | **DONE** |
 | 4 | Create `radiod/`, move the daemon | **DONE** |
-| 5 | Split `hhsdr_core` into base and MANET libraries | pending |
+| 5 | Split `hhsdr_core` into base and MANET libraries | **DONE** |
 | 6a | Relocate `hw_adapter` into `radiod/src/backends/` | pending |
 | 7 | radiod configuration file and daemon hardening | pending |
 | 8 | Event/fault registry (in-process) | pending |
@@ -225,6 +225,43 @@ Caught only because the test count dropped from 29 to 25.
 
 Verified: **29/29** passing, 0 warnings, and clean under
 AddressSanitizer + UBSan.
+
+---
+
+## Phase 5 — Split `hhsdr_core` (DONE)
+
+`hhsdr_core` was a single library holding both the shared primitives and the
+whole MANET stack, so the control-plane components declared a dependency on
+routing, topology, the forwarder and the SCA layer that none of them call.
+
+Split into two targets. No source file moved and no code changed:
+
+| Target | Contents |
+|---|---|
+| `hhsdr_core_base` | `types.c`, `clock.c`, `log.c`, `events.c` |
+| `hhsdr_core` | `config.c`, `dispatcher.c`, `wire.c`, `hw_adapter.c`, all of `manet/`, `dataplane/`, `sca/` — layered on the base |
+
+The split point was chosen by reading actual includes: the entire
+radiod/librc/radioctl stack includes only four core headers — `types.h`,
+`clock.h`, `log.h` and `radio.h` (which itself needs only `events.h` and
+`types.h`).
+
+`hhsdr_core` keeps its name, so `hh-manet`, the tests and the simulation
+tooling are unaffected.
+
+### Honest accounting of the benefit
+
+The `radiod` and `radioctl` binaries are **byte-for-byte identical** before and
+after this phase, and both contained **zero** MANET symbols beforehand. The
+static linker was already discarding the unused objects.
+
+So this phase delivers **no runtime or size improvement**. Its value is
+structural: the dependency graph now *states* the boundary explicitly rather
+than leaving it to linker garbage collection, so a future accidental coupling
+fails at link time instead of silently bloating the daemon. That is worth
+having, but it should not be reported as an optimisation.
+
+Verified: 29/29 passing, 0 warnings.
 
 ---
 

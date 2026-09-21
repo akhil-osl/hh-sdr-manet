@@ -20,14 +20,35 @@ endif()
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
 # ---------------------------------------------------------------------------
-# hhsdr_core : production library. Must never depend on tests/ or the simulator.
+# hhsdr_core_base : the primitives every component shares — status codes,
+# the clock abstraction, structured logging, and the typed event definitions.
+#
+# Deliberately small. radiod, librc and radioctl need these four translation
+# units and nothing else; before the split they linked the entire MANET stack
+# (routing, topology, forwarder, SCA) that they never call.
+#
+# Must never depend on tests/ or the simulator.
 # ---------------------------------------------------------------------------
-add_library(hhsdr_core STATIC
+add_library(hhsdr_core_base STATIC
   src/core/types.c
   src/core/clock.c
   src/core/log.c
-  src/core/config.c
   src/core/events.c
+)
+target_link_libraries(hhsdr_core_base PUBLIC m)
+
+# ---------------------------------------------------------------------------
+# hhsdr_core : the MANET control plane, data plane and SCA layer, on top of
+# the shared base. This is what hh-manet and the simulation tooling consume.
+#
+# The name is kept so that existing consumers (tests, tools) are unaffected by
+# the split; what changed is that it no longer drags the whole stack into the
+# control-plane components.
+#
+# Must never depend on tests/ or the simulator.
+# ---------------------------------------------------------------------------
+add_library(hhsdr_core STATIC
+  src/core/config.c
   src/core/dispatcher.c
   src/radio/wire.c
   src/adapters/hw/hw_adapter.c
@@ -44,7 +65,7 @@ add_library(hhsdr_core STATIC
   src/manet/telemetry.c
   src/sca/resource.c
 )
-target_link_libraries(hhsdr_core PUBLIC m)
+target_link_libraries(hhsdr_core PUBLIC hhsdr_core_base)
 
 # ---------------------------------------------------------------------------
 # protocol : the control-protocol codec, shared by radiod and its clients.

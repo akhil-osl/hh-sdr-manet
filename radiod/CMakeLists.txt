@@ -26,7 +26,7 @@ target_include_directories(hhsdr_radiod PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(hhsdr_radiod PUBLIC hhsdr_core hhsdr_protocol)
+target_link_libraries(hhsdr_radiod PUBLIC hhsdr_core_base hhsdr_protocol)
 
 # The daemon binary. Kept thin: wiring and the control loop only.
 add_executable(radiod radiod_main.c)
