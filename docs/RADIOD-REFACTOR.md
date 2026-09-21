@@ -45,7 +45,7 @@ Every phase must satisfy all of these before it is committed:
 
 1. The build succeeds with **zero warnings** under
    `-Wall -Wextra -Wshadow -Wpointer-arith -Wcast-qual -Wstrict-prototypes`.
-2. **All tests pass** (28 at baseline; the count only grows — 29 as of Phase 3).
+2. **All tests pass** (28 at baseline; the count only grows — 30 as of Phase 7).
 3. Behaviour is unchanged unless the phase explicitly states otherwise.
 4. Dependencies flow one way only. In particular `librc` must never depend on
    `hhsdr_radiod`.
@@ -65,7 +65,7 @@ Every phase must satisfy all of these before it is committed:
 | 4 | Create `radiod/`, move the daemon | **DONE** |
 | 5 | Split `hhsdr_core` into base and MANET libraries | **DONE** |
 | 6a | Relocate `hw_adapter` into `radiod/src/backends/` | **DONE** |
-| 7 | radiod configuration file and daemon hardening | pending |
+| 7 | radiod configuration file and daemon hardening | **DONE** |
 | 8 | Event/fault registry (in-process) | pending |
 | 9 | Empty labelled scaffolding for drivers/workers/fpga | pending |
 
@@ -301,6 +301,53 @@ nothing is actually acquired twice. It becomes a real conflict the moment a
 working backend exists, and must be resolved before then.
 
 Verified: 29/29 passing, 0 warnings, `hh-manet` behaviour byte-identical.
+
+---
+
+## Phase 7 — Configuration and daemon hardening (DONE)
+
+### Configuration
+
+radiod previously had no configuration file — only `-s` and `-v` flags. Added
+`hh_radiod_config_t` (`radiod/include/hhsdr/radiod/config.h`,
+`radiod/src/config.c`) with four keys: `sock_path`, `tick_interval_ms`,
+`client_idle_timeout_ms` and `log_level`.
+
+Kept deliberately separate from the MANET node's `hh_config_t`: the two
+daemons have no keys in common, and sharing a struct would make each carry and
+validate the other's settings. The file syntax is the project's existing
+`key = value` convention, parsed the same way, so operators meet one syntax.
+
+Defaults reproduce the previous behaviour exactly, and command-line options
+override the file. Example at `config/radiod.example.conf`.
+
+**No OpenCPI, worker, PL, hopset or TLV settings** — those contracts do not
+exist, and configuration for them would be inventing the contract.
+
+### Four defects fixed
+
+All four were identified in the original audit:
+
+| Defect | Fix |
+|---|---|
+| 10 ms busy-spin regardless of traffic | `hh_radiod_pollfds()` exposes the descriptors so the process blocks in `poll()`. Test-suite wall time fell from 0.94 s to 0.57 s — that is the per-request latency that was being paid. |
+| Short `write()` silently truncated a reply and desynchronised the client | Responses are queued per-client (`outbuf`/`outlen`/`outsent`) and flushed across passes; `POLLOUT` is watched only while a reply is pending. |
+| `release()` left a stale socket file behind | The bound path is remembered and unlinked on release. |
+| `signal()` with platform-dependent semantics | `sigaction` with `sa_flags = 0`, so `poll()` returns `EINTR` promptly. `SIGPIPE` is ignored so a client disconnecting mid-reply cannot kill the daemon. |
+
+Also added an optional idle-client timeout. Default 0 (disabled) preserves
+prior behaviour; without it an idle client holds its slot indefinitely and 16
+of them exhaust the table.
+
+### Verification
+
+`test_radiod_config` adds 8 cases covering defaults, per-key parsing,
+`NOTFOUND` vs `INVAL`, validation invariants, comment handling, and
+line-accurate error reporting.
+
+Confirmed against a live daemon: the config file is honoured, `-s` overrides
+it, a bad key reports `at line 3` and exits 1, and the socket is unlinked on
+release. **30/30** passing, 0 warnings, clean under ASan + UBSan.
 
 ---
 

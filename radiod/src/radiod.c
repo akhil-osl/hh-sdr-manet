@@ -24,6 +24,16 @@ hh_status_t hh_radiod_init(hh_radiod_t *d, hh_radio_t *radio, const hh_clock_t *
     return HH_OK;
 }
 
+hh_status_t hh_radiod_configure(hh_radiod_t *d, const hh_radiod_config_t *cfg)
+{
+    hh_status_t st;
+    if (!d || !cfg) return HH_ERR_INVAL;
+    st = hh_radiod_config_validate(cfg);
+    if (st != HH_OK) return st;
+    d->client_idle_timeout_ms = cfg->client_idle_timeout_ms;
+    return HH_OK;
+}
+
 void hh_radiod_set_fault_hook(hh_radiod_t *d, hh_radiod_fault_fn fn, void *ctx)
 {
     if (!d) return;
@@ -60,8 +70,35 @@ hh_status_t hh_radiod_listen(hh_radiod_t *d, const char *sock_path)
     }
 
     d->listen_fd = fd;
+    /* Remembered so release() can unlink it, rather than leaving a stale
+     * socket file behind for the next start to clean up. */
+    snprintf(d->sock_path, sizeof d->sock_path, "%s", sock_path);
     HH_LOGI(COMP, "listening", "path=%s", sock_path);
     return HH_OK;
+}
+
+size_t hh_radiod_pollfds(const hh_radiod_t *d, struct pollfd *fds, size_t cap)
+{
+    size_t n = 0;
+
+    if (!d || !fds || cap < (size_t)HH_RADIOD_MAX_CLIENTS + 1) return 0;
+
+    if (d->listen_fd >= 0) {
+        fds[n].fd      = d->listen_fd;
+        fds[n].events  = POLLIN;
+        fds[n].revents = 0;
+        n++;
+    }
+    for (int i = 0; i < HH_RADIOD_MAX_CLIENTS; i++) {
+        if (d->clients[i].fd < 0) continue;
+        fds[n].fd     = d->clients[i].fd;
+        /* Watch for writability only while a reply is still pending, so an
+         * idle connection does not spin the loop on POLLOUT. */
+        fds[n].events = POLLIN | (d->clients[i].outlen ? POLLOUT : 0);
+        fds[n].revents = 0;
+        n++;
+    }
+    return n;
 }
 
 /* ---- state machine (Phase 3) ---- */
@@ -237,9 +274,29 @@ static void close_client(hh_radiod_client_t *c)
     if (c->fd >= 0) close(c->fd);
     c->fd = -1;
     c->inlen = 0;
+    c->outlen = 0;
+    c->outsent = 0;
 }
 
-static void accept_clients(hh_radiod_t *d)
+/* Push whatever is still pending for this client. Returns false if the client
+ * was dropped. A partial write is normal and simply leaves the remainder
+ * queued for the next pass; previously the write() return was ignored, so a
+ * short write silently truncated the reply. */
+static bool flush_client(hh_radiod_client_t *c)
+{
+    while (c->outsent < c->outlen) {
+        ssize_t w = write(c->fd, c->outbuf + c->outsent, c->outlen - c->outsent);
+        if (w > 0) { c->outsent += (size_t)w; continue; }
+        if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return true; /* retry later */
+        close_client(c);
+        return false;
+    }
+    c->outlen = 0;
+    c->outsent = 0;
+    return true;
+}
+
+static void accept_clients(hh_radiod_t *d, hh_time_ms_t now)
 {
     if (d->listen_fd < 0) return;
     for (;;) {
@@ -253,15 +310,26 @@ static void accept_clients(hh_radiod_t *d)
         if (slot < 0) { close(fd); continue; } /* at capacity */
         d->clients[slot].fd = fd;
         d->clients[slot].inlen = 0;
+        d->clients[slot].outlen = 0;
+        d->clients[slot].outsent = 0;
+        d->clients[slot].last_activity = now;
     }
 }
 
-static void service_client(hh_radiod_t *d, hh_radiod_client_t *c)
+static void service_client(hh_radiod_t *d, hh_radiod_client_t *c, hh_time_ms_t now)
 {
-    ssize_t n = read(c->fd, c->inbuf + c->inlen, sizeof c->inbuf - c->inlen - 1);
+    ssize_t n;
+
+    /* Finish any reply still in flight before reading more requests, so
+     * responses cannot interleave. */
+    if (c->outlen && !flush_client(c)) return;
+    if (c->outlen) return;  /* still blocked; try again next pass */
+
+    n = read(c->fd, c->inbuf + c->inlen, sizeof c->inbuf - c->inlen - 1);
     if (n == 0) { close_client(c); return; }              /* clean disconnect  */
     if (n < 0) { if (errno != EAGAIN && errno != EWOULDBLOCK) close_client(c); return; }
 
+    c->last_activity = now;
     c->inlen += (size_t)n;
     c->inbuf[c->inlen] = '\0';
 
@@ -275,8 +343,6 @@ static void service_client(hh_radiod_t *d, hh_radiod_client_t *c)
 
         hh_rc_request_t req;
         hh_rc_response_t resp;
-        char out[HH_RC_MAX_LINE];
-        size_t outlen;
 
         if (hh_rc_request_parse(line, &req) == HH_OK) {
             hh_radiod_handle_request(d, &req, &resp);
@@ -286,18 +352,40 @@ static void service_client(hh_radiod_t *d, hh_radiod_client_t *c)
             resp.reason = HH_ERR_INVAL;
             d->requests_rejected++;
         }
-        outlen = hh_rc_response_format(&resp, out, sizeof out);
-        if (outlen > 0) {
-            ssize_t w = write(c->fd, out, outlen);
-            (void)w; /* a slow/blocked client is dropped, never allowed to stall radiod */
-        }
+
+        c->outlen  = hh_rc_response_format(&resp, c->outbuf, sizeof c->outbuf);
+        c->outsent = 0;
 
         size_t consumed = linelen + 1;
         memmove(c->inbuf, c->inbuf + consumed, c->inlen - consumed);
         c->inlen -= consumed;
+
+        /* One reply at a time: send this one before parsing the next request,
+         * so a pipelining client cannot have a queued response overwritten. */
+        if (!flush_client(c)) return;
+        if (c->outlen) return;  /* socket full; resume on the next pass */
     }
 
     if (c->inlen >= sizeof c->inbuf - 1) close_client(c); /* line too long: drop client */
+}
+
+/* Drop clients that have been silent longer than the configured timeout.
+ * Without this an idle client holds its slot indefinitely, and 16 of them
+ * exhaust the table. Disabled when the timeout is zero. */
+static void expire_idle_clients(hh_radiod_t *d, hh_time_ms_t now)
+{
+    if (d->client_idle_timeout_ms == 0) return;
+
+    for (int i = 0; i < HH_RADIOD_MAX_CLIENTS; i++) {
+        hh_radiod_client_t *c = &d->clients[i];
+        if (c->fd < 0) continue;
+        if (c->outlen) continue;  /* mid-reply: not idle */
+        if (now < c->last_activity) continue;  /* clock went backwards */
+        if ((uint32_t)(now - c->last_activity) < d->client_idle_timeout_ms) continue;
+        HH_LOGD(COMP, "client_idle_timeout", "slot=%d idle_ms=%llu", i,
+                (unsigned long long)(now - c->last_activity));
+        close_client(c);
+    }
 }
 
 hh_status_t hh_radiod_tick(hh_radiod_t *d, hh_time_ms_t now)
@@ -305,10 +393,11 @@ hh_status_t hh_radiod_tick(hh_radiod_t *d, hh_time_ms_t now)
     if (!d) return HH_ERR_INVAL;
     if (d->state == HH_RC_STATE_RELEASED) return HH_ERR_STATE;
 
-    accept_clients(d);
+    accept_clients(d, now);
     for (int i = 0; i < HH_RADIOD_MAX_CLIENTS; i++) {
-        if (d->clients[i].fd >= 0) service_client(d, &d->clients[i]);
+        if (d->clients[i].fd >= 0) service_client(d, &d->clients[i], now);
     }
+    expire_idle_clients(d, now);
     if (d->state == HH_RC_STATE_RUNNING) hh_radio_poll(d->radio, now);
     return HH_OK;
 }
@@ -318,5 +407,7 @@ void hh_radiod_release(hh_radiod_t *d)
     if (!d) return;
     for (int i = 0; i < HH_RADIOD_MAX_CLIENTS; i++) close_client(&d->clients[i]);
     if (d->listen_fd >= 0) { close(d->listen_fd); d->listen_fd = -1; }
+    /* Remove our own socket file rather than leaving it for the next start. */
+    if (d->sock_path[0] != '\0') { unlink(d->sock_path); d->sock_path[0] = '\0'; }
     d->state = HH_RC_STATE_RELEASED;
 }
