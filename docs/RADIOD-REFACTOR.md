@@ -62,7 +62,7 @@ Every phase must satisfy all of these before it is committed:
 | 1 | Extract `protocol/` | **DONE** |
 | 2 | Extract `librc/` | **DONE** |
 | 3 | Add `radioctl/` CLI | **DONE** |
-| 4 | Create `radiod/`, move the daemon | pending |
+| 4 | Create `radiod/`, move the daemon | **DONE** |
 | 5 | Split `hhsdr_core` into base and MANET libraries | pending |
 | 6a | Relocate `hw_adapter` into `radiod/src/backends/` | pending |
 | 7 | radiod configuration file and daemon hardening | pending |
@@ -183,6 +183,48 @@ Verified manually against a live daemon: lifecycle transitions reported
 correctly, `set-channel 11` persisted into a subsequent `status`, injected
 `hw_fault` flipped `operational` to 0, and the three exit statuses behaved as
 documented. Build clean, **29/29** passing.
+
+---
+
+## Phase 4 — Create `radiod/` (DONE)
+
+The daemon is now a self-contained component. Eight files moved, history
+preserved:
+
+| From | To |
+|---|---|
+| `src/radiod/radiod.c` | `radiod/src/radiod.c` |
+| `src/radiod/mock_backend.c` | `radiod/src/backends/mock_backend.c` |
+| `include/hhsdr/radiod/radiod.h` | `radiod/include/hhsdr/radiod/radiod.h` |
+| `include/hhsdr/radiod/mock_backend.h` | `radiod/include/hhsdr/radiod/mock_backend.h` |
+| `tools/radiod/radiod_main.c` | `radiod/radiod_main.c` |
+| `tests/radiod/test_radiod_daemon.c` | `radiod/tests/test_radiod_daemon.c` |
+| `tests/unit/test_radiod_state_machine.c` | `radiod/tests/test_radiod_state_machine.c` |
+| `tests/unit/test_mock_backend.c` | `radiod/tests/test_mock_backend.c` |
+
+The `hhsdr/radiod/` include prefix was kept, so **no source file needed an
+include edit**. The emptied `src/radiod/`, `tools/radiod/`, `tests/radiod/` and
+`include/hhsdr/radiod/` directories were removed.
+
+Each component now registers its own tests alongside the code they exercise,
+rather than from the top-level `tests/` tree.
+
+### Two build-system details worth recording
+
+**Binary output directory.** An initial `RUNTIME_OUTPUT_DIRECTORY
+${CMAKE_BINARY_DIR}` override made the link step emit `Linking C executable .`
+and fail with *"cannot open output file .: Is a directory"*. The override was
+unnecessary — tests locate binaries through `$<TARGET_FILE:...>` — so it was
+dropped rather than worked around.
+
+**Test guard.** Component tests were first guarded on `BUILD_TESTING`, which
+silently registered **zero** of them: this project calls `enable_testing()`
+directly rather than `include(CTest)`, so `BUILD_TESTING` is never defined. The
+guard is now an explicit `HH_BUILD_TESTS`, set in the root `CMakeLists.txt`.
+Caught only because the test count dropped from 29 to 25.
+
+Verified: **29/29** passing, 0 warnings, and clean under
+AddressSanitizer + UBSan.
 
 ---
 

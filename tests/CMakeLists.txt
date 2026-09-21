@@ -41,36 +41,8 @@ add_executable(test_rc_protocol ${CMAKE_SOURCE_DIR}/protocol/tests/test_rc_proto
 target_link_libraries(test_rc_protocol PRIVATE hhsdr_protocol)
 add_test(NAME test_rc_protocol COMMAND test_rc_protocol)
 
-# radiod-specific tests link hhsdr_radiod in addition to hhsdr_core.
-add_executable(test_mock_backend unit/test_mock_backend.c)
-target_link_libraries(test_mock_backend PRIVATE hhsdr_radiod)
-add_test(NAME test_mock_backend COMMAND test_mock_backend)
-
-add_executable(test_radiod_state_machine unit/test_radiod_state_machine.c)
-target_link_libraries(test_radiod_state_machine PRIVATE hhsdr_radiod)
-add_test(NAME test_radiod_state_machine COMMAND test_radiod_state_machine)
-
-# End-to-end: spawns the real radiod binary and drives it over its socket.
-# Links librc ONLY — not hhsdr_radiod. That is deliberate: the test drives the
-# daemon exactly as an external client would, which proves librc is genuinely
-# independent of the daemon library rather than merely filed separately.
-add_executable(test_radiod_daemon radiod/test_radiod_daemon.c)
-target_link_libraries(test_radiod_daemon PRIVATE librc)
-target_compile_definitions(test_radiod_daemon PRIVATE
-  RADIOD_BINARY_PATH="$<TARGET_FILE:radiod>")
-add_dependencies(test_radiod_daemon radiod)
-add_test(NAME test_radiod_daemon COMMAND test_radiod_daemon)
-
-# End-to-end through the public CLI: runs the real radioctl binary against the
-# real radiod binary. This is the path the architecture requires test
-# automation to use, so it is exercised exactly as an ATB/BIT script would.
-add_executable(test_radioctl ${CMAKE_SOURCE_DIR}/radioctl/tests/test_radioctl.c)
-target_link_libraries(test_radioctl PRIVATE librc)
-target_compile_definitions(test_radioctl PRIVATE
-  RADIOD_BINARY_PATH="$<TARGET_FILE:radiod>"
-  RADIOCTL_BINARY_PATH="$<TARGET_FILE:radioctl>")
-add_dependencies(test_radioctl radiod radioctl)
-add_test(NAME test_radioctl COMMAND test_radioctl)
+# radiod's and radioctl's own tests are registered by their component
+# CMakeLists, alongside the code they exercise.
 
 # Tests for the simulation tooling itself. Needs the tools/sim sources, which
 # are development tooling and never linked into the production library.

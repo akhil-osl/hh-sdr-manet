@@ -63,24 +63,22 @@ add_subdirectory(librc)
 add_executable(hh-manet src/main.c)
 target_link_libraries(hh-manet PRIVATE hhsdr_core)
 
-# ---------------------------------------------------------------------------
-# radiod : standalone radio-control daemon (control plane only) plus its
-# mock backend and client library. Depends on hhsdr_core for rc.h/radio.h
-# and core utilities, never the other way around.
-# ---------------------------------------------------------------------------
-add_library(hhsdr_radiod STATIC
-  src/radiod/mock_backend.c
-  src/radiod/radiod.c
-)
-target_link_libraries(hhsdr_radiod PUBLIC hhsdr_core hhsdr_protocol)
+# Tests are registered by each component's own CMakeLists, guarded on this.
+# (Deliberately not CTest's BUILD_TESTING: this project calls enable_testing()
+# directly rather than include(CTest), so BUILD_TESTING is never defined.)
+enable_testing()
+set(HH_BUILD_TESTS ON)
 
-add_executable(radiod tools/radiod/radiod_main.c)
-target_link_libraries(radiod PRIVATE hhsdr_radiod)
+# ---------------------------------------------------------------------------
+# radiod : the radio-control daemon, and in the target architecture the single
+# PL/OpenCPI owner. Self-contained under radiod/, which also registers its own
+# tests. See radiod/CMakeLists.txt.
+# ---------------------------------------------------------------------------
+add_subdirectory(radiod)
 
 # ---------------------------------------------------------------------------
 # radioctl : the radio-control CLI. Reaches radiod through librc only.
 # ---------------------------------------------------------------------------
 add_subdirectory(radioctl)
 
-enable_testing()
 add_subdirectory(tests)
