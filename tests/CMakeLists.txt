@@ -34,6 +34,24 @@ hh_add_test(test_telemetry_verification unit/test_telemetry_verification.c)
 hh_add_test(test_node        unit/test_node.c)
 hh_add_test(test_status_events unit/test_status_events.c)
 hh_add_test(test_interface_compliance unit/test_interface_compliance.c)
+hh_add_test(test_rc_protocol unit/test_rc_protocol.c)
+
+# radiod-specific tests link hhsdr_radiod in addition to hhsdr_core.
+add_executable(test_mock_backend unit/test_mock_backend.c)
+target_link_libraries(test_mock_backend PRIVATE hhsdr_radiod)
+add_test(NAME test_mock_backend COMMAND test_mock_backend)
+
+add_executable(test_radiod_state_machine unit/test_radiod_state_machine.c)
+target_link_libraries(test_radiod_state_machine PRIVATE hhsdr_radiod)
+add_test(NAME test_radiod_state_machine COMMAND test_radiod_state_machine)
+
+# End-to-end: spawns the real radiod binary and drives it over its socket.
+add_executable(test_radiod_daemon radiod/test_radiod_daemon.c)
+target_link_libraries(test_radiod_daemon PRIVATE hhsdr_radiod)
+target_compile_definitions(test_radiod_daemon PRIVATE
+  RADIOD_BINARY_PATH="$<TARGET_FILE:radiod>")
+add_dependencies(test_radiod_daemon radiod)
+add_test(NAME test_radiod_daemon COMMAND test_radiod_daemon)
 
 # Tests for the simulation tooling itself. Needs the tools/sim sources, which
 # are development tooling and never linked into the production library.

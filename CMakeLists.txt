@@ -30,6 +30,7 @@ add_library(hhsdr_core STATIC
   src/core/events.c
   src/core/dispatcher.c
   src/radio/wire.c
+  src/radio/rc.c
   src/adapters/hw/hw_adapter.c
   src/manet/discovery.c
   src/manet/neighbor.c
@@ -46,9 +47,24 @@ add_library(hhsdr_core STATIC
 )
 target_link_libraries(hhsdr_core PUBLIC m)
 
-enable_testing()
-add_subdirectory(tests)
-
 # Node daemon. Links only the production library — never the test simulator.
 add_executable(hh-manet src/main.c)
 target_link_libraries(hh-manet PRIVATE hhsdr_core)
+
+# ---------------------------------------------------------------------------
+# radiod : standalone radio-control daemon (control plane only) plus its
+# mock backend and client library. Depends on hhsdr_core for rc.h/radio.h
+# and core utilities, never the other way around.
+# ---------------------------------------------------------------------------
+add_library(hhsdr_radiod STATIC
+  src/radiod/mock_backend.c
+  src/radiod/radiod.c
+  src/radiod/rc_client.c
+)
+target_link_libraries(hhsdr_radiod PUBLIC hhsdr_core)
+
+add_executable(radiod tools/radiod/radiod_main.c)
+target_link_libraries(radiod PRIVATE hhsdr_radiod)
+
+enable_testing()
+add_subdirectory(tests)
