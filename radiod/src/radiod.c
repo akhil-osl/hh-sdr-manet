@@ -42,6 +42,14 @@ void hh_radiod_set_fault_hook(hh_radiod_t *d, hh_radiod_fault_fn fn, void *ctx)
     d->fault_ctx = ctx;
 }
 
+/* Backend identity for the log. The vtable carries its own name, so a log
+ * line says which backend answered without radiod knowing the concrete type. */
+static const char *backend_name(const hh_radiod_t *d)
+{
+    return (d && d->radio && d->radio->ops && d->radio->ops->name)
+         ? d->radio->ops->name : "none";
+}
+
 hh_status_t hh_radiod_listen(hh_radiod_t *d, const char *sock_path)
 {
     struct sockaddr_un addr;
@@ -74,7 +82,10 @@ hh_status_t hh_radiod_listen(hh_radiod_t *d, const char *sock_path)
     /* Remembered so release() can unlink it, rather than leaving a stale
      * socket file behind for the next start to clean up. */
     snprintf(d->sock_path, sizeof d->sock_path, "%s", sock_path);
-    HH_LOGI(COMP, "listening", "path=%s", sock_path);
+    /* Name the backend at startup: with several backends compiled in, which
+     * one is loaded is the first thing needed when diagnosing a radio. */
+    HH_LOGI(COMP, "listening", "path=%s backend=%s max_clients=%d",
+            sock_path, backend_name(d), HH_RADIOD_MAX_CLIENTS);
     return HH_OK;
 }
 
@@ -131,6 +142,25 @@ static bool transition_allowed(hh_rc_state_t from, hh_rc_cmd_t cmd)
     }
 }
 
+/* States a command is accepted from, for the reject log. Mirrors
+ * transition_allowed() above; keep the two in step when adding a verb. */
+static const char *legal_states_for(hh_rc_cmd_t cmd)
+{
+    switch (cmd) {
+    case HH_RC_CMD_INIT:        return "created";
+    case HH_RC_CMD_CONFIGURE:   return "initialized,configured,stopped";
+    case HH_RC_CMD_START:       return "configured,stopped";
+    case HH_RC_CMD_STOP:        return "running,faulted";
+    case HH_RC_CMD_SHUTDOWN:    return "any-but-released";
+    case HH_RC_CMD_STATUS:
+    case HH_RC_CMD_STATS:       return "any-but-created,released";
+    case HH_RC_CMD_SET_CHANNEL: return "running";
+    case HH_RC_CMD_INJECT_FAULT:
+    case HH_RC_CMD_CLEAR_FAULT: return "running,faulted";
+    default:                    return "none";
+    }
+}
+
 static void fill_status(const hh_radiod_t *d, hh_rc_response_t *resp)
 {
     hh_radio_status_t st;
@@ -161,6 +191,7 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
 {
     hh_status_t st;
     hh_time_ms_t now;
+    hh_rc_state_t prev;
 
     if (!d || !req || !resp) return;
     now = hh_now(d->clock);
@@ -168,15 +199,23 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
     resp->cmd = req->cmd;
     d->requests_total++;
 
+    HH_LOGD(COMP, "request", "cmd=%s state=%s", hh_rc_cmd_str(req->cmd),
+            hh_rc_state_str(d->state));
+
     if (!transition_allowed(d->state, req->cmd)) {
         d->requests_rejected++;
         resp->ok = false;
         resp->reason = HH_ERR_STATE;
         resp->state = d->state;
-        HH_LOGW(COMP, "reject", "cmd=%s state=%s", hh_rc_cmd_str(req->cmd),
-                hh_rc_state_str(d->state));
+        /* Name the states the command WOULD be legal from, so the reason for
+         * the refusal is in the log rather than only in the state table. */
+        HH_LOGW(COMP, "reject", "cmd=%s state=%s reason=ESTATE legal_from=%s",
+                hh_rc_cmd_str(req->cmd), hh_rc_state_str(d->state),
+                legal_states_for(req->cmd));
         return;
     }
+
+    prev = d->state;
 
     switch (req->cmd) {
     case HH_RC_CMD_INIT:
@@ -198,6 +237,8 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
 
     case HH_RC_CMD_START:
         st = hh_radio_open(d->radio);
+        HH_LOGD(COMP, "backend_call", "op=open backend=%s status=%s",
+                backend_name(d), hh_status_str(st));
         if (st != HH_OK) {
             /* A backend that will not open is a hardware fault, and the
              * registry is what records that it happened and when. */
@@ -212,7 +253,9 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
         break;
 
     case HH_RC_CMD_STOP:
-        hh_radio_close(d->radio);
+        st = hh_radio_close(d->radio);
+        HH_LOGD(COMP, "backend_call", "op=close backend=%s status=%s",
+                backend_name(d), hh_status_str(st));
         d->state = HH_RC_STATE_STOPPED;
         resp->ok = true;
         break;
@@ -235,6 +278,8 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
 
     case HH_RC_CMD_SET_CHANNEL:
         st = hh_radio_set_channel(d->radio, req->channel);
+        HH_LOGD(COMP, "backend_call", "op=set_channel backend=%s channel=%u status=%s",
+                backend_name(d), req->channel, hh_status_str(st));
         if (st != HH_OK) {
             hh_radiod_faults_assert(&d->faults, HH_RC_FAULT_BACKEND_IO, now);
             resp->ok = false;
@@ -270,6 +315,22 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
     }
 
     resp->state = d->state; /* always reflect current state, not just STATUS replies */
+
+    /* A state change is the significant event, so it logs at info. A command
+     * that leaves the state alone (status, stats) is routine and logs at
+     * debug, to keep an idle poller from flooding the log at info. */
+    if (d->state != prev) {
+        HH_LOGI(COMP, "transition", "cmd=%s from=%s to=%s ok=%d",
+                hh_rc_cmd_str(req->cmd), hh_rc_state_str(prev),
+                hh_rc_state_str(d->state), resp->ok ? 1 : 0);
+    } else if (!resp->ok) {
+        HH_LOGW(COMP, "failed", "cmd=%s state=%s reason=%s",
+                hh_rc_cmd_str(req->cmd), hh_rc_state_str(d->state),
+                hh_status_str(resp->reason));
+    } else {
+        HH_LOGD(COMP, "ok", "cmd=%s state=%s", hh_rc_cmd_str(req->cmd),
+                hh_rc_state_str(d->state));
+    }
 }
 
 bool hh_radiod_shutdown_requested(const hh_radiod_t *d)
@@ -322,7 +383,15 @@ static void accept_clients(hh_radiod_t *d, hh_time_ms_t now)
         for (int i = 0; i < HH_RADIOD_MAX_CLIENTS; i++) {
             if (d->clients[i].fd < 0) { slot = i; break; }
         }
-        if (slot < 0) { close(fd); continue; } /* at capacity */
+        if (slot < 0) {
+            /* Capacity refusals are silent to the client -- it just sees a
+             * closed connection -- so they must not be silent in the log. */
+            HH_LOGW(COMP, "client_refused", "reason=at_capacity max=%d",
+                    HH_RADIOD_MAX_CLIENTS);
+            close(fd);
+            continue;
+        }
+        HH_LOGD(COMP, "client_connected", "slot=%d fd=%d", slot, fd);
         d->clients[slot].fd = fd;
         d->clients[slot].inlen = 0;
         d->clients[slot].outlen = 0;
@@ -366,6 +435,7 @@ static void service_client(hh_radiod_t *d, hh_radiod_client_t *c, hh_time_ms_t n
             resp.ok = false;
             resp.reason = HH_ERR_INVAL;
             d->requests_rejected++;
+            HH_LOGW(COMP, "parse_error", "reason=EINVAL line=\"%s\"", line);
         }
 
         c->outlen  = hh_rc_response_format(&resp, c->outbuf, sizeof c->outbuf);
@@ -381,7 +451,11 @@ static void service_client(hh_radiod_t *d, hh_radiod_client_t *c, hh_time_ms_t n
         if (c->outlen) return;  /* socket full; resume on the next pass */
     }
 
-    if (c->inlen >= sizeof c->inbuf - 1) close_client(c); /* line too long: drop client */
+    if (c->inlen >= sizeof c->inbuf - 1) {
+        HH_LOGW(COMP, "client_dropped", "reason=line_too_long max=%d",
+                HH_RC_MAX_LINE);
+        close_client(c);   /* line too long: drop client */
+    }
 }
 
 /* Drop clients that have been silent longer than the configured timeout.
