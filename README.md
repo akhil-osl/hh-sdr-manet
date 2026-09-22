@@ -4,6 +4,9 @@ A C11 implementation of a self-healing mobile ad-hoc network (MANET) control
 plane, data plane, and radio abstraction — the application/control-software
 and networking portion of the HH-SDR software-defined radio architecture.
 
+> **New here?** Read [ARCHITECTURE.md](ARCHITECTURE.md) first — it maps how
+> every component relates, and what is built versus still blocked.
+
 ---
 
 ## Overview
