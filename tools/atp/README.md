@@ -22,6 +22,7 @@ They test **only through interfaces that will still exist on hardware**:
 | `atp-mgen.sh` | an IP address | network namespace | the mesh (`manet0`, U-06) |
 | `atp-capture.sh` | a network interface | `veth0` | `manet0` |
 | `atp-decode.sh` | a pcap file | analysis host | analysis host |
+| `atp-radioctl.sh` | `radioctl` (public CLI) | mock backend | real backend |
 
 Nothing reads simulator internals. Moving to hardware changes a peer address
 or an interface name, never the scripts.
@@ -136,6 +137,43 @@ A capture can only see what the radio exposes as an interface. User IP
 traffic will cross `manet0`. The MANET's own beacon and routing frames have no
 defined capture point yet (U-16).
 
+### `atp-radioctl.sh` — control-plane checks
+
+Everything goes through `radioctl`, the public control interface the
+architecture requires test automation to use. The script relies on
+`radioctl`'s documented exit codes and `key=value` output, and on nothing else.
+
+```sh
+# BIT: read-only, safe on a radio in service
+tools/atp/atp-radioctl.sh health -o evidence --max-tx-errors 0
+
+# ATP: walks the whole lifecycle; refuses unless radiod is freshly started
+tools/atp/atp-radioctl.sh lifecycle -o evidence --node-id 42 --set-channel 11
+```
+
+| Mode | Does | Judges |
+|---|---|---|
+| `health` | `status`, `stats` only; changes nothing | radiod answers; state is `running` (or `--expect-state`); `operational=1`; optional counter limits |
+| `lifecycle` | `start` before `init` (must be rejected), `init`, `configure`, `start`, `set-channel`, `inject-fault hw_fault`, `clear-fault`, `stats`, `stop` | every step returns the documented exit code and state |
+
+**`lifecycle` changes the radio's state**, so it refuses to run unless radiod
+is in its initial `created` state. It can never reconfigure a radio that is
+already in use. `health` is the one to schedule for BIT.
+
+In `health`, an unreachable or silent radiod is a **`fail`**, not an `error`.
+The check worked, and the radio is the thing that is down. That is the same
+distinction `radioctl` keeps between exits 3 and 4. `radioctl` has no timeout
+of its own, so every call is bounded by `-T` (default 5 s).
+
+The counters from `stats` are cumulative since radiod started. A BIT limit on
+them is a limit on the total, not a rate.
+
+The lifecycle expectations are radiod's documented behaviour, not invented
+limits. Against the real hardware backend today, `start` fails honestly
+(`hw_adapter` returns `HH_ERR_NOT_IMPLEMENTED`), so the lifecycle check
+reports `fail` until a PL backend exists (U-03, U-04). That is the correct
+result.
+
 ### `atp-decode.sh` — decode a capture into evidence (analysis host)
 
 ```sh
@@ -226,7 +264,17 @@ the outcome without parsing JSON.
 
 ---
 
-## Self-test: proving the scripts judge correctly
+## Self-tests: proving the scripts judge correctly
+
+Three self-tests cover the tooling. Two run under `ctest`:
+
+| Test | Covers | In ctest |
+|---|---|---|
+| `check_dissector` | dissector vs the C codec; `atp-decode.sh` | yes (skipped without tshark) |
+| `check_atp_radioctl` | `atp-radioctl.sh` against the real `radiod` and `radioctl` binaries, through fresh, running, faulted and unreachable states | yes (skipped without jq) |
+| `selftest/netns-selftest.sh` | iperf3, MGEN and capture scripts over real traffic | no, run by hand |
+
+### The traffic self-test
 
 ```sh
 tools/atp/selftest/netns-selftest.sh [evidence-dir]

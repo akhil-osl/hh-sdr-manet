@@ -114,6 +114,7 @@ collision the moment a working backend exists. Tracked as
 | `src/radio/` | `radio.h` hardware seam + beacon wire format | ✅ the key boundary |
 | `src/sca/` | SCA 2.2.2 compatibility layer | ✅ compatible, not conformant |
 | `tests/`, `tools/sim/` | test harness, simulator, dev tooling | ✅ 31 tests |
+| [`tools/atp/`](tools/atp/README.md) | ATP/BIT evidence scripts, Wireshark dissector | ✅ working, validated off-radio |
 | [`drivers/`](drivers/README.md) | manet0, radio clock | ❌ empty |
 | [`workers/`](workers/README.md) | OpenCPI RCC workers | ❌ empty |
 | [`fpga/`](fpga/README.md) | PL fabric | ❌ empty |
@@ -274,6 +275,7 @@ drops into `radiod/src/backends/`.
 | MANET routing | custom distance-vector | OLSRv2 (RFC 7181) | U-09 |
 | RCC workers | none | 5 PS workers | U-03 |
 | FPGA fabric | none | DMA, MAC, modem, AD9361 | U-06, U-08, U-14 |
+| Test automation | ✅ ATP/BIT scripts, dissector, JSON evidence | same, on the radio over `manet0` | U-06, U-07, U-16 |
 
 ---
 
