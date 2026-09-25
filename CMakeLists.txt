@@ -112,3 +112,9 @@ add_subdirectory(radiod)
 add_subdirectory(radioctl)
 
 add_subdirectory(tests)
+
+# ---------------------------------------------------------------------------
+# ATP/BIT evidence tooling: traffic scripts, the Wireshark dissector and its
+# golden-capture generator. Development tooling, never linked into production.
+# ---------------------------------------------------------------------------
+add_subdirectory(tools/atp)
