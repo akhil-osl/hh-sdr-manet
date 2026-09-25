@@ -169,10 +169,10 @@ The counters from `stats` are cumulative since radiod started. A BIT limit on
 them is a limit on the total, not a rate.
 
 The lifecycle expectations are radiod's documented behaviour, not invented
-limits. Against the real hardware backend today, `start` fails honestly
-(`hw_adapter` returns `HH_ERR_NOT_IMPLEMENTED`), so the lifecycle check
-reports `fail` until a PL backend exists (U-03, U-04). That is the correct
-result.
+limits. Today radiod always runs the mock backend. It has no hardware backend
+to select, because the PL/OpenCPI contracts are unspecified (U-03, U-04). The
+checks are therefore validated against the mock only. They use nothing but
+`radioctl`, so they run unchanged once a real backend exists.
 
 ### `atp-decode.sh` — decode a capture into evidence (analysis host)
 
