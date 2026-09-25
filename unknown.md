@@ -488,6 +488,50 @@ backend exists, and must be resolved before then.
 
 ---
 
+## U-16 — Capture point for MANET frames on hardware
+
+**Status:** BLOCKING (for on-radio capture of MANET control traffic only)
+
+**What is missing:** A defined place where the MANET stack's own frames —
+beacons and routing updates — can be observed on the running radio. The
+drawing places tcpdump in Test Automation, but tcpdump only sees network
+interfaces. User IP traffic will cross `manet0` and is capturable there (once
+`manet0` exists, U-06). MANET beacon and routing frames are different: they
+leave through `hh_radio_transmit` toward the DMA/MAC path and never touch an
+IP interface, so nothing today says where, or whether, they can be captured.
+Undefined:
+
+- whether the `manet0` driver (or another driver) exposes a monitor/tap
+  interface carrying MANET frames
+- the link-layer framing on such an interface — i.e. an over-the-air frame
+  header carrying frame kind, source and destination; today `hh_frame_t` holds
+  those as C struct fields that are never serialised
+- whether received frames are mirrored with their measured metrics
+  (RSSI/SNR), which ATP evidence would want alongside the payload
+
+**Why it is needed:** The Lua dissector (`tools/atp/wireshark/hh_manet.lua`)
+decodes the beacon and routing-update payloads defined in `src/radio/wire.c`,
+but on hardware it has nothing to decode unless those frames reach a capture
+point. Without one, on-radio evidence of MANET control traffic is limited to
+the stack's own log records.
+
+**Where it must come from:** E5 (Linux BSP), with the system architect, and
+informed by U-06 and U-15.
+
+**What it blocks:** On-radio packet capture of MANET control traffic, and any
+link-layer registration for the dissector beyond the private pcap link types
+it uses today.
+
+**What can proceed:** The dissector itself, validated against pcaps written
+from the real encoder (`hh_wire_pcapgen`, private `DLT_USER0`/`DLT_USER1`
+link types — a test-tooling convention, not an air format). Capture of user IP
+traffic with `tools/atp/atp-capture.sh`, which is interface-agnostic.
+Resolution of U-09 in favour of OLSRv2 would change the picture: OLSRv2 runs
+over UDP (port 269, RFC 5498) and is then capturable on any IP interface,
+with Wireshark's existing RFC 5444 dissector.
+
+---
+
 ## Summary
 
 | ID | Topic | Status | Primary source |
@@ -507,6 +551,7 @@ backend exists, and must be resolved before then.
 | U-13 | Audio path ownership | PARTIAL | Architect + E1–E4 |
 | U-14 | Frequency-hopping control | BLOCKING | E1–E4 + architect |
 | U-15 | Control/data vtable split | BLOCKING | Architect |
+| U-16 | Capture point for MANET frames | BLOCKING | E5 + architect |
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol
