@@ -302,6 +302,8 @@ sudo apt install iperf3 mgen tcpdump jq tshark
 
 **Sandboxed editors:** when the shell runs inside a confined snap (for
 example VS Code installed as a snap), Ubuntu's AppArmor profile for
-`/usr/bin/tcpdump` refuses signals from that sandbox. `timeout` cannot stop
-the capture, and it hangs. Run the self-test from an ordinary terminal. This
-is a property of the host, not of the radio.
+`/usr/bin/tcpdump` refuses signals from that sandbox, so `timeout` cannot
+stop a capture. The self-test detects this. It skips the capture case with a
+`SKIP` line and a "NOT full coverage" warning, instead of hanging. For full
+coverage, run it from an ordinary terminal. This is a property of the host,
+not of the radio.
