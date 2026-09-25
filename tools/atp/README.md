@@ -21,6 +21,7 @@ They test **only through interfaces that will still exist on hardware**:
 | `atp-iperf3.sh` | an IP address | network namespace | the mesh (`manet0`, U-06) |
 | `atp-mgen.sh` | an IP address | network namespace | the mesh (`manet0`, U-06) |
 | `atp-capture.sh` | a network interface | `veth0` | `manet0` |
+| `atp-decode.sh` | a pcap file | analysis host | analysis host |
 
 Nothing reads simulator internals. Moving to hardware changes a peer address
 or an interface name, never the scripts.
@@ -135,6 +136,80 @@ A capture can only see what the radio exposes as an interface. User IP
 traffic will cross `manet0`. The MANET's own beacon and routing frames have no
 defined capture point yet (U-16).
 
+### `atp-decode.sh` — decode a capture into evidence (analysis host)
+
+```sh
+tools/atp/atp-decode.sh -r evidence/raw/capture.x.pcap -o evidence \
+    --min-frames 100 --max-bad-frames 0 --max-seq-gaps 5
+```
+
+It runs tshark with the MANET dissector and writes counts per decode status.
+For beacons it also reports sequence continuity per node: a gap is a beacon
+the capture point never saw. Sequence wrap-around at 2^32 is handled. The
+per-frame decode is kept as an artifact, so every number in the summary can
+be checked.
+
+This runs on the analysis host, never on the radio, because it needs tshark
+with Lua.
+
+---
+
+## The Wireshark dissector
+
+[`wireshark/hh_manet.lua`](wireshark/hh_manet.lua) decodes the two payload
+layouts defined in [`src/radio/wire.c`](../../src/radio/wire.c):
+
+| Protocol | Filter name | Layout |
+|---|---|---|
+| Beacon | `hhbeacon` | 48 bytes, fixed, `protocol_version` 1 |
+| Routing update | `hhroute` | 5 + 11 × count bytes, count ≤ 24 |
+
+```sh
+tshark -X lua_script:tools/atp/wireshark/hh_manet.lua -r beacons.pcap -V
+# or, for the GUI:
+cp tools/atp/wireshark/hh_manet.lua ~/.local/lib/wireshark/plugins/
+```
+
+Every frame gets a `hhbeacon.status` or `hhroute.status` field. It holds the
+same verdict the C decoder reaches: `ok`, `unsupported_version`, `malformed`
+or `invalid_node`. A frame with an unknown protocol version is not decoded
+past the version field, exactly as `hh_beacon_decode` refuses it.
+
+**What it does not claim:**
+
+- **The layouts are this implementation's choice, not a specification.** The
+  architecture leaves the air format TBD. The dissector labels encoding-TBD
+  fields as such (capability bits, coordinate units).
+- **There is no frame header to decode.** Frame kind, source and destination
+  are `hh_frame_t` struct fields that are never serialised. Captures
+  therefore use private pcap link types instead of a header: `DLT_USER0` for
+  beacons and `DLT_USER1` for routing updates. This is a test-tooling
+  convention, not an air format.
+- **On the radio, MANET frames have no defined capture point yet** (U-16).
+  Until one exists, the dissector decodes captures generated from the
+  encoder, not live radio traffic.
+
+### How it is validated
+
+```sh
+ctest --test-dir build -R check_dissector --output-on-failure
+```
+
+[`wireshark/hh_wire_pcapgen.c`](wireshark/hh_wire_pcapgen.c) writes golden
+captures with the **real encoder**. It also writes `expected.json`, which
+records what the **real decoder** makes of each frame. The cases cover full
+and empty optional fields, integer maxima, a future protocol version, a
+truncated frame, node id 0, and routing updates with 0, 1 and 24 entries plus
+out-of-range counts.
+[`wireshark/check-dissector.sh`](wireshark/check-dissector.sh) decodes the
+captures with tshark and compares every status and every field. It then
+checks that `atp-decode.sh` summarises the same capture correctly.
+
+The C code is the reference, not a second hand-written description of the
+layout. If `wire.c` changes and the dissector does not, this test fails. The
+test is skipped (exit 77) on hosts without tshark with Lua support, or
+without jq.
+
 ---
 
 ## Running on the radio
@@ -174,7 +249,7 @@ and deterministic.
 On a development host:
 
 ```sh
-sudo apt install iperf3 mgen tcpdump jq
+sudo apt install iperf3 mgen tcpdump jq tshark
 ```
 
 **Sandboxed editors:** when the shell runs inside a confined snap (for
