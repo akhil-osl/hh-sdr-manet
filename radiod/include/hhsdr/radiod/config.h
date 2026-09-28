@@ -11,20 +11,31 @@
  * same way so operators meet one syntax across the system.
  *
  * SCOPE: every key here corresponds to something radiod actually does today.
- * Settings for OpenCPI, workers, the PL, hopsets and TLV are deliberately
- * absent — those contracts do not exist yet (see unknown.md), and inventing
- * configuration for them would be inventing the contract.
+ * The OpenCPI keys name an application file and property values supplied by
+ * the operator; radiod itself names no worker or property. Settings for the
+ * PL, hopsets and TLV are deliberately absent — those contracts do not exist
+ * yet (see unknown.md), and inventing configuration for them would be
+ * inventing the contract.
  */
 #ifndef HHSDR_RADIOD_CONFIG_H
 #define HHSDR_RADIOD_CONFIG_H
 
 #include "hhsdr/core/log.h"
 #include "hhsdr/core/types.h"
+#include "hhsdr/radiod/ocpi_backend.h"
 
 /* Longest socket path radiod will accept. sockaddr_un.sun_path is 108 bytes on
  * Linux; bind() is what ultimately enforces the limit, and this bound simply
  * lets the field be stored by value. */
 #define HH_RADIOD_MAX_PATH 108
+
+/* Which hh_radio_ops_t implementation radiod owns. */
+typedef enum {
+    HH_RADIOD_BACKEND_MOCK = 0,   /* control-plane validation, no hardware */
+    HH_RADIOD_BACKEND_OCPI        /* an OpenCPI application, via the ACI    */
+} hh_radiod_backend_kind_t;
+
+const char *hh_radiod_backend_str(hh_radiod_backend_kind_t k);
 
 typedef struct {
     /* Control socket to bind. Overridable on the command line. */
@@ -42,6 +53,14 @@ typedef struct {
     uint32_t client_idle_timeout_ms;
 
     hh_log_level_t log_level;
+
+    /* Backend selection. Defaults to the mock, which is what radiod ran before
+     * a backend could be chosen. */
+    hh_radiod_backend_kind_t backend;
+
+    /* Used only when backend == HH_RADIOD_BACKEND_OCPI. Keys: ocpi_app,
+     * ocpi_library_path, and ocpi_property (repeatable). */
+    hh_ocpi_config_t ocpi;
 } hh_radiod_config_t;
 
 /* Populate with the documented defaults. Never fails. */

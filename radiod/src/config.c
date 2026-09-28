@@ -18,10 +18,22 @@ void hh_radiod_config_defaults(hh_radiod_config_t *cfg)
     cfg->log_level             = HH_LOG_INFO;
 }
 
+const char *hh_radiod_backend_str(hh_radiod_backend_kind_t k)
+{
+    switch (k) {
+    case HH_RADIOD_BACKEND_MOCK: return "mock";
+    case HH_RADIOD_BACKEND_OCPI: return "ocpi";
+    default:                     return "unknown";
+    }
+}
+
 hh_status_t hh_radiod_config_validate(const hh_radiod_config_t *cfg)
 {
     if (!cfg) return HH_ERR_INVAL;
     if (cfg->sock_path[0] == '\0') return HH_ERR_INVAL;
+    /* The OpenCPI backend has nothing to open without an application. */
+    if (cfg->backend == HH_RADIOD_BACKEND_OCPI && cfg->ocpi.app_path[0] == '\0')
+        return HH_ERR_INVAL;
     /* A zero tick would spin the control loop without ever yielding. */
     if (cfg->tick_interval_ms == 0) return HH_ERR_INVAL;
     /* An idle timeout shorter than a tick could expire a client before it is
@@ -40,6 +52,14 @@ static hh_status_t parse_u32(const char *v, uint32_t *out)
     n = strtoul(v, &end, 10);
     if (*end != '\0' || n > 0xFFFFFFFFul) return HH_ERR_INVAL;
     *out = (uint32_t)n;
+    return HH_OK;
+}
+
+/* Refuse rather than truncate: a shortened path names a different file. */
+static hh_status_t copy_path(char *dst, size_t cap, const char *v)
+{
+    if (*v == '\0' || strlen(v) >= cap) return HH_ERR_INVAL;
+    snprintf(dst, cap, "%s", v);
     return HH_OK;
 }
 
@@ -64,6 +84,19 @@ hh_status_t hh_radiod_config_set(hh_radiod_config_t *cfg, const char *key,
         cfg->log_level = lvl;
         return HH_OK;
     }
+    if (!strcmp(key, "backend")) {
+        if (!strcmp(value, "mock"))      cfg->backend = HH_RADIOD_BACKEND_MOCK;
+        else if (!strcmp(value, "ocpi")) cfg->backend = HH_RADIOD_BACKEND_OCPI;
+        else return HH_ERR_INVAL;
+        return HH_OK;
+    }
+    if (!strcmp(key, "ocpi_app"))
+        return copy_path(cfg->ocpi.app_path, sizeof cfg->ocpi.app_path, value);
+    if (!strcmp(key, "ocpi_library_path"))
+        return copy_path(cfg->ocpi.library_path, sizeof cfg->ocpi.library_path, value);
+    /* Repeatable: each occurrence adds one property write, in file order. */
+    if (!strcmp(key, "ocpi_property"))
+        return hh_ocpi_config_add_property(&cfg->ocpi, value);
     return HH_ERR_NOTFOUND;
 }
 

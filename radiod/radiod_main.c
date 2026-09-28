@@ -8,17 +8,17 @@
  * The loop blocks in poll() until a client is ready or the tick interval
  * elapses, rather than waking on a fixed timer regardless of traffic.
  *
- * BACKEND: the mock backend is wired in here. In the target architecture
- * radiod is the single PL/OpenCPI owner, and this is where a real backend
- * would be selected instead — but the OpenCPI application, worker names and
- * ACI lifecycle are unspecified (unknown.md U-03, U-04), so no such backend
- * exists to select. The mock implements the same hh_radio_ops_t contract a
- * real one will, so nothing below this file changes when it arrives.
+ * BACKEND: chosen by the `backend` configuration key. `mock` (the default) is
+ * the control-plane validation backend. `ocpi` makes radiod the owner of an
+ * OpenCPI application — the single-PL-owner role of the target architecture —
+ * and exists only in builds configured with -DHH_WITH_OPENCPI=ON. Both
+ * implement hh_radio_ops_t, so nothing below this file depends on the choice.
  */
 #include "hhsdr/core/clock.h"
 #include "hhsdr/core/log.h"
 #include "hhsdr/radiod/config.h"
 #include "hhsdr/radiod/mock_backend.h"
+#include "hhsdr/radiod/ocpi_backend.h"
 #include "hhsdr/radiod/radiod.h"
 #include <errno.h>
 #include <poll.h>
@@ -66,10 +66,35 @@ static void usage(const char *argv0)
         argv0, HH_RC_DEFAULT_SOCK_PATH);
 }
 
+/* Construct the configured backend into `radio`. The OpenCPI backend is
+ * compiled only when OpenCPI is available; asking for it otherwise is a
+ * configuration the daemon cannot honour, so it says so and refuses to start
+ * rather than quietly falling back to the mock. */
+static hh_status_t make_backend(const hh_radiod_config_t *cfg, hh_mock_backend_t *mock,
+                                hh_ocpi_backend_t *ocpi, hh_radio_t *radio)
+{
+    switch (cfg->backend) {
+    case HH_RADIOD_BACKEND_MOCK:
+        hh_mock_backend_init(mock, radio);
+        return HH_OK;
+    case HH_RADIOD_BACKEND_OCPI:
+#ifdef HH_HAVE_OPENCPI
+        return hh_ocpi_backend_init(ocpi, &cfg->ocpi, radio);
+#else
+        (void)ocpi;
+        HH_LOGE("radiod", "backend_unavailable",
+                "backend=ocpi reason=\"radiod was built without OpenCPI; configure with -DHH_WITH_OPENCPI=ON\"");
+        return HH_ERR_UNSUPPORTED;
+#endif
+    }
+    return HH_ERR_INVAL;
+}
+
 int main(int argc, char **argv)
 {
     hh_radiod_config_t cfg;
     hh_mock_backend_t backend;
+    hh_ocpi_backend_t ocpi_backend;
     hh_radio_t radio;
     hh_radiod_t daemon;
     hh_status_t st;
@@ -117,7 +142,13 @@ int main(int argc, char **argv)
     }
     hh_log_set_level(cfg.log_level);
 
-    hh_mock_backend_init(&backend, &radio);
+    st = make_backend(&cfg, &backend, &ocpi_backend, &radio);
+    if (st != HH_OK) {
+        fprintf(stderr, "radiod: backend %s unavailable: %s\n",
+                hh_radiod_backend_str(cfg.backend), hh_status_str(st));
+        return 1;
+    }
+    HH_LOGI("radiod", "backend", "kind=%s", hh_radiod_backend_str(cfg.backend));
 
     st = hh_radiod_init(&daemon, &radio, hh_clock_monotonic());
     if (st != HH_OK) { fprintf(stderr, "radiod init failed: %s\n", hh_status_str(st)); return 1; }
@@ -125,7 +156,11 @@ int main(int argc, char **argv)
     st = hh_radiod_configure(&daemon, &cfg);
     if (st != HH_OK) { fprintf(stderr, "radiod configure failed: %s\n", hh_status_str(st)); return 1; }
 
-    hh_radiod_set_fault_hook(&daemon, fault_hook, &backend);
+    /* Fault injection drives the mock's simulated faults. A real application
+     * has no injection point, so with the OpenCPI backend inject_fault only
+     * moves radiod's own state machine and fault registry. */
+    if (cfg.backend == HH_RADIOD_BACKEND_MOCK)
+        hh_radiod_set_fault_hook(&daemon, fault_hook, &backend);
 
     st = hh_radiod_listen(&daemon, cfg.sock_path);
     if (st != HH_OK) { fprintf(stderr, "radiod listen failed: %s\n", hh_status_str(st)); return 1; }

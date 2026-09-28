@@ -19,3 +19,4 @@ tests/demo_selfheal
 logs/
 *.log
 .vscode/
+build-ocpi/

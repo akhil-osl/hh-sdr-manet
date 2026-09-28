@@ -1,0 +1,22 @@
+<!-- Test fixture for radiod's OpenCPI backend: runs until stopped.
+
+     Uses only ocpi.core.file_read and ocpi.core.file_write, which every
+     OpenCPI installation builds for its host platform, so the backend can be
+     exercised on a development machine with no radio and no FPGA. It stands
+     in for a waveform application; it is not one.
+
+     The input file is created by the test in its working directory. -->
+<application>
+  <instance component="ocpi.core.file_read" name="src">
+    <property name="fileName"    value="hh_ocpi_test_in.bin"/>
+    <property name="messageSize" value="4096"/>
+    <property name="repeat"      value="true"/>
+  </instance>
+  <instance component="ocpi.core.file_write" name="sink">
+    <property name="fileName" value="/dev/null"/>
+  </instance>
+  <connection>
+    <port instance="src"  name="out"/>
+    <port instance="sink" name="in"/>
+  </connection>
+</application>

@@ -1,0 +1,18 @@
+<!-- Test fixture for radiod's OpenCPI backend: finishes on its own.
+
+     Reads its input once and stops at end of file, so the application ends
+     without being told to. The backend must notice that and stop reporting
+     the radio as operational. -->
+<application done="sink">
+  <instance component="ocpi.core.file_read" name="src">
+    <property name="fileName"    value="hh_ocpi_test_in.bin"/>
+    <property name="messageSize" value="4096"/>
+  </instance>
+  <instance component="ocpi.core.file_write" name="sink">
+    <property name="fileName" value="/dev/null"/>
+  </instance>
+  <connection>
+    <port instance="src"  name="out"/>
+    <port instance="sink" name="in"/>
+  </connection>
+</application>
