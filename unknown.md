@@ -104,7 +104,20 @@ facade can be layered over the existing client without changing radiod.
 
 ## U-03 — OpenCPI application XML and worker identities
 
-**Status:** BLOCKING
+**Status:** PARTIAL (was BLOCKING; updated 2026-09-28)
+
+**Update 2026-09-28:** a working OpenCPI project now exists —
+`txrx_worker_rt_ch2_dma` (OpenCPI 2.4.7, XC7Z100 + AD9361). It has real
+application XMLs (`qpsk_dma_null_app.xml`, `proxy_only.xml`) and workers with
+typed properties (`ad9361_proxy`, `qpsk_tx`, `qpsk_rx`, `qpsk_ctrl`, plus
+`ocpi.core` file_read/file_write). What is still open: those workers are a
+point-to-point QPSK chain, not the five PS RCC workers the drawing names
+(`waveform_ctrl`, `drc`, `mac_ps`, `ad9361_config_proxy`, `telemetry`), and
+which application radiod is to run on the radio is not decided (see U-17,
+U-18). radiod's OpenCPI backend therefore takes the application path and
+every property from configuration and names none of them itself.
+
+The original entry follows.
 
 **What is missing:**
 
@@ -140,7 +153,28 @@ appear anywhere in the source.
 
 ## U-04 — OpenCPI ACI lifecycle and error contract
 
-**Status:** BLOCKING
+**Status:** PARTIAL (was BLOCKING; updated 2026-09-28)
+
+**Update 2026-09-28:** the sequence is now known from working code and
+implemented in `radiod/src/backends/ocpi_backend.cpp`: construct
+`OCPI::API::Application(xml)` → `initialize()` → `setProperty()` → `start()`;
+`wait(timeout)` returns true while running and false once finished; `stop()`;
+destroy. Errors are thrown as `std::string` (verified against OpenCPI 2.4.7).
+radiod maps it as: `start` = create…start, `stop` = stop + release, a start
+failure = `faulted`. Tested on the host with real applications.
+
+Still open, all from the radio project's board experience:
+- `ad9361_init` must run before anything touches the PL, or the CPU hangs; the
+  radio-setup application (`proxy_only.xml`) must be running before the data
+  application, and must not be in it. Who performs these steps is U-19.
+- Stopping the application does not stop the RF carrier (the PL free-runs), so
+  radiod `stop` is not an emission-off command.
+- A process that dies holding an application leaves the driver's DMA block
+  allocated, and the next start fails until it is freed.
+- Whether an application can be reloaded without restarting the process has
+  not been tested on the board.
+
+The original entry follows.
 
 **What is missing:** The required call sequence and its failure semantics —
 initialize, create/load, configure, start, stop, shutdown — plus which ACI
@@ -331,7 +365,20 @@ remains overridable via radiod's `-s` flag.
 
 ## U-11 — Implementation language for the OpenCPI boundary
 
-**Status:** BLOCKING (OpenCPI only)
+**Status:** PARTIAL (was BLOCKING; updated 2026-09-28)
+
+**Update 2026-09-28:** decided — C++ is allowed in radiod for the OpenCPI
+backend. OpenCPI 2.4.7's `aci/OcpiApi.h` declares nothing callable, so there
+is no C binding to use instead. The C++ is confined to
+`radiod/src/backends/ocpi_backend.cpp`, behind `extern "C"` entry points, and
+built only with `-DHH_WITH_OPENCPI=ON`; the rest of the project stays C11.
+Exceptions map to `HH_ERR_IO` with the OpenCPI message logged.
+
+Still open: cross-building for the board. The radio project targets RCC
+platform `xilinx19_2_aarch32` (rootfs GCC 8.2) and has built with a GCC 7.5
+cross compiler; how its ACI program `dma_stream` was built is not documented.
+
+The original entry follows.
 
 **What is missing:** A decision on how C11 code reaches a C++ API.
 
@@ -355,6 +402,16 @@ internal structure of its OpenCPI backend.
 ## U-12 — Threading model for PL ownership
 
 **Status:** PARTIAL
+
+**Update 2026-09-28:** the ACI is poll-friendly — `Application::wait()` takes a
+timeout, so radiod polls it with 1 µs from its existing control loop and makes
+every ACI call from its one thread. But the OpenCPI runtime links `pthread`
+and runs its own container threads inside the process once an application
+exists. radiod's code still needs no locks (it shares no state with those
+threads); the process as a whole is no longer single-threaded. Whether that is
+acceptable is the remaining decision.
+
+The original entry follows.
 
 **What is missing:** Whether radiod may remain single-threaded once it owns a
 live OpenCPI application.
@@ -532,27 +589,107 @@ with Wireshark's existing RFC 5444 dissector.
 
 ---
 
+## U-17 — Which OpenCPI project is the integration baseline
+
+**Status:** BLOCKING (for on-board integration)
+
+**What is missing:** A named, versioned OpenCPI project to integrate against.
+The copy examined (`txrx_worker_rt_ch2_dma_Mishra_c`) is, by its own
+hand-over notes, a verbatim copy of `txrx_worker_rt_ch2_dma` whose
+OpenCPI package id (`local.txrx_worker_rt_ch2_dma`) still collides with the
+original. Its latest QA release is R2 (`b72b4ee`).
+
+**Why radiod needs it:** Application XML paths, artifact names and package ids
+are matched by exact string on the board; configuring radiod against the wrong
+copy fails, or worse, runs the wrong artifacts.
+
+**Where it must come from:** The OpenCPI project owner (E1–E4).
+
+**What can proceed:** radiod's OpenCPI backend, which takes the application
+and properties from configuration and is tested on the host with stock
+`ocpi.core` components.
+
+---
+
+## U-18 — Waveform and MAC gap between the OpenCPI chain and the MANET
+
+**Status:** BLOCKING (MANET over RF)
+
+**What is missing:** The OpenCPI chain is a point-to-point FDD QPSK link:
+fixed 2240-bit (280-byte) frames, continuous transmit, no MAC, no addressing,
+no multiple access, no CRC, and no per-frame RSSI/SNR. The MANET stack
+assumes a shared broadcast medium carrying frames of up to 512 bytes
+(`HH_RADIO_MAX_FRAME`) with `kind`/`src`/`dst`, and per-frame link metrics
+(`docs/MANET-RADIO-REQUIREMENTS.md`).
+
+**Why it is needed:** Without a MAC and framing, several nodes cannot share
+the channel, and the MANET cannot tell who sent a frame.
+
+**Where it must come from:** System architect with E1–E4 (the drawing's
+`mac_ps`/`mac_pl`), related to U-06, U-08 and U-15.
+
+**What can proceed:** radiod lifecycle control of the existing application;
+off-radio MANET work and ATP tooling.
+
+---
+
+## U-19 — Board bring-up steps versus the single-owner rule
+
+**Status:** BLOCKING (on-board operation)
+
+**What is missing:** On the board today, three separate things touch the
+hardware: `ad9361_init` (programs the AD9361 over SPI through `/dev/mem`,
+outside OpenCPI), a long-lived `ocpirun proxy_only.xml` (the radio-setup
+application, which must not share an application with the DMA data path), and
+the data application run by `dma_stream`. That is two ACI processes plus raw
+SPI access. Undecided:
+
+- whether "never a second ACI instance" means one process or one application
+  — i.e. may radiod hold both applications in one process;
+- whether radiod runs `ad9361_init` itself, and in which lifecycle state;
+- what radiod does when asked to stop, given that stopping the application
+  does not stop the RF carrier (U-04).
+
+**Why radiod needs it:** Note 1 makes radiod the single owner. It cannot be,
+while other processes bring the radio up.
+
+**Where it must come from:** System architect with the OpenCPI project owner.
+
+**What can proceed:** The OpenCPI backend for one application, tested on the
+host.
+
+---
+
 ## Summary
 
 | ID | Topic | Status | Primary source |
 |---|---|---|---|
 | U-01 | ICD-2 TLV wire format | BLOCKING | System architect |
 | U-02 | `rc_*` API signatures | PARTIAL | System architect / E6 |
-| U-03 | OpenCPI app XML + workers | BLOCKING | E1–E4 |
-| U-04 | ACI lifecycle + errors | BLOCKING | E1–E4 |
+| U-03 | OpenCPI app XML + workers | PARTIAL | E1–E4 |
+| U-04 | ACI lifecycle + errors | PARTIAL | E1–E4 |
 | U-05 | Event/fault taxonomy | PARTIAL | Architect + E1–E4 |
 | U-06 | ICD-1 PDU descriptor layout | BLOCKING | E5 + E1–E4 |
 | U-07 | ICD-3 time register map | BLOCKING | E5 + E1–E4 |
 | U-08 | MANET STROBE semantics | BLOCKING | E1–E4 |
 | U-09 | OLSRv2 vs existing stack | DEFERRED | Architect + E6 |
 | U-10 | Socket path + permissions | PARTIAL | Architect / integrator |
-| U-11 | C vs C++ at the ACI | BLOCKING | E1–E4 + build owner |
+| U-11 | C vs C++ at the ACI | PARTIAL (C++ decided; cross-build open) | Build owner |
 | U-12 | Threading model | PARTIAL | Architect |
 | U-13 | Audio path ownership | PARTIAL | Architect + E1–E4 |
 | U-14 | Frequency-hopping control | BLOCKING | E1–E4 + architect |
 | U-15 | Control/data vtable split | BLOCKING | Architect |
 | U-16 | Capture point for MANET frames | BLOCKING | E5 + architect |
+| U-17 | OpenCPI integration baseline | BLOCKING | OpenCPI project owner |
+| U-18 | Waveform/MAC gap vs MANET | BLOCKING | Architect + E1–E4 |
+| U-19 | Board bring-up vs single owner | BLOCKING | Architect + OpenCPI owner |
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol
 forward unchanged, with no invented contracts.
+
+**Added 2026-09-28:** radiod's OpenCPI backend (`backend = ocpi`), which owns
+one OpenCPI application through the ACI. It takes the application and every
+property from configuration and names nothing itself, and is tested on the
+development host against real OpenCPI 2.4.7 applications. Board operation
+waits on U-17 and U-19.

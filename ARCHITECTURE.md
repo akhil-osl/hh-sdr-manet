@@ -264,12 +264,12 @@ drops into `radiod/src/backends/`.
 
 | Area | Now | Target | Blocked by |
 |---|---|---|---|
-| Control daemon | ✅ working, mock backend | PL/OpenCPI owner | U-03, U-04 |
+| Control daemon | ✅ working; mock backend, and an OpenCPI backend (host-tested) | PL/OpenCPI owner on the board | U-17, U-19 |
 | Client library + CLI | ✅ working | same | — |
 | Wire protocol | ASCII `key=value` | versioned TLV (ICD-2) | U-01 |
 | Async events | none (poll only) | radiod pushes events | U-01, U-05 |
 | Fault registry | ✅ in-process | exposed over ICD-2 | U-01, U-05 |
-| PL ownership | none | single owner | U-03, U-15 |
+| PL ownership | radiod owns one OpenCPI application (host only) | single owner on the board | U-15, U-19 |
 | Data plane | in-process forwarder | manet0 → DMA → MAC → RF | U-06, U-15 |
 | Time plane | **absent entirely** | 1PPS → PL → PHC | U-07 |
 | MANET routing | custom distance-vector | OLSRv2 (RFC 7181) | U-09 |
