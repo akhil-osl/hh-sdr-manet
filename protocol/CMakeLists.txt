@@ -12,6 +12,11 @@
 # ---------------------------------------------------------------------------
 add_library(hhsdr_protocol STATIC
   src/rc.c
+  # The human-facing command grammar and output layout. Separate from the
+  # codec: rc.c is the wire format, rc_cli.c is what a person types and reads.
+  # It lives here rather than in radioctl because radiod's interactive console
+  # must accept exactly the same words -- see rc_cli.h.
+  src/rc_cli.c
 )
 
 target_include_directories(hhsdr_protocol PUBLIC

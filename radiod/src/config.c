@@ -16,6 +16,17 @@ void hh_radiod_config_defaults(hh_radiod_config_t *cfg)
     cfg->tick_interval_ms      = HH_RADIOD_DEFAULT_TICK_MS;
     cfg->client_idle_timeout_ms = 0;   /* disabled: prior behaviour */
     cfg->log_level             = HH_LOG_INFO;
+
+    /* The mock backend stays the default. Every existing deployment and every
+     * existing test therefore behaves exactly as before this file learned
+     * about OpenCPI; a real radio is something an operator opts into. */
+    snprintf(cfg->radio_backend, sizeof cfg->radio_backend, "mock");
+    cfg->opencpi_agent[0]        = '\0';
+    /* 10 s, not 3: `stop` on a proxy session mutes the TX, waits for the
+     * proxy to confirm (<= 1.4 s), then stops two OpenCPI applications, and a
+     * timeout kills the agent part-way through -- leaving the PL running. */
+    cfg->opencpi_reply_timeout_ms = 10000u;
+    cfg->opencpi_start_timeout_ms = 60000u;
 }
 
 hh_status_t hh_radiod_config_validate(const hh_radiod_config_t *cfg)
@@ -28,6 +39,13 @@ hh_status_t hh_radiod_config_validate(const hh_radiod_config_t *cfg)
      * ever serviced. Zero is valid and means "no timeout". */
     if (cfg->client_idle_timeout_ms != 0 &&
         cfg->client_idle_timeout_ms < cfg->tick_interval_ms)
+        return HH_ERR_INVAL;
+    if (strcmp(cfg->radio_backend, "mock") != 0 &&
+        strcmp(cfg->radio_backend, "opencpi") != 0)
+        return HH_ERR_INVAL;
+    /* A zero timeout would make every agent call fail instantly, which reads
+     * as "OpenCPI is broken" rather than as a misconfiguration. */
+    if (cfg->opencpi_reply_timeout_ms == 0 || cfg->opencpi_start_timeout_ms == 0)
         return HH_ERR_INVAL;
     return HH_OK;
 }
@@ -58,6 +76,21 @@ hh_status_t hh_radiod_config_set(hh_radiod_config_t *cfg, const char *key,
         return parse_u32(value, &cfg->tick_interval_ms);
     if (!strcmp(key, "client_idle_timeout_ms"))
         return parse_u32(value, &cfg->client_idle_timeout_ms);
+    if (!strcmp(key, "radio_backend")) {
+        if (strcmp(value, "mock") != 0 && strcmp(value, "opencpi") != 0)
+            return HH_ERR_INVAL;
+        snprintf(cfg->radio_backend, sizeof cfg->radio_backend, "%s", value);
+        return HH_OK;
+    }
+    if (!strcmp(key, "opencpi_agent")) {
+        if (strlen(value) >= sizeof cfg->opencpi_agent) return HH_ERR_INVAL;
+        snprintf(cfg->opencpi_agent, sizeof cfg->opencpi_agent, "%s", value);
+        return HH_OK;
+    }
+    if (!strcmp(key, "opencpi_reply_timeout_ms"))
+        return parse_u32(value, &cfg->opencpi_reply_timeout_ms);
+    if (!strcmp(key, "opencpi_start_timeout_ms"))
+        return parse_u32(value, &cfg->opencpi_start_timeout_ms);
     if (!strcmp(key, "log_level")) {
         hh_log_level_t lvl;
         if (!hh_log_level_parse(value, &lvl)) return HH_ERR_INVAL;

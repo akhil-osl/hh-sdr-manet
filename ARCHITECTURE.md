@@ -9,6 +9,7 @@ Start here, then follow the links into component READMEs for detail.
   OSL-628-BD-101 Rev 00
 - Blocked contracts: [`unknown.md`](unknown.md)
 - Refactor history: [`docs/RADIOD-REFACTOR.md`](docs/RADIOD-REFACTOR.md)
+- **OpenCPI integration:** [`docs/OPENCPI-INTEGRATION.md`](docs/OPENCPI-INTEGRATION.md)
 
 ---
 
@@ -16,11 +17,18 @@ Start here, then follow the links into component READMEs for detail.
 
 A software-defined radio node. A MANET stack finds neighbours and routes
 packets; a control daemon owns the radio hardware; a CLI and a client library
-drive that daemon from other processes. Today everything runs in Linux
-userspace on x86 against a mock radio. The FPGA, the OpenCPI workers, the
-drivers and the timing hardware named in the target architecture **do not exist
-in this repository yet** — deliberately, because their contracts are not
-specified.
+drive that daemon from other processes.
+
+The **control plane now reaches real OpenCPI workers**: `radiod -b opencpi`
+starts and stops an OpenCPI SDR application and gets and sets its workers'
+properties, through a helper process and the RADHAWK C API published by the
+OpenCPI project ([`docs/OPENCPI-INTEGRATION.md`](docs/OPENCPI-INTEGRATION.md)).
+That is verified on the host, not on a board.
+
+The **data plane, the drivers and the timing hardware** named in the target
+architecture still **do not exist in this repository** — deliberately, because
+their contracts are not specified. The default backend remains the mock, so
+everything here still runs in Linux userspace on x86 with no hardware.
 
 ---
 
@@ -246,17 +254,28 @@ so a TLV layout would be invented, then reconciled later against the real one.
 The codec lives in its own `protocol/` component precisely so an ICD-2 codec can
 be added beside it without touching `radiod` or `librc`.
 
-### radiod is not yet the PL owner
+### radiod is the PL owner now — but not on hardware yet
 
-No OpenCPI integration exists anywhere — no ACI call, no application handle, no
-worker reference. The only mentions of OpenCPI in the source are comments saying
-it is absent. Blocked on the application XML, worker names,
-properties and ACI lifecycle ([U-03](unknown.md), [U-04](unknown.md)), plus the
-C11-versus-C++ boundary ([U-11](unknown.md)).
+This gap is **closed in design and closed on the host**, and is the one thing in
+this section that changed. `radiod/src/backends/opencpi_backend.c` drives a real
+OpenCPI application, through the **rh_agent** helper process and the **RADHAWK**
+C API published by the OpenCPI project. `radiod -b opencpi` brings the
+application up on `start`, and four new protocol verbs (`opencpi list | get |
+set | status`) reach the workers' properties.
+[U-03](unknown.md), [U-04](unknown.md), [U-11](unknown.md) and
+[U-12](unknown.md) are resolved. Read
+[docs/OPENCPI-INTEGRATION.md](docs/OPENCPI-INTEGRATION.md) first.
 
-What makes the gap safe: `radiod` depends only on `hh_radio_ops_t` and never
-names a concrete backend. An OpenCPI backend implements that same contract and
-drops into `radiod/src/backends/`.
+What makes it safe is what was predicted here: `radiod` still depends only on
+`hh_radio_ops_t` (plus a second, orthogonal property vtable), and still names no
+concrete backend. It also names **no worker and no property** — the agent
+publishes its registry and radiod routes against it, so the next project's
+workers need no change here.
+
+What remains genuinely unfinished: **none of it has driven a PL.** It is verified
+on the host — 36 CTest cases, including the real `radiod` binary end to end
+against a stub agent, plus a manual run of the real agent in `dry_run`. The agent
+builds for `xilinx19_2_aarch32` but has not been run on a board.
 
 ---
 
@@ -264,12 +283,13 @@ drops into `radiod/src/backends/`.
 
 | Area | Now | Target | Blocked by |
 |---|---|---|---|
-| Control daemon | ✅ working, mock backend | PL/OpenCPI owner | U-03, U-04 |
-| Client library + CLI | ✅ working | same | — |
+| Control daemon | ✅ working; mock **and** OpenCPI backends | PL/OpenCPI owner | — (on-hardware run) |
+| Client library + CLI | ✅ working, plus `opencpi` verbs and a shell | same | — |
 | Wire protocol | ASCII `key=value` | versioned TLV (ICD-2) | U-01 |
 | Async events | none (poll only) | radiod pushes events | U-01, U-05 |
 | Fault registry | ✅ in-process | exposed over ICD-2 | U-01, U-05 |
-| PL ownership | none | single owner | U-03, U-15 |
+| PL ownership | ✅ via rh_agent + RADHAWK, host-verified | single owner | — (on-hardware run) |
+| Worker properties | ✅ `opencpi list/get/set/status` | same | — |
 | Data plane | in-process forwarder | manet0 → DMA → MAC → RF | U-06, U-15 |
 | Time plane | **absent entirely** | 1PPS → PL → PHC | U-07 |
 | MANET routing | custom distance-vector | OLSRv2 (RFC 7181) | U-09 |
@@ -284,8 +304,11 @@ drops into `radiod/src/backends/`.
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j8
-ctest --test-dir build                      # 31 tests, ~0.6 s
+ctest --test-dir build                      # 34 tests, ~1 s (2 skip without jq)
 ```
+
+(That `cmake -S/-B` form needs CMake 3.13+. On the 3.10 this project targets:
+`mkdir -p build && cd build && cmake .. && make -j8 && ctest`.)
 
 Drive the control plane — **two terminals**, so daemon logs and command output
 stay separate:
@@ -321,6 +344,7 @@ Run the MANET simulator:
 
 | Question | Document |
 |---|---|
+| How does radiod drive the OpenCPI workers? | [`docs/OPENCPI-INTEGRATION.md`](docs/OPENCPI-INTEGRATION.md) |
 | How does the daemon work internally? | [`radiod/README.md`](radiod/README.md) |
 | How do I write a client? | [`librc/README.md`](librc/README.md) |
 | What commands exist, what exit codes? | [`radioctl/README.md`](radioctl/README.md) |

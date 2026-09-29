@@ -42,8 +42,41 @@
 /* Default UNIX domain socket path. Overridable by the daemon/client caller. */
 #define HH_RC_DEFAULT_SOCK_PATH "/tmp/hh-radiod.sock"
 
-/* One request/response line, including its trailing newline, must fit here. */
-#define HH_RC_MAX_LINE 512
+/* One request/response line, including its trailing newline, must fit here.
+ *
+ * Raised from 512 when the opencpi_* verbs were added: opencpi_list and
+ * opencpi_status answer with a comma-separated item list whose length is set
+ * by how many properties the backend publishes, and 512 could not hold the
+ * qpsk_tx list. Raised again from 1024 to 2048 on 2026-09-29 together with
+ * HH_RC_MAX_ITEMS: an items list travels INSIDE one of these lines, so the line
+ * must hold a full HH_RC_MAX_ITEMS list plus the HH_RC_MAX_TEXT detail and the
+ * key names around them (1536 + 256 + ~100 < 2048). The framing is unchanged --
+ * still exactly one line per message -- so this only grows the per-client
+ * buffers (4 KiB per client). */
+#define HH_RC_MAX_LINE 2048
+
+/* A worker or property name. Long enough for the names the OpenCPI workers
+ * actually carry (the longest today is "enable_descrambler", 18). */
+#define HH_RC_MAX_NAME 32
+
+/* A property value, as text. Values cross the wire in the same textual form
+ * OpenCPI's setProperty() takes, so no per-type encoding is needed; the
+ * bound is set by app_xml-style path values rather than by numbers. */
+#define HH_RC_MAX_VALUE 192
+
+/* A comma-separated item list (opencpi_list, opencpi_status).
+ *
+ * Raised from 768 to 1536 on 2026-09-29. The largest list the OpenCPI backend
+ * produces is opencpi_status: every read-only property of every worker, 19
+ * elements since the radioctl live-radio work, measured at 600 bytes worst
+ * case (every 64-bit counter at 20 digits). 768 held that with 168 bytes to
+ * spare; 1536 doubles the budget so the next few properties need no protocol
+ * change. Must stay below HH_RC_MAX_LINE - HH_RC_MAX_TEXT - ~100 (see above). */
+#define HH_RC_MAX_ITEMS 1536
+
+/* Human-readable detail carried with a response. Always the LAST key on the
+ * wire, because it is the only field allowed to contain spaces. */
+#define HH_RC_MAX_TEXT 256
 
 /* radiod lifecycle state (Phase 3). Names are drawn directly from the
  * existing hh_node_state_t (node.h) plus a FAULTED state required by
@@ -73,6 +106,28 @@ typedef enum {
     HH_RC_CMD_SET_CHANNEL,  /* HTI-14 channel/radio control             */
     HH_RC_CMD_INJECT_FAULT, /* fault-injection control, for validation */
     HH_RC_CMD_CLEAR_FAULT,
+
+    /* ------------------------------------------------------------------
+     * Worker-property control (HTI-15 "config in, status out", applied to
+     * the signal-processing workers rather than to the RF front end).
+     *
+     * These four verbs are deliberately GENERIC: not one worker name,
+     * property name or property type appears anywhere in this protocol or
+     * in radiod. The backend publishes its own control surface and
+     * opencpi_list reports it, so a new worker or a new property is visible
+     * through the existing verbs without a protocol or daemon change.
+     *
+     * They are separate from SET_CHANNEL because that is HTI-14 radio
+     * control with a defined meaning, whereas these carry an opaque
+     * (worker, property, value) triple whose meaning belongs to the
+     * backend. Merging them would put the backend's property namespace into
+     * the radio-control contract.
+     * ------------------------------------------------------------------ */
+    HH_RC_CMD_OPENCPI_LIST,   /* list workers, or one worker's properties  */
+    HH_RC_CMD_OPENCPI_GET,    /* read one property                         */
+    HH_RC_CMD_OPENCPI_SET,    /* write one property                        */
+    HH_RC_CMD_OPENCPI_STATUS, /* sample every readable property at once    */
+
     HH_RC_CMD__MAX
 } hh_rc_cmd_t;
 
@@ -103,6 +158,14 @@ typedef struct {
     hh_node_id_t  node_id;      /* CONFIGURE                            */
     uint32_t      channel;      /* CONFIGURE, SET_CHANNEL               */
     hh_rc_fault_t fault;        /* INJECT_FAULT                         */
+
+    /* OPENCPI_LIST (worker optional), OPENCPI_GET, OPENCPI_SET. Empty
+     * strings mean "not supplied". None of these may contain a space: the
+     * framing is space-delimited, so hh_rc_request_parse rejects one that
+     * does rather than silently truncating it. */
+    char          worker[HH_RC_MAX_NAME];
+    char          prop[HH_RC_MAX_NAME];
+    char          value[HH_RC_MAX_VALUE];
 } hh_rc_request_t;
 
 /* A parsed/formatted response. Text on the wire is one line:
@@ -127,6 +190,27 @@ typedef struct {
     uint64_t      rx_errors;
     uint64_t      requests_total;
     uint64_t      requests_rejected;
+
+    /* OPENCPI_* payload. `items` is a comma-separated list whose element
+     * shape depends on the verb:
+     *   opencpi_list (no worker)  worker names          "qpsk_tx,qpsk_rx"
+     *   opencpi_list (worker=X)   name:type:access      "enable:bool:rw"
+     *   opencpi_status            name:value            "in_sync:1"
+     * `count` is how many elements it holds. Keeping the payload opaque to
+     * the protocol is what lets a new worker property appear here without a
+     * protocol change. */
+    char          worker[HH_RC_MAX_NAME];
+    char          prop[HH_RC_MAX_NAME];
+    char          value[HH_RC_MAX_VALUE];
+    char          ptype[16];     /* property type, as the backend names it  */
+    char          access[16];    /* "rw" | "rw-start" | "ro"                */
+    char          items[HH_RC_MAX_ITEMS];
+    uint32_t      count;
+
+    /* Human-readable detail. Carried on success and failure alike, and the
+     * only field that may contain spaces -- so it is always formatted last
+     * and parsed as the remainder of the line. */
+    char          text[HH_RC_MAX_TEXT];
 } hh_rc_response_t;
 
 /* Parse one request line (no trailing newline required). HH_ERR_INVAL on a

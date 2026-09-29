@@ -104,7 +104,28 @@ facade can be layered over the existing client without changing radiod.
 
 ## U-03 — OpenCPI application XML and worker identities
 
-**Status:** BLOCKING
+**Status:** RESOLVED (2026-09-28) — for the QPSK SDR project. See
+`docs/OPENCPI-INTEGRATION.md`.
+
+A real OpenCPI project arrived with a published control API: **RADHAWK**
+(`api/radhawk.h` in the OpenCPI project), a plain-C ABI over the C++ ACI with a
+session API and property writes through `Application::setProperty()`. Everything
+this item listed as missing now has an answer, and radiod is wired to it through
+the **rh_agent** helper process.
+
+Crucially, the answer did NOT come by writing worker names into radiod.
+**radiod still contains no worker name, property name, type or range.** The agent
+publishes its registry at startup and radiod routes against it, which is why this
+item is resolved *generically* — the same mechanism serves the next project's
+workers without a radiod change. The skeleton at
+`/home/ospl/projects/manet-opencpi/manet/` referenced below is still empty; it is
+simply no longer on the critical path.
+
+The original statement of the item follows, unedited.
+
+---
+
+**Status (original):** BLOCKING
 
 **What is missing:**
 
@@ -140,7 +161,27 @@ appear anywhere in the source.
 
 ## U-04 — OpenCPI ACI lifecycle and error contract
 
-**Status:** BLOCKING
+**Status:** RESOLVED (2026-09-28) — for the QPSK SDR project. See
+`docs/OPENCPI-INTEGRATION.md`.
+
+RADHAWK owns the ACI sequence and its exception handling: `rh_start` performs
+initialize → setProperty → start, `rh_stop` performs stop → release, and every
+ACI call is inside a `try` block that turns a C++ exception into one of twelve
+`rh_status_t` codes with a message. radiod's own 7-state machine maps onto it
+cleanly — `START` → `rh_start`, `STOP` → `rh_stop`, a failed start → `FAULTED`.
+
+Error *containment* is answered by the process boundary rather than by a mapping:
+an ACI exception or abort kills the agent, not the control plane, and radiod sees
+the pipe close and reports it. The twelve RADHAWK codes are deliberately NOT
+folded into the eight `hh_status_t` values — the RADHAWK message is passed
+through verbatim in the response's `text` field, because collapsing the codes
+would lose exactly the detail that makes an OpenCPI failure diagnosable.
+
+The original statement of the item follows, unedited.
+
+---
+
+**Status (original):** BLOCKING
 
 **What is missing:** The required call sequence and its failure semantics —
 initialize, create/load, configure, start, stop, shutdown — plus which ACI
@@ -331,7 +372,24 @@ remains overridable via radiod's `-s` flag.
 
 ## U-11 — Implementation language for the OpenCPI boundary
 
-**Status:** BLOCKING (OpenCPI only)
+**Status:** RESOLVED (2026-09-28). The boundary is a **process** boundary, so no
+ABI is mixed at all: radiod stays pure C11 under `-Wstrict-prototypes`, `CXX` is
+never enabled in its build, and the C++ lives in the separate rh_agent binary.
+
+This was not a free choice. The ACI archives in this CDK are compiled without
+`-fPIC`, so they cannot be linked into a shared library and radiod cannot load
+one; linking them directly into radiod would make it a C++-linked binary that
+only builds where a CDK exists. `radiod/include/hhsdr/radiod/opencpi_agent_proto.h`
+records the measured linker error and the full reasoning.
+
+The exception→status mapping question is answered in U-04: RADHAWK does the
+mapping, and its message is passed through rather than collapsed.
+
+The original statement of the item follows, unedited.
+
+---
+
+**Status (original):** BLOCKING (OpenCPI only)
 
 **What is missing:** A decision on how C11 code reaches a C++ API.
 
@@ -354,7 +412,23 @@ internal structure of its OpenCPI backend.
 
 ## U-12 — Threading model for PL ownership
 
-**Status:** PARTIAL
+**Status:** RESOLVED (2026-09-28). radiod remains single-threaded, and owning a
+live OpenCPI application did not change that, because the ACI runs in the
+rh_agent process rather than in radiod's. The repository still has zero
+`pthread` and zero `mutex` usage in production code.
+
+What the design does need instead is a **bound on how long a backend call may
+block the control loop**, since every agent call is synchronous. Those are the
+`opencpi_reply_timeout_ms` (3 s) and `opencpi_start_timeout_ms` (60 s)
+configuration keys; a timed-out agent is dropped, because its state is then
+unknown. The start bound is the larger one because `start` may run
+`ad9361_init`.
+
+The original statement of the item follows, unedited.
+
+---
+
+**Status (original):** PARTIAL
 
 **What is missing:** Whether radiod may remain single-threaded once it owns a
 live OpenCPI application.
@@ -538,16 +612,16 @@ with Wireshark's existing RFC 5444 dissector.
 |---|---|---|---|
 | U-01 | ICD-2 TLV wire format | BLOCKING | System architect |
 | U-02 | `rc_*` API signatures | PARTIAL | System architect / E6 |
-| U-03 | OpenCPI app XML + workers | BLOCKING | E1–E4 |
-| U-04 | ACI lifecycle + errors | BLOCKING | E1–E4 |
+| U-03 | OpenCPI app XML + workers | **RESOLVED** | — (RADHAWK + rh_agent) |
+| U-04 | ACI lifecycle + errors | **RESOLVED** | — (RADHAWK owns the sequence) |
 | U-05 | Event/fault taxonomy | PARTIAL | Architect + E1–E4 |
 | U-06 | ICD-1 PDU descriptor layout | BLOCKING | E5 + E1–E4 |
 | U-07 | ICD-3 time register map | BLOCKING | E5 + E1–E4 |
 | U-08 | MANET STROBE semantics | BLOCKING | E1–E4 |
 | U-09 | OLSRv2 vs existing stack | DEFERRED | Architect + E6 |
 | U-10 | Socket path + permissions | PARTIAL | Architect / integrator |
-| U-11 | C vs C++ at the ACI | BLOCKING | E1–E4 + build owner |
-| U-12 | Threading model | PARTIAL | Architect |
+| U-11 | C vs C++ at the ACI | **RESOLVED** | — (process boundary) |
+| U-12 | Threading model | **RESOLVED** | — (still single-threaded) |
 | U-13 | Audio path ownership | PARTIAL | Architect + E1–E4 |
 | U-14 | Frequency-hopping control | BLOCKING | E1–E4 + architect |
 | U-15 | Control/data vtable split | BLOCKING | Architect |

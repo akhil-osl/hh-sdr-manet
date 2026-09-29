@@ -108,10 +108,15 @@ stack changes.
   conformance claim — see [docs/SCA-COMPATIBILITY.md](docs/SCA-COMPATIBILITY.md)).
 - **Hardware-independent:** the entire MANET stack depends only on the radio
   abstraction, not on anything below it.
-- **Hardware-dependent, not yet implemented:** the real radio adapter, RF
-  metric units/encodings, beacon wire byte layout, and channel/waveform
-  encodings — all intentionally left open pending a defined hardware
-  contract. See [docs/HARDWARE-DEPENDENCIES.md](docs/HARDWARE-DEPENDENCIES.md).
+- **OpenCPI control plane:** `radiod` drives a real OpenCPI SDR application —
+  application lifecycle plus worker-property get/set — through the `rh_agent`
+  helper and the RADHAWK API. Host-verified; not yet run on a board. See
+  [docs/OPENCPI-INTEGRATION.md](docs/OPENCPI-INTEGRATION.md).
+- **Hardware-dependent, not yet implemented:** the radio *data* plane (frame
+  transmit/receive and per-frame link metrics), RF metric units/encodings,
+  beacon wire byte layout, and channel/waveform encodings — all intentionally
+  left open pending a defined hardware contract. See
+  [docs/HARDWARE-DEPENDENCIES.md](docs/HARDWARE-DEPENDENCIES.md).
 - **Not yet implemented:** QoS queueing, security/crypto interfaces, and
   deployment packaging (designed in
   [docs/DEPLOYMENT-ARCHITECTURE.md](docs/DEPLOYMENT-ARCHITECTURE.md)). A
@@ -352,6 +357,46 @@ real hardware means implementing that interface for the target platform —
 open/close, transmit, receive, status, link metrics, and channel control.
 No other part of the MANET stack needs to change.
 
+### OpenCPI — the control plane is connected
+
+`radiod` now drives a **real OpenCPI SDR application**: it starts and stops it,
+and reads and writes the signal-processing workers' properties, over its
+existing control protocol. Read
+**[docs/OPENCPI-INTEGRATION.md](docs/OPENCPI-INTEGRATION.md)** first.
+
+```bash
+./build/radiod/radiod -b opencpi -a /path/to/rh_agent -i
+```
+
+```
+radiod> opencpi list qpsk_tx                     # names, types, access classes
+radiod> opencpi set radio tx_lo_hz 225000000
+radiod> init && configure 1 && start
+radiod> opencpi set qpsk_tx rrc_backoff 16384    # live, no restart
+radiod> opencpi status
+```
+
+Three things worth knowing about how it is built:
+
+- **radiod names no worker and no property.** The OpenCPI side publishes its
+  registry at startup and radiod routes against it, so another project's
+  workers need no change here.
+- **The OpenCPI work happens in a helper process** (`rh_agent`), because this
+  CDK's ACI archives are not position-independent and so link only into an
+  executable. That boundary also keeps radiod pure C11 and single-threaded, and
+  keeps an ACI crash out of the control plane —
+  resolving [`unknown.md`](unknown.md) U-03, U-04, U-11 and U-12.
+- **It is host-verified, not hardware-verified.** 36 CTest cases including the
+  real `radiod` binary end to end against a stub agent; no part of it has driven
+  a PL.
+
+The data plane is a separate matter and is *not* connected: `transmit`,
+`set_rx_callback` and `get_link_metrics` report `NOT_IMPLEMENTED`, because the
+control contract deliberately excludes the high-rate interfaces and that
+application's payload path is DMA.
+
+### Still undefined
+
 Deliberately left undefined until a hardware contract exists: register-level
 APIs, DMA/streaming interfaces, PHY/modem control, and RF tuner control —
 along with RF metric units/encodings, beacon wire byte layout, and
@@ -364,6 +409,7 @@ Deployment packaging is designed in
 
 ## Documentation
 
+- [docs/OPENCPI-INTEGRATION.md](docs/OPENCPI-INTEGRATION.md) — how radiod drives the OpenCPI application and its workers' properties
 - [docs/HARDWARE-DEPENDENCIES.md](docs/HARDWARE-DEPENDENCIES.md) — what depends on real hardware and what doesn't
 - [docs/SCA-COMPATIBILITY.md](docs/SCA-COMPATIBILITY.md) — SCA 2.2.2 compatibility scope and gaps
 - [docs/DEPLOYMENT-ARCHITECTURE.md](docs/DEPLOYMENT-ARCHITECTURE.md) — deployment packaging design

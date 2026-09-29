@@ -29,19 +29,24 @@ radioctl / any client
 
 | | |
 |---|---|
-| ✅ **Working** | daemon lifecycle, UNIX socket server, 10 command verbs, 7-state machine, config file, fault registry, mock backend |
-| ❌ **Not implemented** | **OpenCPI / PL ownership**, TLV protocol, async events, real hardware |
+| ✅ **Working** | daemon lifecycle, UNIX socket server, 14 command verbs, 7-state machine, config file, fault registry, interactive console, mock backend, **OpenCPI backend** |
+| ⚠ **Host-verified only** | OpenCPI / PL ownership — 36 CTest cases including end to end through the real binary, but never run on a board |
+| ❌ **Not implemented** | TLV protocol, async events, data plane |
 
-**radiod is not yet the PL owner.** The architecture's Note 1 — *"only radiod
-opens OpenCPI; never a second ACI instance"* — describes the target, not the
-code. No OpenCPI integration exists anywhere in this repository, because the
-application XML, worker names, properties and ACI lifecycle are all unspecified
-([`../unknown.md`](../unknown.md), U-03/U-04).
+**radiod is the PL owner now.** The architecture's Note 1 — *"only radiod opens
+OpenCPI; never a second ACI instance"* — is implemented by
+`src/backends/opencpi_backend.c`, which drives a real OpenCPI application
+through the **rh_agent** helper and the **RADHAWK** API published by the OpenCPI
+project. `../unknown.md` U-03, U-04, U-11 and U-12 are resolved. Start with
+[`../docs/OPENCPI-INTEGRATION.md`](../docs/OPENCPI-INTEGRATION.md).
 
-What makes that gap safe to leave open: radiod depends **only** on the
-`hh_radio_ops_t` vtable and never names a concrete backend. A real OpenCPI
-backend implements that same 8-function contract and drops into
-`src/backends/`. Nothing in `radiod.c` changes.
+What made that safe, and still holds: radiod depends **only** on the
+`hh_radio_ops_t` vtable (plus a second, orthogonal property vtable) and never
+names a concrete backend. It also names **no worker and no property** — the
+agent publishes its registry and radiod routes against it.
+
+What is genuinely unfinished: **none of it has run on hardware.** The agent
+builds for `xilinx19_2_aarch32` but has not driven a PL.
 
 ---
 
@@ -51,9 +56,12 @@ backend implements that same 8-function contract and drops into
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j8
 
-./build/radiod/radiod                          # defaults: /tmp/hh-radiod.sock
+./build/radiod/radiod                          # defaults: /tmp/hh-radiod.sock, mock backend
 ./build/radiod/radiod -s /run/radiod.sock -v debug
 ./build/radiod/radiod -c config/radiod.example.conf
+
+# the real radio, with a prompt on this terminal
+./build/radiod/radiod -b opencpi -a /opt/txrx_worker_rt_ch2_dma/rh_agent -i
 ```
 
 > **Note the path:** the binary is at `build/radiod/radiod` — `build/radiod/` is
@@ -66,6 +74,15 @@ cmake --build build -j8
 | `-c <file>` | config file (`key = value`) |
 | `-s <path>` | socket path — **overrides the config file** |
 | `-v <level>` | `error`\|`warn`\|`info`\|`debug`\|`trace` — overrides the config file |
+| `-b <backend>` | `mock` (default) \| `opencpi` — overrides the config file |
+| `-a <path>` | rh_agent binary, for the `opencpi` backend — overrides the config file |
+| `-i` | also serve an interactive console on this terminal |
+
+`-i` adds a `radiod> ` prompt on stdin, for an operator sitting at the terminal.
+The control socket is served either way, and a typed line goes through the same
+request pipeline as a socket client's, so the console can neither accept nor
+refuse anything the socket would not. `help` lists the commands; `quit` or
+Ctrl-D shuts the daemon down through the ordinary SHUTDOWN path.
 
 Drive it with [`radioctl`](../radioctl/README.md):
 
@@ -81,7 +98,7 @@ Stop it with `SIGINT`/`SIGTERM`, or `radioctl shutdown`. Either way
 
 ### Configuration
 
-Four keys ([`config/radiod.example.conf`](../config/radiod.example.conf)),
+Eight keys ([`config/radiod.example.conf`](../config/radiod.example.conf)),
 deliberately separate from the MANET node's `hh_config_t`:
 
 | Key | Default | Notes |
@@ -90,12 +107,19 @@ deliberately separate from the MANET node's `hh_config_t`:
 | `tick_interval_ms` | `10` | `poll()` timeout; bounds backend polling when idle |
 | `client_idle_timeout_ms` | `0` | 0 = disabled (historical behaviour) |
 | `log_level` | `info` | |
+| `radio_backend` | `mock` | `mock` \| `opencpi`. An unknown name is rejected, not defaulted |
+| `opencpi_agent` | *(compiled-in)* | rh_agent path; `/opt/txrx_worker_rt_ch2_dma/rh_agent` |
+| `opencpi_reply_timeout_ms` | `3000` | ceiling on how long one agent call may block the loop |
+| `opencpi_start_timeout_ms` | `60000` | larger because `start` may run `ad9361_init` |
 
-Defaults reproduce pre-config behaviour exactly. A bad key reports its line
+Defaults reproduce pre-config behaviour exactly — including `radio_backend =
+mock`, so an existing deployment is unaffected. A bad key reports its line
 number and exits 1: `radiod: config error in x.conf at line 3: EINVAL`.
 
-There are **no OpenCPI, worker, PL, hopset or TLV settings** — those contracts
-don't exist, and configuration for them would be inventing them.
+There is still **no per-worker or per-property configuration**, and there must
+not be: property names, types and ranges belong to the backend, and properties
+are set at run time with `opencpi set`. Hopset and TLV settings remain absent
+because those contracts still do not exist (U-01, U-14).
 
 ---
 
@@ -313,6 +337,44 @@ are data plane.
 
 Fault injection reaches it through the `hh_radiod_fault_fn` hook, which is the
 single indirection point keeping radiod itself backend-agnostic.
+
+### `opencpi_backend.c` — the real PL backend
+
+Drives the OpenCPI application through the **rh_agent** helper process and the
+**RADHAWK** C API (`api/radhawk.h` in the OpenCPI project). Selected with
+`radio_backend = opencpi`, or `radiod -b opencpi`.
+
+It implements **both** backend contracts:
+
+| contract | what it provides |
+|---|---|
+| `hh_radio_ops_t` | `start`/`stop` deploy and release the OpenCPI application; `status` reports whether it is running |
+| `hh_radiod_props_ops_t` | the `opencpi_*` verbs — list, get, set and sample worker properties |
+
+Why a helper process rather than linking the ACI into radiod: in this CDK the
+OpenCPI runtime archives are **not position-independent**, so the ACI links into
+an executable and nothing else. `hhsdr/radiod/opencpi_agent_proto.h` carries the
+measured linker error and the full reasoning. The boundary also resolves
+`unknown.md` U-11 (C versus C++) and U-12 (threading) outright: the ACI runs in
+its own process, so radiod stays C11 and single-threaded, and an ACI crash takes
+the agent down rather than the control plane.
+
+**radiod knows no property names.** The agent publishes its registry at startup
+and radiod only routes, enforcing the access class the agent declared. Adding a
+property is one row in `rh_agent.cc` — no radiod change, no protocol change.
+
+Three access classes, and radiod's one rule:
+
+| class | meaning | radiod's behaviour |
+|---|---|---|
+| `rw` | writable at any time | applied live while running, staged while stopped |
+| `rw-start` | writable only while stopped | **refused** while running, never silently queued |
+| `ro` | a live counter | readable only while running |
+
+Building it changes nothing about radiod's build: no OpenCPI header is included
+and no OpenCPI symbol referenced anywhere in `hhsdr_radiod`, so the library and
+the daemon compile identically on a host with no CDK installed. See
+`docs/OPENCPI-INTEGRATION.md` for the end-to-end picture and the build commands.
 
 ### `hw_adapter.c` — the honest stub
 

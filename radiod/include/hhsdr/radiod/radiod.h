@@ -31,9 +31,14 @@
 #include "hhsdr/radio/radio.h"
 #include "hhsdr/radiod/config.h"
 #include "hhsdr/radiod/events.h"
+#include "hhsdr/radiod/props.h"
 #include <poll.h>
 
 #define HH_RADIOD_MAX_CLIENTS 16
+
+/* Descriptors hh_radiod_pollfds may report: every client, the listen socket,
+ * and the interactive console when one is attached. */
+#define HH_RADIOD_MAX_POLLFDS (HH_RADIOD_MAX_CLIENTS + 2)
 
 typedef struct {
     int fd;
@@ -59,6 +64,13 @@ typedef void (*hh_radiod_fault_fn)(void *ctx, hh_rc_fault_t fault);
 
 typedef struct {
     hh_radio_t        *radio;
+
+    /* The worker-property control surface, when the backend publishes one.
+     * Separate from `radio` because it is a separate contract (props.h): a
+     * backend may implement either, both, or neither, and with `ops` NULL the
+     * opencpi_* verbs are answered HH_ERR_UNSUPPORTED. */
+    hh_radiod_props_t  props;
+
     const hh_clock_t  *clock;
     hh_rc_state_t      state;
     hh_node_id_t       node_id;
@@ -76,12 +88,46 @@ typedef struct {
     /* Fault registry: what is wrong, how often, and since when. */
     hh_radiod_faults_t faults;
 
+    /* Interactive console (radiod -i). -1 when none is attached, which is the
+     * default and the deployed configuration: a console is for a person at a
+     * terminal, and a daemon started by an init script has no terminal.
+     *
+     * It is serviced by the same code path as a socket client -- one line in,
+     * one request, one response -- so the console cannot accept a command the
+     * socket would refuse, or refuse one the socket would accept. */
+    int                console_in;
+    int                console_out;
+    /* The console descriptor is put in non-blocking mode so that servicing it
+     * from the tick cannot stall the loop waiting for someone to type. It is
+     * usually the process's shared stdin, so the original flags are kept and
+     * restored on release -- leaving O_NONBLOCK set on a terminal the parent
+     * shell also holds would break that shell after radiod exits. */
+    int                console_in_flags;
+    char               console_buf[HH_RC_MAX_LINE];
+    size_t             console_len;
+
     uint64_t requests_total;
     uint64_t requests_rejected;
 } hh_radiod_t;
 
 /* Construct radiod bound to `radio` (not yet opened) and `clock`. */
 hh_status_t hh_radiod_init(hh_radiod_t *d, hh_radio_t *radio, const hh_clock_t *clock);
+
+/* Attach the backend's worker-property control surface, which is what
+ * services the opencpi_* verbs. Optional: without it those verbs report
+ * HH_ERR_UNSUPPORTED, which is the correct answer for a backend (such as the
+ * mock) that publishes no properties. Pass NULL to detach.
+ *
+ * radiod stores the handle and routes to it. It never inspects a worker name,
+ * a property name or a value -- see props.h for why that rule matters. */
+void hh_radiod_set_props(hh_radiod_t *d, const hh_radiod_props_t *props);
+
+/* Attach an interactive console on the given descriptors (normally STDIN and
+ * STDOUT). Commands use the shared CLI grammar (rc_cli.h), so a line typed
+ * here is spelled exactly as it would be on a radioctl command line.
+ *
+ * Must be called before the poll loop starts. */
+hh_status_t hh_radiod_console_enable(hh_radiod_t *d, int in_fd, int out_fd);
 
 /* Wire a backend-specific fault-injection hook (optional; INJECT_FAULT and
  * CLEAR_FAULT still update radiod's own state machine when this is unset,
@@ -105,7 +151,7 @@ hh_status_t hh_radiod_listen(hh_radiod_t *d, const char *sock_path);
  * timer: previously the control loop woke every 10 ms regardless of traffic,
  * which both burned CPU when idle and added up to 10 ms to every request.
  *
- * `cap` must be at least HH_RADIOD_MAX_CLIENTS + 1. Returns 0 if it is not. */
+ * `cap` must be at least HH_RADIOD_MAX_POLLFDS. Returns 0 if it is not. */
 size_t hh_radiod_pollfds(const hh_radiod_t *d, struct pollfd *fds, size_t cap);
 
 /* One control-loop iteration: accept new clients, service ready ones,

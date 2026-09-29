@@ -41,6 +41,12 @@ add_executable(test_rc_protocol ${CMAKE_SOURCE_DIR}/protocol/tests/test_rc_proto
 target_link_libraries(test_rc_protocol PRIVATE hhsdr_protocol)
 add_test(NAME test_rc_protocol COMMAND test_rc_protocol)
 
+# The shared CLI grammar and the worker-property verbs. Same placement rule:
+# it lives with the component it exercises and links only that component.
+add_executable(test_rc_cli ${CMAKE_SOURCE_DIR}/protocol/tests/test_rc_cli.c)
+target_link_libraries(test_rc_cli PRIVATE hhsdr_protocol)
+add_test(NAME test_rc_cli COMMAND test_rc_cli)
+
 # radiod's and radioctl's own tests are registered by their component
 # CMakeLists, alongside the code they exercise.
 

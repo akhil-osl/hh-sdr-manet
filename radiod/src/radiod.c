@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "hhsdr/radiod/radiod.h"
 #include "hhsdr/core/log.h"
+#include "hhsdr/protocol/rc_cli.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -20,6 +21,8 @@ hh_status_t hh_radiod_init(hh_radiod_t *d, hh_radio_t *radio, const hh_clock_t *
     d->state      = HH_RC_STATE_CREATED;
     d->node_id    = HH_NODE_ID_INVALID;
     d->listen_fd  = -1;
+    d->console_in = -1;
+    d->console_out = -1;
     for (int i = 0; i < HH_RADIOD_MAX_CLIENTS; i++) d->clients[i].fd = -1;
     hh_radiod_faults_init(&d->faults);
     return HH_OK;
@@ -33,6 +36,13 @@ hh_status_t hh_radiod_configure(hh_radiod_t *d, const hh_radiod_config_t *cfg)
     if (st != HH_OK) return st;
     d->client_idle_timeout_ms = cfg->client_idle_timeout_ms;
     return HH_OK;
+}
+
+void hh_radiod_set_props(hh_radiod_t *d, const hh_radiod_props_t *props)
+{
+    if (!d) return;
+    if (props) d->props = *props;
+    else       memset(&d->props, 0, sizeof d->props);
 }
 
 void hh_radiod_set_fault_hook(hh_radiod_t *d, hh_radiod_fault_fn fn, void *ctx)
@@ -93,8 +103,14 @@ size_t hh_radiod_pollfds(const hh_radiod_t *d, struct pollfd *fds, size_t cap)
 {
     size_t n = 0;
 
-    if (!d || !fds || cap < (size_t)HH_RADIOD_MAX_CLIENTS + 1) return 0;
+    if (!d || !fds || cap < (size_t)HH_RADIOD_MAX_POLLFDS) return 0;
 
+    if (d->console_in >= 0) {
+        fds[n].fd      = d->console_in;
+        fds[n].events  = POLLIN;
+        fds[n].revents = 0;
+        n++;
+    }
     if (d->listen_fd >= 0) {
         fds[n].fd      = d->listen_fd;
         fds[n].events  = POLLIN;
@@ -137,6 +153,25 @@ static bool transition_allowed(hh_rc_state_t from, hh_rc_cmd_t cmd)
     case HH_RC_CMD_INJECT_FAULT:
     case HH_RC_CMD_CLEAR_FAULT:
         return from == HH_RC_STATE_RUNNING || from == HH_RC_STATE_FAULTED;
+    /* Worker properties are orthogonal to the radio lifecycle, so they are
+     * reachable from every state but RELEASED -- including CREATED.
+     *
+     * Two reasons, both load-bearing. A start-time-only property can ONLY be
+     * written while the application is stopped, so gating these on the
+     * lifecycle would make those properties unreachable in exactly the state
+     * they are meant to be written in. And staging a configuration before the
+     * radio is brought up is the normal order of work: `opencpi set` then
+     * `start`, not the reverse.
+     *
+     * Whether a particular property may be read or written right now stays the
+     * backend's decision, taken from the access class it published -- not this
+     * table's. A live counter read before `start` is refused by the backend,
+     * with a sentence saying so. */
+    case HH_RC_CMD_OPENCPI_LIST:
+    case HH_RC_CMD_OPENCPI_GET:
+    case HH_RC_CMD_OPENCPI_SET:
+    case HH_RC_CMD_OPENCPI_STATUS:
+        return from != HH_RC_STATE_RELEASED;
     default:
         return false;
     }
@@ -157,6 +192,10 @@ static const char *legal_states_for(hh_rc_cmd_t cmd)
     case HH_RC_CMD_SET_CHANNEL: return "running";
     case HH_RC_CMD_INJECT_FAULT:
     case HH_RC_CMD_CLEAR_FAULT: return "running,faulted";
+    case HH_RC_CMD_OPENCPI_LIST:
+    case HH_RC_CMD_OPENCPI_GET:
+    case HH_RC_CMD_OPENCPI_SET:
+    case HH_RC_CMD_OPENCPI_STATUS: return "any-but-released";
     default:                    return "none";
     }
 }
@@ -184,6 +223,78 @@ static void fill_stats(const hh_radiod_t *d, hh_rc_response_t *resp)
     resp->rx_errors         = st.rx_errors;
     resp->requests_total    = d->requests_total;
     resp->requests_rejected = d->requests_rejected;
+}
+
+/*
+ * Service one worker-property verb by handing it to the backend's control
+ * surface. radiod supplies exactly one thing the backend cannot know -- its
+ * own lifecycle state, as the `running` flag -- and translates the result.
+ * It reads no worker name, no property name and no value; see props.h.
+ */
+static void handle_props_request(hh_radiod_t *d, const hh_rc_request_t *req,
+                                 hh_rc_response_t *resp)
+{
+    const hh_radiod_props_ops_t *ops = d->props.ops;
+    const bool running = (d->state == HH_RC_STATE_RUNNING);
+    hh_status_t st;
+
+    if (!ops) {
+        /* The honest answer for a backend with no property surface, and the
+         * answer an operator gets when radiod was built or configured without
+         * OpenCPI: the verb is understood, this backend cannot serve it. */
+        d->requests_rejected++;
+        resp->ok = false;
+        resp->reason = HH_ERR_UNSUPPORTED;
+        (void)snprintf(resp->text, sizeof resp->text,
+                       "backend '%s' publishes no worker properties",
+                       backend_name(d));
+        HH_LOGW(COMP, "props_unsupported", "cmd=%s backend=%s",
+                hh_rc_cmd_str(req->cmd), backend_name(d));
+        return;
+    }
+
+    switch (req->cmd) {
+    case HH_RC_CMD_OPENCPI_LIST:
+        st = ops->list ? ops->list(d->props.self, req->worker, resp) : HH_ERR_UNSUPPORTED;
+        break;
+    case HH_RC_CMD_OPENCPI_GET:
+        if (ops->get && req->worker[0] && req->prop[0]) {
+            st = ops->get(d->props.self, req->worker, req->prop, resp);
+        } else {
+            st = HH_ERR_INVAL;
+            (void)snprintf(resp->text, sizeof resp->text,
+                           "opencpi_get needs both a worker and a property");
+        }
+        break;
+    case HH_RC_CMD_OPENCPI_SET:
+        if (ops->set && req->worker[0] && req->prop[0] && req->value[0]) {
+            st = ops->set(d->props.self, req->worker, req->prop, req->value, running, resp);
+        } else {
+            st = HH_ERR_INVAL;
+            (void)snprintf(resp->text, sizeof resp->text,
+                           "opencpi_set needs a worker, a property and a value");
+        }
+        break;
+    case HH_RC_CMD_OPENCPI_STATUS:
+        st = ops->status ? ops->status(d->props.self, running, resp) : HH_ERR_UNSUPPORTED;
+        break;
+    default:
+        st = HH_ERR_INVAL;
+        break;
+    }
+
+    if (st != HH_OK) {
+        d->requests_rejected++;
+        resp->ok = false;
+        resp->reason = st;
+        HH_LOGW(COMP, "props_failed", "cmd=%s worker=%s prop=%s reason=%s detail=\"%s\"",
+                hh_rc_cmd_str(req->cmd), req->worker, req->prop,
+                hh_status_str(st), resp->text);
+        return;
+    }
+    resp->ok = true;
+    HH_LOGD(COMP, "props_ok", "cmd=%s worker=%s prop=%s",
+            hh_rc_cmd_str(req->cmd), req->worker, req->prop);
 }
 
 void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
@@ -296,6 +407,13 @@ void hh_radiod_handle_request(hh_radiod_t *d, const hh_rc_request_t *req,
         if (req->fault == HH_RC_FAULT_HW_FAULT) d->state = HH_RC_STATE_FAULTED;
         resp->ok = true;
         fill_status(d, resp);
+        break;
+
+    case HH_RC_CMD_OPENCPI_LIST:
+    case HH_RC_CMD_OPENCPI_GET:
+    case HH_RC_CMD_OPENCPI_SET:
+    case HH_RC_CMD_OPENCPI_STATUS:
+        handle_props_request(d, req, resp);
         break;
 
     case HH_RC_CMD_CLEAR_FAULT:
@@ -477,11 +595,154 @@ static void expire_idle_clients(hh_radiod_t *d, hh_time_ms_t now)
     }
 }
 
+/* ---- interactive console ---- */
+
+/* The console is a terminal, so a blocking full write is the right thing and
+ * the queueing a socket client needs would be pure overhead. A write that
+ * cannot complete means the terminal is gone; the console detaches. */
+static bool console_write(hh_radiod_t *d, const char *text)
+{
+    size_t len = strlen(text), sent = 0;
+    if (d->console_out < 0) return false;
+    while (sent < len) {
+        ssize_t w = write(d->console_out, text + sent, len - sent);
+        if (w > 0) { sent += (size_t)w; continue; }
+        if (w < 0 && errno == EINTR) continue;
+        d->console_in = -1;
+        d->console_out = -1;
+        return false;
+    }
+    return true;
+}
+
+static void console_prompt(hh_radiod_t *d) { (void)console_write(d, "radiod> "); }
+
+hh_status_t hh_radiod_console_enable(hh_radiod_t *d, int in_fd, int out_fd)
+{
+    if (!d || in_fd < 0 || out_fd < 0) return HH_ERR_INVAL;
+    d->console_in_flags = fcntl(in_fd, F_GETFL, 0);
+    if (d->console_in_flags < 0) return HH_ERR_IO;
+    if (fcntl(in_fd, F_SETFL, d->console_in_flags | O_NONBLOCK) != 0) return HH_ERR_IO;
+
+    d->console_in   = in_fd;
+    d->console_out  = out_fd;
+    d->console_len  = 0;
+    (void)console_write(d,
+        "radiod interactive console. `help` lists commands, `quit` exits.\n"
+        "Every command here is the same one radioctl takes.\n");
+    console_prompt(d);
+    return HH_OK;
+}
+
+/* One typed line. Goes through exactly the same request pipeline as a socket
+ * client, so the console can neither accept nor refuse anything the socket
+ * would not -- there is one state machine, not two. */
+static void console_line(hh_radiod_t *d, char *line)
+{
+    hh_rc_request_t req;
+    hh_rc_response_t resp;
+    char err[160];
+    char out[HH_RC_MAX_LINE * 2];
+    hh_status_t st;
+
+    if (!strcmp(line, "help") || !strcmp(line, "?")) {
+        (void)console_write(d, hh_rc_cli_usage());
+        return;
+    }
+    if (!strcmp(line, "quit") || !strcmp(line, "exit")) {
+        memset(&req, 0, sizeof req);
+        req.cmd = HH_RC_CMD_SHUTDOWN;   /* the same orderly release the verb does */
+        hh_radiod_handle_request(d, &req, &resp);
+        (void)console_write(d, "bye\n");
+        return;
+    }
+
+    st = hh_rc_cli_parse_line(line, &req, err, sizeof err);
+    if (st == HH_ERR_AGAIN) return;                 /* blank line */
+    if (st != HH_OK) {
+        (void)snprintf(out, sizeof out, "error: %s\n", err);
+        (void)console_write(d, out);
+        return;
+    }
+
+    hh_radiod_handle_request(d, &req, &resp);
+    if (!resp.ok) {
+        (void)snprintf(out, sizeof out, "error: %s rejected (%s)%s%s\n",
+                       hh_rc_cmd_str(resp.cmd), hh_status_str(resp.reason),
+                       resp.text[0] ? ": " : "", resp.text);
+        (void)console_write(d, out);
+        return;
+    }
+    hh_rc_cli_render(&resp, out, sizeof out);
+    (void)console_write(d, out);
+}
+
+static void service_console(hh_radiod_t *d)
+{
+    ssize_t n;
+    char *nl;
+
+    if (d->console_in < 0) return;
+
+    n = read(d->console_in, d->console_buf + d->console_len,
+             sizeof d->console_buf - d->console_len - 1u);
+    if (n == 0) {
+        /* End of input (Ctrl-D). Treated as `quit`: an interactive daemon
+         * whose operator has gone has nothing left to serve interactively,
+         * and going through SHUTDOWN closes the backend properly. */
+        hh_rc_request_t req;
+        hh_rc_response_t resp;
+        memset(&req, 0, sizeof req);
+        req.cmd = HH_RC_CMD_SHUTDOWN;
+        hh_radiod_handle_request(d, &req, &resp);
+        (void)console_write(d, "\n");
+        (void)fcntl(d->console_in, F_SETFL, d->console_in_flags);
+        d->console_in = -1;
+        d->console_out = -1;
+        return;
+    }
+    if (n < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+            d->console_in = -1;
+            d->console_out = -1;
+        }
+        return;
+    }
+
+    d->console_len += (size_t)n;
+    d->console_buf[d->console_len] = '\0';
+
+    while ((nl = memchr(d->console_buf, '\n', d->console_len)) != NULL) {
+        size_t linelen = (size_t)(nl - d->console_buf);
+        size_t consumed = linelen + 1u;
+        char line[HH_RC_MAX_LINE];
+
+        if (linelen >= sizeof line) linelen = sizeof line - 1u;
+        memcpy(line, d->console_buf, linelen);
+        line[linelen] = '\0';
+
+        memmove(d->console_buf, d->console_buf + consumed, d->console_len - consumed);
+        d->console_len -= consumed;
+
+        console_line(d, line);
+        if (d->state == HH_RC_STATE_RELEASED) return;   /* quit: no new prompt */
+        console_prompt(d);
+    }
+
+    if (d->console_len >= sizeof d->console_buf - 1u) {
+        (void)console_write(d, "error: line too long\n");
+        d->console_len = 0;
+        console_prompt(d);
+    }
+}
+
 hh_status_t hh_radiod_tick(hh_radiod_t *d, hh_time_ms_t now)
 {
     if (!d) return HH_ERR_INVAL;
     if (d->state == HH_RC_STATE_RELEASED) return HH_ERR_STATE;
 
+    service_console(d);
+    if (d->state == HH_RC_STATE_RELEASED) return HH_OK;
     accept_clients(d, now);
     for (int i = 0; i < HH_RADIOD_MAX_CLIENTS; i++) {
         if (d->clients[i].fd >= 0) service_client(d, &d->clients[i], now);
@@ -494,6 +755,12 @@ hh_status_t hh_radiod_tick(hh_radiod_t *d, hh_time_ms_t now)
 void hh_radiod_release(hh_radiod_t *d)
 {
     if (!d) return;
+    /* Detached, never closed: the console descriptors are the process's own
+     * stdin and stdout and were lent to radiod, not given to it. The blocking
+     * mode they arrived in is put back for the same reason. */
+    if (d->console_in >= 0) (void)fcntl(d->console_in, F_SETFL, d->console_in_flags);
+    d->console_in = -1;
+    d->console_out = -1;
     for (int i = 0; i < HH_RADIOD_MAX_CLIENTS; i++) close_client(&d->clients[i]);
     if (d->listen_fd >= 0) { close(d->listen_fd); d->listen_fd = -1; }
     /* Remove our own socket file rather than leaving it for the next start. */

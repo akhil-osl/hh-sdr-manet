@@ -5,12 +5,23 @@
 # process that opens the OpenCPI application. Every other process reaches the
 # radio through librc (the control protocol), never by touching the PL itself.
 #
-# That ownership is NOT yet implemented: the OpenCPI application XML, worker
-# names, properties and ACI lifecycle are all unspecified (see unknown.md,
-# U-03 and U-04). radiod today owns a mock backend behind the same
-# hh_radio_ops_t vtable a real backend will implement, so its control loop,
-# lifecycle state machine and IPC are already backend-agnostic and will not
-# need to change when a real backend arrives.
+# That ownership is now implemented, by the `opencpi` backend: it reaches the
+# PL through the rh_agent helper process and the RADHAWK API (api/radhawk.h in
+# the OpenCPI project). radiod remains the only owner -- it spawns the agent,
+# holds its pipes, and kills it on exit -- and the agent additionally holds
+# RADHAWK's cross-process run lock while a session is open.
+#
+# BUILD DEPENDENCIES: none were added. No OpenCPI header is included and no
+# OpenCPI symbol is referenced anywhere in this library, because the ACI lives
+# in the separate agent binary; opencpi_agent_proto.h explains why that
+# boundary is the only one this CDK allows. radiod therefore builds and links
+# identically on a host with no OpenCPI installation, and the mock backend
+# remains the default.
+#
+# The `opencpi` backend also implements the second, orthogonal property vtable
+# (props.h), which is what the opencpi_* protocol verbs are serviced from; the
+# mock implements only hh_radio_ops_t and those verbs then report
+# HH_ERR_UNSUPPORTED.
 #
 # DEPENDENCY RULE:
 #   radiod -> hhsdr_radiod -> hhsdr_protocol -> hhsdr_core
@@ -22,6 +33,7 @@ add_library(hhsdr_radiod STATIC
   src/config.c
   src/events.c
   src/backends/mock_backend.c
+  src/backends/opencpi_backend.c
 )
 
 target_include_directories(hhsdr_radiod PUBLIC
@@ -58,6 +70,38 @@ if(HH_BUILD_TESTS)
   target_link_libraries(test_radiod_state_machine PRIVATE hhsdr_radiod)
   target_include_directories(test_radiod_state_machine PRIVATE ${CMAKE_SOURCE_DIR}/tests)
   add_test(NAME test_radiod_state_machine COMMAND test_radiod_state_machine)
+
+  # Worker-property routing, against a props vtable defined in the test. What
+  # is under test is radiod's own behaviour: the unsupported path, the running
+  # flag, and verbatim pass-through of names, values and failure detail.
+  add_executable(test_radiod_props tests/test_radiod_props.c)
+  target_link_libraries(test_radiod_props PRIVATE hhsdr_radiod)
+  target_include_directories(test_radiod_props PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+  add_test(NAME test_radiod_props COMMAND test_radiod_props)
+
+  # ---------------------------------------------------------------------------
+  # The OpenCPI backend.
+  #
+  # stub_agent is TEST-ONLY infrastructure -- a deterministic implementation of
+  # the rh_agent wire contract, in the same spirit as tests/sim/mock_radio.c. It
+  # is what lets the whole chain be exercised on a machine with no OpenCPI
+  # installation and no FPGA. It is never linked into a production target; the
+  # real agent is applications/rh_agent/ in the OpenCPI project and is built
+  # there, by OpenCPI's own application.mk.
+  # ---------------------------------------------------------------------------
+  add_executable(stub_agent tests/stub_agent.c)
+  target_link_libraries(stub_agent PRIVATE hhsdr_radiod)
+
+  add_executable(test_radiod_opencpi tests/test_radiod_opencpi.c)
+  # librc as well as the daemon library: half the test drives the backend in
+  # process, and half drives the real radiod binary over its socket.
+  target_link_libraries(test_radiod_opencpi PRIVATE hhsdr_radiod librc)
+  target_include_directories(test_radiod_opencpi PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+  target_compile_definitions(test_radiod_opencpi PRIVATE
+    RADIOD_BINARY_PATH="$<TARGET_FILE:radiod>"
+    STUB_AGENT_PATH="$<TARGET_FILE:stub_agent>")
+  add_dependencies(test_radiod_opencpi radiod stub_agent)
+  add_test(NAME test_radiod_opencpi COMMAND test_radiod_opencpi)
 
   # End-to-end: spawns the real radiod binary and drives it over its socket.
   # Links librc ONLY -- not hhsdr_radiod. That is deliberate: the test drives

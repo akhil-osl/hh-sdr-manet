@@ -182,7 +182,8 @@ version negotiation to soften that — which is precisely why ICD-2 asks for one
 
 | Constant | Value | Meaning |
 |---|---|---|
-| `HH_RC_MAX_LINE` | 512 | max bytes per line, including `\n` |
+| `HH_RC_MAX_LINE` | 2048 | max bytes per line, including `\n` |
+| `HH_RC_MAX_ITEMS` | 1536 | max bytes of an `opencpi_list` / `opencpi_status` item list (carried inside one line) |
 | `HH_RC_DEFAULT_SOCK_PATH` | `/tmp/hh-radiod.sock` | default socket (see U-10) |
 
 ---

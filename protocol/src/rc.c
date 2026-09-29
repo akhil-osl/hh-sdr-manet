@@ -28,6 +28,10 @@ static const char *g_cmd_names[HH_RC_CMD__MAX] = {
     [HH_RC_CMD_SET_CHANNEL]   = "set_channel",
     [HH_RC_CMD_INJECT_FAULT]  = "inject_fault",
     [HH_RC_CMD_CLEAR_FAULT]   = "clear_fault",
+    [HH_RC_CMD_OPENCPI_LIST]  = "opencpi_list",
+    [HH_RC_CMD_OPENCPI_GET]   = "opencpi_get",
+    [HH_RC_CMD_OPENCPI_SET]   = "opencpi_set",
+    [HH_RC_CMD_OPENCPI_STATUS]= "opencpi_status",
 };
 
 const char *hh_rc_cmd_str(hh_rc_cmd_t c)
@@ -80,6 +84,17 @@ static char *next_token(char **cursor)
     return tok;
 }
 
+/* Copy a wire value into a fixed field, refusing rather than truncating.
+ * A silently truncated property name would address a DIFFERENT property, so
+ * an over-long value must be an error the caller sees. */
+static bool copy_field(char *dst, size_t cap, const char *src)
+{
+    size_t n = strlen(src);
+    if (n >= cap) return false;
+    memcpy(dst, src, n + 1u);
+    return true;
+}
+
 static bool kv_split(char *tok, const char **k, const char **v)
 {
     char *eq = strchr(tok, '=');
@@ -116,7 +131,11 @@ hh_status_t hh_rc_request_parse(const char *line, hh_rc_request_t *out)
         else if (!strcmp(k, "channel")) out->channel = (uint32_t)strtoul(v, NULL, 10);
         else if (!strcmp(k, "kind")) {
             if (!hh_rc_fault_parse(v, &out->fault)) return HH_ERR_INVAL;
-        } else return HH_ERR_INVAL;
+        }
+        else if (!strcmp(k, "worker")) { if (!copy_field(out->worker, sizeof out->worker, v)) return HH_ERR_INVAL; }
+        else if (!strcmp(k, "prop"))   { if (!copy_field(out->prop,   sizeof out->prop,   v)) return HH_ERR_INVAL; }
+        else if (!strcmp(k, "value"))  { if (!copy_field(out->value,  sizeof out->value,  v)) return HH_ERR_INVAL; }
+        else return HH_ERR_INVAL;
     }
     return HH_OK;
 }
@@ -136,6 +155,20 @@ size_t hh_rc_request_format(const hh_rc_request_t *r, char *buf, size_t cap)
         break;
     case HH_RC_CMD_INJECT_FAULT:
         n = snprintf(buf, cap, "%s kind=%s\n", hh_rc_cmd_str(r->cmd), hh_rc_fault_str(r->fault));
+        break;
+    case HH_RC_CMD_OPENCPI_LIST:
+        /* worker is optional: omitted means "list the workers themselves". */
+        n = (r->worker[0] != '\0')
+          ? snprintf(buf, cap, "%s worker=%s\n", hh_rc_cmd_str(r->cmd), r->worker)
+          : snprintf(buf, cap, "%s\n", hh_rc_cmd_str(r->cmd));
+        break;
+    case HH_RC_CMD_OPENCPI_GET:
+        n = snprintf(buf, cap, "%s worker=%s prop=%s\n", hh_rc_cmd_str(r->cmd),
+                     r->worker, r->prop);
+        break;
+    case HH_RC_CMD_OPENCPI_SET:
+        n = snprintf(buf, cap, "%s worker=%s prop=%s value=%s\n", hh_rc_cmd_str(r->cmd),
+                     r->worker, r->prop, r->value);
         break;
     default:
         n = snprintf(buf, cap, "%s\n", hh_rc_cmd_str(r->cmd));
@@ -159,6 +192,18 @@ hh_status_t hh_rc_response_parse(const char *line, hh_rc_response_t *out)
     buf[len] = '\0';
 
     memset(out, 0, sizeof *out);
+
+    /* `text` is the one field allowed to contain spaces, so it is always last
+     * on the wire and is taken as the whole remainder of the line before the
+     * space-delimited tokeniser runs. Without this the tokeniser would split a
+     * message like "start-time only" into three unparseable tokens. */
+    {
+        char *tail = strstr(buf, " text=");
+        if (tail != NULL) {
+            if (!copy_field(out->text, sizeof out->text, tail + 6)) return HH_ERR_INVAL;
+            *tail = '\0';
+        }
+    }
 
     cursor = buf;
     tok = next_token(&cursor);
@@ -188,6 +233,13 @@ hh_status_t hh_rc_response_parse(const char *line, hh_rc_response_t *out)
         else if (!strcmp(k, "rx_errors"))   out->rx_errors = strtoull(v, NULL, 10);
         else if (!strcmp(k, "requests_total"))    out->requests_total = strtoull(v, NULL, 10);
         else if (!strcmp(k, "requests_rejected")) out->requests_rejected = strtoull(v, NULL, 10);
+        else if (!strcmp(k, "n"))      out->count = (uint32_t)strtoul(v, NULL, 10);
+        else if (!strcmp(k, "worker")) { if (!copy_field(out->worker, sizeof out->worker, v)) return HH_ERR_INVAL; }
+        else if (!strcmp(k, "prop"))   { if (!copy_field(out->prop,   sizeof out->prop,   v)) return HH_ERR_INVAL; }
+        else if (!strcmp(k, "value"))  { if (!copy_field(out->value,  sizeof out->value,  v)) return HH_ERR_INVAL; }
+        else if (!strcmp(k, "type"))   { if (!copy_field(out->ptype,  sizeof out->ptype,  v)) return HH_ERR_INVAL; }
+        else if (!strcmp(k, "access")) { if (!copy_field(out->access, sizeof out->access, v)) return HH_ERR_INVAL; }
+        else if (!strcmp(k, "items"))  { if (!copy_field(out->items,  sizeof out->items,  v)) return HH_ERR_INVAL; }
         else return HH_ERR_INVAL;
     }
     return HH_OK;
@@ -201,7 +253,12 @@ size_t hh_rc_response_format(const hh_rc_response_t *r, char *buf, size_t cap)
     tag = r->ok ? "ok" : "err";
 
     if (!r->ok) {
-        n = snprintf(buf, cap, "%s %s reason=%d\n", tag, hh_rc_cmd_str(r->cmd), (int)r->reason);
+        /* text last, and only when there is one: an unadorned failure line
+         * stays byte-identical to what it was before opencpi_* existed. */
+        n = (r->text[0] != '\0')
+          ? snprintf(buf, cap, "%s %s reason=%d text=%s\n", tag, hh_rc_cmd_str(r->cmd),
+                     (int)r->reason, r->text)
+          : snprintf(buf, cap, "%s %s reason=%d\n", tag, hh_rc_cmd_str(r->cmd), (int)r->reason);
         return (n < 0 || (size_t)n >= cap) ? 0 : (size_t)n;
     }
 
@@ -220,6 +277,26 @@ size_t hh_rc_response_format(const hh_rc_response_t *r, char *buf, size_t cap)
             (unsigned long long)r->frames_tx, (unsigned long long)r->frames_rx,
             (unsigned long long)r->tx_errors, (unsigned long long)r->rx_errors,
             (unsigned long long)r->requests_total, (unsigned long long)r->requests_rejected);
+        break;
+    case HH_RC_CMD_OPENCPI_LIST:
+    case HH_RC_CMD_OPENCPI_STATUS:
+        n = (r->worker[0] != '\0')
+          ? snprintf(buf, cap, "%s %s worker=%s n=%u items=%s\n", tag, hh_rc_cmd_str(r->cmd),
+                     r->worker, r->count, r->items)
+          : snprintf(buf, cap, "%s %s n=%u items=%s\n", tag, hh_rc_cmd_str(r->cmd),
+                     r->count, r->items);
+        break;
+    case HH_RC_CMD_OPENCPI_GET:
+        n = snprintf(buf, cap, "%s %s worker=%s prop=%s value=%s type=%s access=%s\n",
+                     tag, hh_rc_cmd_str(r->cmd), r->worker, r->prop, r->value,
+                     r->ptype, r->access);
+        break;
+    case HH_RC_CMD_OPENCPI_SET:
+        n = (r->text[0] != '\0')
+          ? snprintf(buf, cap, "%s %s worker=%s prop=%s value=%s text=%s\n", tag,
+                     hh_rc_cmd_str(r->cmd), r->worker, r->prop, r->value, r->text)
+          : snprintf(buf, cap, "%s %s worker=%s prop=%s value=%s\n", tag,
+                     hh_rc_cmd_str(r->cmd), r->worker, r->prop, r->value);
         break;
     default:
         n = snprintf(buf, cap, "%s %s state=%s\n", tag, hh_rc_cmd_str(r->cmd),
