@@ -19,4 +19,8 @@ tests/demo_selfheal
 logs/
 *.log
 .vscode/
+
+# Scratch space for working notes and drafts; never committed.
+temp/
 build-ocpi/
+CLAUDE.md
