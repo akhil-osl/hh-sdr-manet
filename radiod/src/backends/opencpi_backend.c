@@ -288,15 +288,18 @@ static hh_status_t agent_call(hh_oc_backend_t *b, uint32_t timeout_ms,
 /* Registry                                                                  */
 /* ------------------------------------------------------------------------- */
 
-static void registry_note_worker(hh_oc_backend_t *b, const char *worker)
+/* false = one worker name too many: the registry is then refused at load,
+ * the same as a props overflow, rather than its tail silently dropped. */
+static bool registry_note_worker(hh_oc_backend_t *b, const char *worker)
 {
     size_t i;
     for (i = 0; i < b->nworkers; i++) {
-        if (strcmp(b->workers[i], worker) == 0) return;
+        if (strcmp(b->workers[i], worker) == 0) return true;
     }
-    if (b->nworkers >= HH_OC_MAX_WORKERS) return;
+    if (b->nworkers >= HH_OC_MAX_WORKERS) return false;
     (void)snprintf(b->workers[b->nworkers], HH_RC_MAX_NAME, "%s", worker);
     b->nworkers++;
+    return true;
 }
 
 /* Parse one "worker.prop:type:access" element into the registry. */
@@ -320,12 +323,12 @@ static bool registry_add(hh_oc_backend_t *b, const char *elem, size_t len)
     *c2 = '\0';
 
     if (b->nprops >= HH_OC_MAX_PROPS) return false;
+    if (!registry_note_worker(b, buf)) return false;
     (void)snprintf(b->props[b->nprops].worker, HH_RC_MAX_NAME, "%s", buf);
     (void)snprintf(b->props[b->nprops].prop,   HH_RC_MAX_NAME, "%s", dot + 1);
     (void)snprintf(b->props[b->nprops].type,   16, "%s", c1 + 1);
     (void)snprintf(b->props[b->nprops].access, 16, "%s", c2 + 1);
     b->nprops++;
-    registry_note_worker(b, buf);
     return true;
 }
 
