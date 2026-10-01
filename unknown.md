@@ -660,6 +660,100 @@ host.
 
 ---
 
+## U-20 — Data-path test specification: undefined limits and methods
+
+**Status:** PARTIAL (ATP on the board)
+
+**What is missing:** OSL-SQA-TCS-002-EX1 (Operator, Application and BER Test
+Cases) gives most limits, and `tools/atp/opencpi/atp-ocpi.sh` applies them.
+These are named but not given:
+
+- **CNF-07**, the mechanism for setting worker properties (Operator TC-3 to
+  TC-6, Application TC-4, 5, 10 to 12). It lives in the parent document
+  OSL-SQA-TCS-002, which we do not have. `dma_stream` uses ACI `setProperty`,
+  which is the likely answer, unconfirmed.
+- **Numbers for "not growing"** (the words-in-flight gap), **"about
+  119 540 kB"** (MemTotal) and **"the agreed duration"** plus "throughput
+  holds" and "loss counters do not trend upward" (Application TC-15).
+- **Methods** for bursts (Application TC-8), "each supported block size"
+  (TC-9) and deliberately stalling the sink or starving the source (TC-13).
+- Operator TC-1 and Application TC-2 launch `qpsk_trx_app.xml`, which in the
+  project holds only `ad9361_proxy`; the four data-path workers are in
+  `qpsk_dma_null_app.xml` and `qpsk_dma_app.xml`.
+
+**Why it is needed:** without a number the script measures the criterion and
+reports `unjudged`, never `pass`.
+
+**Where it must come from:** QA (author of OSL-SQA-TCS-002).
+
+**What can proceed:** every case with a written limit (Operator TC-1, 2, 8,
+9, 10; Application TC-1 to 3, 6, 7, 16; BER TC-1), judged by
+`atp-ocpi.sh` and self-tested on the host.
+
+---
+
+## U-21 — MAC frame and slot structure
+
+**Status:** BLOCKING (MAC timing)
+
+**What is missing:** The slot is fixed at 1 ms by the 1000 hop/s rate. The
+rest is not given: frame length, slots per frame, guard time, the maximum
+number of nodes and the maximum range. `docs/MAC-ARCHITECTURE.md` §8.1
+recommends a 20 ms frame of 20 slots inside a 1 s superframe on the 1PPS
+edge, as a **candidate** only.
+
+**Why it is needed:** The guard time and range fix the timing precision
+requirement (`docs/MAC-ARCHITECTURE.md` §8.3). The node count fixes the frame
+length.
+
+**Where it must come from:** Logic owner (guard) and network owner (nodes,
+range).
+
+**What can proceed:** The architecture, with frame length kept as a parameter
+on both sides.
+
+---
+
+## U-22 — Burst-mode air interface for the MAC
+
+**Status:** BLOCKING (MAC over RF)
+
+**What is missing:** A TDMA MAC on a shared hop frequency needs half-duplex
+burst operation. The existing chain is continuous FDD (U-18). Not given: the
+AD9361 LO settle time per hop on this board, the TX/RX turnaround time, the
+burst bit rate, the maximum PDU per slot, and the MAC header layout. The MANET
+allows 512-byte frames and the existing PHY frame is 280 bytes, so either the
+MAC fragments or the limits change.
+
+**Why it is needed:** Settle and turnaround set how much of the 1 ms slot is
+left for data and guard.
+
+**Where it must come from:** Logic owner (E1–E4), with the architect for the
+maximum PDU.
+
+**What can proceed:** MAC architecture and the software service, with these
+values left open.
+
+---
+
+## U-23 — Network entry and slot allocation
+
+**Status:** BLOCKING (MAC policy)
+
+**What is missing:** How a node gets its slots: a fixed map from the node id,
+or a dynamic claim with conflict handling. Also the listen time before entry
+and what happens on a slot conflict.
+
+**Why it is needed:** It decides the ENTRY state of the MAC state machine
+(`docs/MAC-ARCHITECTURE.md` §9) and whether an entry protocol must exist.
+
+**Where it must come from:** Network owner, related to U-09.
+
+**What can proceed:** The state machine, with ENTRY defined by its exit
+conditions only.
+
+---
+
 ## Summary
 
 | ID | Topic | Status | Primary source |
@@ -683,6 +777,10 @@ host.
 | U-17 | OpenCPI integration baseline | BLOCKING | OpenCPI project owner |
 | U-18 | Waveform/MAC gap vs MANET | BLOCKING | Architect + E1–E4 |
 | U-19 | Board bring-up vs single owner | BLOCKING | Architect + OpenCPI owner |
+| U-20 | Data-path test limits and methods | PARTIAL | QA |
+| U-21 | MAC frame and slot structure | BLOCKING | Logic + network owners |
+| U-22 | Burst-mode air interface for the MAC | BLOCKING | E1–E4 + architect |
+| U-23 | Network entry and slot allocation | BLOCKING | Network owner |
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol

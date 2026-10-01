@@ -29,4 +29,12 @@ if(HH_BUILD_TESTS)
             $<TARGET_FILE:radiod> $<TARGET_FILE:radioctl>
             ${CMAKE_CURRENT_BINARY_DIR}/radioctl)
   set_tests_properties(check_atp_radioctl PROPERTIES SKIP_RETURN_CODE 77)
+
+  # atp-ocpi.sh (board data-path checks, OSL-SQA-TCS-002-EX1) against fixture
+  # logs and a fake /sys and /proc, once with host tools and once with
+  # BusyBox's, since the board runs BusyBox. Needs jq and busybox.
+  add_test(NAME check_atp_ocpi
+    COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/opencpi/selftest/ocpi-selftest.sh
+            ${CMAKE_CURRENT_BINARY_DIR}/ocpi)
+  set_tests_properties(check_atp_ocpi PROPERTIES SKIP_RETURN_CODE 77)
 endif()

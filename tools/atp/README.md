@@ -190,6 +190,68 @@ be checked.
 This runs on the analysis host, never on the radio, because it needs tshark
 with Lua.
 
+### `opencpi/atp-ocpi.sh`: data-path test cases on the board
+
+Judges the OpenCPI data path against **OSL-SQA-TCS-002-EX1** (Operator,
+Application and BER Test Cases) and writes the same `hh-atp-evidence/1`
+records. It runs on the board, under BusyBox, after sourcing
+`opencpi-setup.sh`. The board image has no `jq` and no `timeout`, so this
+script builds its JSON with awk (`opencpi/lib/ocpi.sh`) and needs only sh,
+awk, grep, sed, ps, dmesg and sleep.
+
+**It judges; it never starts, stops or configures the radio.** The operator
+does that with the project's own `board_stream.sh`, because the bring-up
+order is hardware-critical (touching the PL before `ad9361_init` hangs the
+CPU). Most cases are therefore "operator acts, script judges".
+
+Its measurements come from the counter lines `dma_stream` prints every 10 s
+(`/tmp/dma_stream.log`), plus `/sys`, `/proc`, `ps`, `dmesg` and
+`ocpidriver status`.
+
+```sh
+# before start-up, read-only
+opencpi/atp-ocpi.sh preflight -o ev --memtotal-kb 119540 --memtotal-tol-kb 500
+
+./board_stream.sh start
+opencpi/atp-ocpi.sh watch --case apl-07 --duration 60 -o ev --sink /dev/null
+opencpi/atp-ocpi.sh watch --case ber-01 --duration 620 -o ev
+./board_stream.sh stop
+
+# after stop, read-only
+opencpi/atp-ocpi.sh postcheck -o ev
+
+# or judge a log afterwards, on the board or on a host
+opencpi/atp-ocpi.sh analyze --case ber-01 --log dma_stream.log -o ev
+```
+
+| Test case | How | Limits applied |
+|---|---|---|
+| Operator TC-1 (steps 1 to 3), Application TC-1 | `preflight`, then operator start | FPGA manager `operating`; driver loaded; no `dma_stream` left; System RAM `0-0fffffff`; no kernel error; no DMA allocation failure. MemTotal needs `--memtotal-kb/--memtotal-tol-kb` |
+| Operator TC-2, TC-8; Application TC-3 | operator stop, then `postcheck` | no `dma_stream` left; no kernel error; no DMA allocation failure (`--console` for the ocpirun output) |
+| Operator TC-9 | `watch`/`analyze --case opr-09` | both word counters advance; gap below 200 000. "Not growing" needs `--max-gap-growth` |
+| Application TC-6 | `--case apl-06` | as Operator TC-9 |
+| Application TC-7 | `--case apl-07` | at least 400 000 words/s each way; more than 25 Mbit read from the source; sink recorded (`--sink`) |
+| Application TC-15 | `--case apl-15` | every limit must be given: `--min-duration-s`, `--min-words-per-s`, `--max-loss-delta`, `--max-gap-growth` |
+| Application TC-16 | `watch --case apl-16` | `dma_stream` alive at start and end; no "finished on its own"; counter lines keep arriving; no new kernel error |
+| BER TC-1 | `--case ber-01` | `in_sync` true on every line; `err_count` 0; `bit_count` at least 9.2 Gbit; at least 600 s |
+| Operator TC-3 to 7, 10, 11; Application TC-4, 5, 8 to 14 | not automated yet | need CNF-07 or a method from QA (U-20) |
+
+**Where the specification gives no number, there is no default.** The
+criterion is measured and the result is `unjudged` until the agreed number is
+passed (U-20). Kernel errors are counted with the pattern `board_stream.sh`
+itself uses (`oops|bad page`); change it with `--dmesg-pattern`.
+
+A log where a counter goes down (the application restarted mid-log), where a
+required counter reads `?` (getProperty failed), or with fewer than two
+counter lines is an `error`, not a measurement. BER records also carry the
+corrected BER (errors divided by 3, as the PRBS-23 checker counts one channel
+error up to three times) and, with zero errors, the rule-of-3 upper bound.
+
+Self-test: `ctest -R check_atp_ocpi`, or
+`opencpi/selftest/ocpi-selftest.sh`. It replaces the board with fixture logs,
+a fake `/sys` and `/proc`, and shims for `ps`, `dmesg`, `ocpidriver` and
+`sleep`. It runs every case twice, with host tools and with BusyBox's.
+
 ---
 
 ## The Wireshark dissector
