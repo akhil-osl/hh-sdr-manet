@@ -63,13 +63,15 @@
 #include "hhsdr/radiod/props.h"
 #include <sys/types.h>
 
-/* Registry capacity. The agent publishes 75 properties on 17 worker names
- * (2026-09-30: app, radio, the tx/rx chains and the 14 DSP-stage workers of
- * the worker split -- see rh_agent.cc); the headroom is for further workers.
+/* Registry capacity. The agent publishes 114 properties on 18 worker names
+ * (2026-10-07: app, radio, the tx/rx chains and the 14 DSP-stage workers of
+ * the worker split, now with every per-worker debug counter -- see
+ * rh_agent.cc); the headroom is for further workers. HH_OC_MAX_PROPS was 96
+ * until 2026-10-07 (94 used).
  * A registry larger than either limit is reported as an error at startup
  * rather than silently truncated. HH_OC_MAX_WORKERS was 12 until the split,
  * which silently dropped every name after the 12th (rx_rrc onwards, radio). */
-#define HH_OC_MAX_PROPS   96
+#define HH_OC_MAX_PROPS   128
 #define HH_OC_MAX_WORKERS 24
 
 typedef struct {

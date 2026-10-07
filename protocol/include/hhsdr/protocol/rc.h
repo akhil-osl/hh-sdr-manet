@@ -50,10 +50,11 @@
  * qpsk_tx list. Raised again from 1024 to 2048 on 2026-09-29 together with
  * HH_RC_MAX_ITEMS: an items list travels INSIDE one of these lines, so the line
  * must hold a full HH_RC_MAX_ITEMS list plus the HH_RC_MAX_TEXT detail and the
- * key names around them (1536 + 256 + ~100 < 2048). The framing is unchanged --
- * still exactly one line per message -- so this only grows the per-client
- * buffers (4 KiB per client). */
-#define HH_RC_MAX_LINE 2048
+ * key names around them (1536 + 256 + ~100 < 2048). Raised again to 4096 on
+ * 2026-10-07 with HH_RC_MAX_ITEMS 3072 (3072 + 256 + ~100 < 4096). The framing
+ * is unchanged -- still exactly one line per message -- so this only grows the
+ * per-client buffers (8 KiB per client). */
+#define HH_RC_MAX_LINE 4096
 
 /* A worker or property name. Long enough for the names the OpenCPI workers
  * actually carry (the longest today is "enable_descrambler", 18). */
@@ -71,8 +72,10 @@
  * elements since the radioctl live-radio work, measured at 600 bytes worst
  * case (every 64-bit counter at 20 digits). 768 held that with 168 bytes to
  * spare; 1536 doubles the budget so the next few properties need no protocol
- * change. Must stay below HH_RC_MAX_LINE - HH_RC_MAX_TEXT - ~100 (see above). */
-#define HH_RC_MAX_ITEMS 1536
+ * change. Raised to 3072 on 2026-10-07: the per-worker debug counters took
+ * opencpi_status to 53 elements. Must stay below
+ * HH_RC_MAX_LINE - HH_RC_MAX_TEXT - ~100 (see above). */
+#define HH_RC_MAX_ITEMS 3072
 
 /* Human-readable detail carried with a response. Always the LAST key on the
  * wire, because it is the only field allowed to contain spaces. */

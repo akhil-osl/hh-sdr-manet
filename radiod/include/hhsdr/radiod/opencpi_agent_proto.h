@@ -92,15 +92,16 @@
  *
  * Larger than the client-facing HH_RC_MAX_LINE on purpose: the `props` reply
  * carries the WHOLE registry in one line -- 61 elements of
- * "<worker>.<prop>:<type>:<access>", 1724 bytes, measured 2026-09-29 --
- * whereas the client-facing
+ * "<worker>.<prop>:<type>:<access>", 1724 bytes, measured 2026-09-29; 114
+ * elements, ~3.4 KB, 2026-10-07, so raised from 4096 / 3584 -- whereas the
+ * client-facing
  * opencpi_list only ever returns one worker's share of it. This link is
  * internal to radiod and its own helper, so its framing is sized for what it
  * actually carries rather than for what a client needs. */
-#define HH_RH_AGENT_MAX_LINE 4096
+#define HH_RH_AGENT_MAX_LINE 8192
 
 /* The `items` value within such a line. */
-#define HH_RH_AGENT_MAX_ITEMS 3584
+#define HH_RH_AGENT_MAX_ITEMS 7680
 
 /* Request verbs. */
 #define HH_RH_AGENT_HELLO  "hello"

@@ -701,8 +701,8 @@ static hh_status_t oc_get_status(void *self, hh_radio_status_t *out)
         return HH_ERR_IO;
     }
     if (reply_kv(reply, "items", items, sizeof items)) {
-        out->tx_errors = status_u64(items, "qpsk_tx.dbg_out_dropped");
-        out->rx_errors = status_u64(items, "qpsk_rx.err_count");
+        out->tx_errors = status_u64(items, "tx_rrc.dbg_out_dropped");
+        out->rx_errors = status_u64(items, "rx_ber.err_count");
     }
 
     /* The requested LO, not a synthesiser read-back -- see opencpi.h. */
