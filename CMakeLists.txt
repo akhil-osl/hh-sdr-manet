@@ -92,6 +92,15 @@ add_library(hhsdr_core STATIC
 target_link_libraries(hhsdr_core PUBLIC hhsdr_core_base)
 
 # ---------------------------------------------------------------------------
+# hhsdr_netif : network interface to hh_radio_ops_t (OLSRv2 path).
+# Links hhsdr_core_base only, never hhsdr_core or tests/.
+# ---------------------------------------------------------------------------
+add_library(hhsdr_netif STATIC
+  src/netif/netif.c
+)
+target_link_libraries(hhsdr_netif PUBLIC hhsdr_core_base)
+
+# ---------------------------------------------------------------------------
 # protocol : the control-protocol codec, shared by radiod and its clients.
 # Kept separate from both so that a client library never has to link the
 # daemon. See protocol/CMakeLists.txt.
