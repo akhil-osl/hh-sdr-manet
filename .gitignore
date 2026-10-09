@@ -4,6 +4,8 @@ build/
 __pycache__/
 *.pyc
 build-asan/
+build-ocpi/
+CLAUDE.md
 Testing/
 CMakeCache.txt
 CMakeFiles/
@@ -19,3 +21,4 @@ tests/demo_selfheal
 logs/
 *.log
 .vscode/
+tools/f01-ak2/ca-certificates.crt
