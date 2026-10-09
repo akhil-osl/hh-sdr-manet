@@ -1,5 +1,11 @@
 # Implementation walkthrough: node bring-up, discovery, and the data plane
 
+> **Legacy stack.** Since 2026-10-08 the routing engine is OLSRv2 in OLSRd2,
+> an external process, with HH-SDR's `hh_netif` adapter between the Linux
+> interface and the radio (ARCHITECTURE.md, "OLSRv2: who owns routing";
+> `unknown.md` U-09). The `hh_node_t` stack traced below is kept as the
+> legacy reference and simulator workload. The trace remains accurate for it.
+
 This traces `hh_node_t` from construction through the first beacon, the first
 installed route, and the first forwarded packet, function by function, with
 file paths and line numbers. Everything here is production code — nothing in

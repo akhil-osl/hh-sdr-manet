@@ -7,6 +7,13 @@ and networking portion of the HH-SDR software-defined radio architecture.
 > **New here?** Read [ARCHITECTURE.md](ARCHITECTURE.md) first — it maps how
 > every component relates, and what is built versus still blocked.
 
+> **Routing engine (2026-10-08):** OLSRv2, run by OLSRd2 (OONF) as an
+> external Linux routing daemon. HH-SDR provides the network-interface
+> adapter `hh_netif` (`src/netif/`) between the Linux interface and the
+> radio abstraction. The self-healing distance-vector stack described below
+> is kept as the legacy reference and simulator workload. See
+> ARCHITECTURE.md, "OLSRv2: who owns routing", and `unknown.md` U-09, U-24.
+
 ---
 
 ## Overview
@@ -148,9 +155,11 @@ fpga/                   EMPTY — PL/FPGA fabric (see unknown.md)
 include/hhsdr/          Public headers
   core/                 types, sequence arithmetic, clock, log, config, events, dispatcher
   radio/                radio.h — the hardware abstraction; wire format
-  manet/                discovery, neighbor, link_health, routing, route_table,
-                        failure_detector, topology, self_healing, node, telemetry
-  dataplane/            forwarder.h — the fast path
+  netif/                netif.h — network interface ↔ radio adapter (OLSRv2 path)
+  manet/                legacy stack: discovery, neighbor, link_health, routing,
+                        route_table, failure_detector, topology, self_healing,
+                        node, telemetry
+  dataplane/            forwarder.h — the legacy stack's fast path
   sca/                  resource.h — SCA 2.2.2 compatibility layer
 
 src/                    Implementations, mirroring include/

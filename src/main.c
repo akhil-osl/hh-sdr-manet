@@ -7,6 +7,8 @@
  * With radio_adapter="hw" the node will fail to start, because the FPGA/PL
  * contract does not exist yet and the hardware adapter reports that honestly
  * rather than pretending to run. That is the intended behavior.
+ *
+ * Legacy: runs the distance-vector node. Routing is OLSRd2 (unknown.md U-09).
  */
 #include "hhsdr/manet/node.h"
 #include "hhsdr/manet/telemetry.h"

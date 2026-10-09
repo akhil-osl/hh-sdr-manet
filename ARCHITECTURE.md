@@ -14,9 +14,14 @@ Start here, then follow the links into component READMEs for detail.
 
 ## 1. The one-paragraph version
 
-A software-defined radio node. A MANET stack finds neighbours and routes
-packets; a control daemon owns the radio hardware; a CLI and a client library
-drive that daemon from other processes. Today everything runs in Linux
+A software-defined radio node. Routing is OLSRv2, run by OLSRd2 (OONF) as an
+ordinary external Linux routing daemon; Linux forwards IP packets with the
+routes it installs; HH-SDR supplies the network-interface adapter that carries
+those packets onto the radio through `hh_radio_ops_t` (see "OLSRv2: who owns
+routing" in section 6). A control daemon owns the radio hardware; a CLI and a
+client library drive that daemon from other processes. The earlier in-process
+distance-vector MANET stack is kept as a legacy reference and simulator
+workload. Today everything runs in Linux
 userspace on x86 against a mock radio. The FPGA, the OpenCPI workers, the
 drivers and the timing hardware named in the target architecture **do not exist
 in this repository yet** — deliberately, because their contracts are not
@@ -82,7 +87,16 @@ collision the moment a working backend exists. Tracked as
 ║                                                                         ║
 ╚═════════════════════════════════════════════════════════════════════════╝
 
-╔══ MANET STACK — built and working, but in-process ═════════════════════╗
+╔══ OLSRv2 PATH — adapter built; manet0 binding and OLSRd2 runs next ════╗
+║                                                                         ║
+║   OLSRd2 (external) ─► Linux routes ─► manet0 (NOT BUILT, U-24)        ║
+║                                           │                             ║
+║                     hh_netif adapter ◄────┘  ──► hh_radio_ops_t        ║
+║                     (built, tested on an emulated medium)               ║
+║                                                                         ║
+╚═════════════════════════════════════════════════════════════════════════╝
+
+╔══ LEGACY MANET STACK — working, in-process, reference only ════════════╗
 ║                                                                         ║
 ║   hh-manet ──► discovery, neighbour, link health, routing,             ║
 ║                forwarder, failure detection, topology, self-healing    ║
@@ -108,12 +122,13 @@ collision the moment a working backend exists. Tracked as
 | [`librc/`](librc/README.md) | client library — the C API to reach `radiod` | ✅ working |
 | [`radioctl/`](radioctl/README.md) | CLI front end | ✅ working |
 | [`protocol/`](protocol/README.md) | wire codec shared by daemon and clients | ✅ working (**not** ICD-2) |
-| `src/manet/` | MANET control plane: discovery → routing → self-healing | ✅ working |
-| `src/dataplane/` | packet forwarder (fast path) | ✅ working, in-process |
+| `src/netif/` | network-interface adapter: host interface ↔ `hh_radio_ops_t` (OLSRv2 path) | ✅ working; Linux binding not built (U-24) |
+| `src/manet/` | legacy MANET stack: discovery → distance-vector routing → self-healing | ✅ working, legacy reference |
+| `src/dataplane/` | legacy packet forwarder (fast path of the legacy stack) | ✅ working, legacy reference |
 | `src/core/` | types, clock, log, config, events, dispatcher | ✅ shared primitives |
 | `src/radio/` | `radio.h` hardware seam + beacon wire format | ✅ the key boundary |
-| `src/sca/` | SCA 2.2.2 compatibility layer | ✅ compatible, not conformant |
-| `tests/`, `tools/sim/` | test harness, simulator, dev tooling | ✅ 31 tests |
+| `src/sca/` | SCA 2.2.2 compatibility layer (wraps the legacy node) | ✅ compatible, not conformant |
+| `tests/`, `tools/sim/` | test harness, simulator, emulated medium, dev tooling | ✅ 36 tests |
 | [`tools/atp/`](tools/atp/README.md) | ATP/BIT evidence scripts, Wireshark dissector | ✅ working, validated off-radio |
 | [`drivers/`](drivers/README.md) | manet0, radio clock | ❌ empty |
 | [`workers/`](workers/README.md) | OpenCPI RCC workers | ❌ empty |
@@ -131,8 +146,10 @@ radioctl ──► librc ──► hhsdr_protocol ──┐
 radiod   ──► hhsdr_radiod ──────────────┘                       log, events)
                   └──► backends: mock_backend, hw_adapter
 
-hh-manet ──► hhsdr_core ──► hhsdr_core_base
+hh-manet ──► hhsdr_core ──► hhsdr_core_base          (legacy stack)
                   └──► manet, dataplane, sca, wire
+
+             hhsdr_netif ──► hhsdr_core_base          (OLSRv2 path)
 ```
 
 **Arrows point one way. No cycles.** Two rules hold this together:
@@ -143,6 +160,9 @@ hh-manet ──► hhsdr_core ──► hhsdr_core_base
    real daemon binary.
 2. **`radiod` never links the MANET stack.** It needs four core headers and the
    protocol codec — nothing about routing or topology.
+3. **`hhsdr_netif` never links `hhsdr_core`.** The OLSRv2 path must not depend
+   on the legacy stack. Enforced by the build: `test_netif` and
+   `test_netif_emulation` link `hhsdr_netif` without `hhsdr_core`.
 
 ### The hardware seam — the single most important interface
 
@@ -163,7 +183,8 @@ Who calls what:
 | Caller | Uses | Plane |
 |---|---|---|
 | `radiod` | `open`, `close`, `get_status`, `set_channel`, `poll` | control |
-| `hh-manet` | all eight, including `transmit`, `set_rx_callback` | control + **data** |
+| `hh_netif` (OLSRv2 path) | `open`, `close`, `transmit`, `set_rx_callback`, `poll` | **data** |
+| `hh-manet` (legacy) | all eight, including `transmit`, `set_rx_callback` | control + **data** |
 
 That asymmetry is the unresolved issue: **one vtable currently spans two
 planes**. Splitting it is [U-15](unknown.md).
@@ -173,11 +194,82 @@ planes**. Splitting it is [U-15](unknown.md).
 `radiod` and `hh-manet` are separate processes that **do not talk to each
 other** today. Each builds its own radio backend.
 
-In the target, MANET routing takes neighbour statistics *from `librc`* — i.e.
-through `radiod`. The existing stack instead gets them by sending and receiving
-its own beacons. Those are incompatible data-flow models, and the target names
-**OLSRv2 (RFC 7181)** rather than this custom distance-vector stack. Deferred
-decision: [U-09](unknown.md).
+In the OLSRv2 architecture below, `hh-manet` (the legacy node daemon) is not
+used at all. How OLSRd2 and `radiod` share the radio once a real backend
+exists is still open ([U-15](unknown.md)).
+
+### OLSRv2: who owns routing
+
+Decided 2026-10-08 ([U-09](unknown.md)): **OLSRv2 (RFC 7181) with NHDP
+(RFC 6130), as implemented by OLSRd2 from OONF, is the routing engine.**
+OLSRd2 is an external process. It is not embedded in HH-SDR, not linked into
+any HH-SDR target, and not modified; no OONF source is in this repository.
+
+```
+ application
+     │  IP packets
+ Linux IP stack ─────────────── forwards IP using the Linux routing table
+     │                          OLSRd2 (external process): NHDP, MPR, TC,
+     │                          Dijkstra; writes routes into that table
+ manet0  (Linux network interface)        NOT BUILT: binding TBD (U-24)
+     │  bytes + one-hop next hop (or broadcast)
+ hh_netif  (src/netif/)  ◄── HH-SDR's part: network interface ↔ radio
+     │  hh_frame_t
+ hh_radio_ops_t  (include/hhsdr/radio/radio.h, unchanged)
+     │
+ radio  ── today: mock radio on an emulated medium (tests only)
+           later: the real radio, under the same seam
+```
+
+**Ownership.**
+
+| Concern | Owner |
+|---|---|
+| Neighbour discovery, MPR, topology, route calculation | OLSRd2 |
+| Routing table | Linux, written by OLSRd2 |
+| IP forwarding, choosing the next hop for a packet | Linux |
+| Network interface ↔ radio: next hop and broadcast to MAC destination, received frames up with sender and per-frame metrics | `hh_netif` |
+| Address filtering, slots, air interface | MAC software and below `hh_radio_ops_t` (MAC-NETWORK-INTERFACE section 14.2) |
+
+**The `hh_netif` boundary** ([`include/hhsdr/netif/netif.h`](include/hhsdr/netif/netif.h)):
+
+- In: `hh_netif_send(kind, next_hop, payload, len)`. The next hop is an
+  `hh_node_id_t`, the one-hop MAC destination; `HH_NETIF_BROADCAST` (0) is
+  one broadcast transmission. The payload is opaque bytes, at most one radio
+  frame (512 bytes, the buffer bound in `radio.h`, not a decided MTU).
+- Out: a deliver callback with kind, payload, the one-hop sender, and the
+  radio's per-frame metrics, called from `hh_netif_poll()`.
+- It does not route, does not filter by address, does not flood, does not
+  parse the payload, and does not decide anything the MAC-to-network contract
+  leaves open: the frame kind is the caller's, and destination ids are not
+  judged (MAC-NETWORK-INTERFACE DP-11).
+- Single-threaded, no allocation, links `hhsdr_core_base` only.
+
+**What the Linux binding (next step) must decide, and nothing here does**
+([U-24](unknown.md)): TAP or TUN framing for `manet0`, how a link-layer
+address maps to a node id, IP addressing, ARP policy, MTU, which frame kind
+OLSRv2 control and user traffic use, how radio metrics reach OLSRd2, the OONF
+version, and how OLSRd2 is deployed.
+
+**What happens to the legacy stack.** Nothing on the OLSRv2 path calls it.
+It stays, unchanged, because the simulator and 24 of the 36 tests exercise it,
+and because some parts may feed the new path later:
+
+| Component | In the OLSRv2 architecture |
+|---|---|
+| `hh_radio_ops_t`, `hw_adapter`, mock radio | **Used unchanged.** The radio seam for both paths |
+| `routing.c`, `route_table.c` | Legacy reference. Replaced by OLSRd2 |
+| `forwarder.c` | Legacy reference. Replaced by Linux IP forwarding |
+| `discovery.c`, `neighbor.c` | Legacy reference. Overlap with NHDP HELLO and its neighbour set |
+| `topology.c` | Legacy reference. Overlaps with the OLSRv2 topology set |
+| `link_health.c`, `failure_detector.c` | Legacy today. Possible source of radio-derived link metrics for OLSRd2; whether and how is TBD (U-24) |
+| `self_healing.c` | Legacy today. Route repair is OLSRv2's own; its channel-change reaction has no OLSRd2 counterpart, and who owns that is open (U-14) |
+| `telemetry.c`, `src/sca/` | Legacy. They report the legacy node; OLSRd2 has its own status interfaces, not integrated |
+| `wire.c` | Legacy beacon and route-update format; still used by the dissector tooling |
+| `netsim` | Legacy stack's virtual-time test bed. OLSRd2 cannot run inside it (one instance per process, real clock) |
+
+The legacy node and the OLSRv2 path must not share a radio: both would send
+discovery and routing traffic.
 
 ---
 
@@ -219,7 +311,9 @@ closed, not accommodated.
 
 **Injected clock.** Components take a `hh_clock_t *`, never read wall-clock time
 directly. Tests bind a virtual clock, so scenario timing is deterministic and
-nothing sleeps. This is why 31 tests run in 0.6 s.
+nothing sleeps. This is why the MANET and adapter tests finish in well under a
+second; the whole suite of 36 takes a few seconds because of the radiod and ATP
+checks.
 
 **Honest failure over fake success.** `hw_adapter.c` returns
 `HH_ERR_NOT_IMPLEMENTED` from every hardware operation and logs why.
@@ -270,9 +364,9 @@ drops into `radiod/src/backends/`.
 | Async events | none (poll only) | radiod pushes events | U-01, U-05 |
 | Fault registry | ✅ in-process | exposed over ICD-2 | U-01, U-05 |
 | PL ownership | radiod owns one OpenCPI application (host only) | single owner on the board | U-15, U-19 |
-| Data plane | in-process forwarder | manet0 → DMA → MAC → RF | U-06, U-15 |
+| Data plane | Linux IP forwarding → `hh_netif` → radio seam; adapter built and tested on an emulated medium, `manet0` binding not built (legacy in-process forwarder kept) | manet0 → DMA → MAC → RF | U-24, U-06, U-15 |
 | Time plane | **absent entirely** | 1PPS → PL → PHC | U-07 |
-| MANET routing | custom distance-vector | OLSRv2 (RFC 7181) | U-09 |
+| MANET routing | OLSRv2 in OLSRd2 selected, external process; not yet run against HH-SDR (legacy distance-vector kept as reference) | OLSRd2 on `manet0` over the radio | U-24 |
 | RCC workers | none | 5 PS workers | U-03 |
 | FPGA fabric | none | DMA, MAC, modem, AD9361 | U-06, U-08, U-14 |
 | Test automation | ✅ ATP/BIT scripts, dissector, JSON evidence | same, on the radio over `manet0` | U-06, U-07, U-16 |
@@ -284,7 +378,7 @@ drops into `radiod/src/backends/`.
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j8
-ctest --test-dir build                      # 31 tests, ~0.6 s
+ctest --test-dir build                      # 36 tests, a few seconds
 ```
 
 Drive the control plane — **two terminals**, so daemon logs and command output

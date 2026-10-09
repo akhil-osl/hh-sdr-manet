@@ -1,6 +1,8 @@
 /*
  * Routing Engine.
  *
+ * Legacy: the routing engine is OLSRv2 in OLSRd2 (unknown.md U-09).
+ *
  * Proactive, distance-vector, sequence-numbered, RF-metric-weighted — the architecture's
  * recommendation. Routes are maintained by periodic sequence-numbered
  * originator-style updates bounded to one hop's neighbors, plus event-triggered

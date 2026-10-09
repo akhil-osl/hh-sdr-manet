@@ -30,6 +30,8 @@ librc users) · **E1–E4** = HDL/OpenCPI. See ADD §1.4.
 | **BLOCKING** | Work cannot start until this is answered |
 | **DEFERRED** | Deliberately out of scope for the current round |
 | **PARTIAL** | Some of the contract is known; the rest is not |
+| **DECIDED** | The decision is made; the entry keeps its history and any follow-on gaps it points to |
+| **OPEN** | A question is raised; code runs on stated assumptions that are not yet agreed |
 
 ---
 
@@ -308,7 +310,35 @@ touches RF state.
 
 ## U-09 — OLSRv2 versus the existing MANET stack
 
-**Status:** DEFERRED (by decision, 2026-09-21)
+**Status:** DECIDED (2026-10-08). Previously DEFERRED (by decision, 2026-09-21).
+
+**Decision (2026-10-08):** OLSRv2 (RFC 7181) with NHDP (RFC 6130), as
+implemented by OLSRd2 from OONF, is the routing engine. OLSRd2 runs as an
+external process, as an ordinary Linux routing daemon: it is not embedded in
+`hh_node_t`, not linked into any HH-SDR target, and its source is neither
+copied into this repository nor modified. Linux forwards IP with the routes
+it installs. HH-SDR's part is the network-interface adapter `hh_netif`
+(`include/hhsdr/netif/netif.h`) between a host interface and
+`hh_radio_ops_t`. The custom distance-vector stack (`src/manet/`,
+`src/dataplane/`) stays, unchanged, as a legacy reference and simulator
+workload; nothing on the OLSRv2 path depends on it, and the build enforces
+that. See ARCHITECTURE.md, "OLSRv2: who owns routing".
+
+Background: the routing selection record for task F01-AK-1 (version 1.0,
+5 October 2026) proposes OLSRv2 with Babel as fallback; it is held outside
+this repository. The integration study found that OONF cannot be embedded
+without porting its operating-system layer (clock, sockets, interfaces,
+routes) and removing its single-instance globals, which is why OLSRd2 stays
+external.
+
+**What remains open:** the Linux binding between OLSRd2 and `hh_netif`, and
+how radio metrics reach OLSRd2: [U-24](#u-24--linux-network-interface-binding-for-the-olsrv2-path).
+How OLSRd2's data traffic and `radiod` share one radio once a real backend
+exists: [U-15](#u-15--controldata-split-of-hh_radio_ops_t). The neighbour-stats
+question below (OLSRv2 fed through `radiod` versus its own HELLOs) is now part
+of U-24's metric item.
+
+**Original entry, kept for history:**
 
 **What is missing:** A decision on the fate of the existing routing stack.
 
@@ -754,6 +784,106 @@ conditions only.
 
 ---
 
+## U-24 — Linux network-interface binding for the OLSRv2 path
+
+**Status:** BLOCKING (for running OLSRd2 over HH-SDR)
+
+**What is missing:** Everything between a Linux network interface (`manet0`)
+and the `hh_netif` adapter that no project document defines:
+
+1. **Framing:** a TAP (Ethernet) or TUN (IP) device, or something else.
+2. **Link-layer address to node id:** how the next hop Linux resolves (for
+   example a destination MAC address on TAP) becomes the `hh_node_id_t` given
+   to `hh_netif_send()`, and the reverse on receive. Node ids are 32-bit;
+   Ethernet addresses are 48-bit; no mapping is defined.
+3. **IP addressing of `manet0`:** subnet, per-node addresses, IPv4, IPv6 or
+   both. OLSRv2 identifies nodes by IP address.
+4. **ARP / neighbour policy:** resolution over the air, or static entries.
+5. **MTU:** one radio frame carries at most 512 bytes (`HH_RADIO_MAX_FRAME`,
+   itself TBD) and the PHY frame is 280 bytes (U-22). IPv6 needs at least
+   1280. OLSRd2 builds RFC 5444 packets up to 1472 bytes regardless of MTU.
+   Who fragments is MAC-NETWORK-INTERFACE section 18, undecided.
+6. **Frame kind and MAC class:** whether OLSRv2 HELLO and TC, ARP, and user
+   traffic are sent as BEACON, ROUTING (control class) or DATA
+   (MAC-NETWORK-INTERFACE section 7.1, DP-10). `hh_netif` leaves the kind to
+   its caller for this reason.
+7. **Radio metrics into OLSRd2:** whether per-frame RSSI, SNR and PER from
+   `hh_radio_ops_t` reach OLSRd2's link metric, and by which path (OONF's
+   layer-2 database, DLEP RFC 8175, a constant metric). Averaging is
+   MAC-NETWORK-INTERFACE DP-6.
+8. **OONF baseline and deployment:** which OONF version (the last tag is
+   v0.15.1 from 2018; upstream asks users to follow master), build flags (a
+   Release build fails with -Werror on GCC 11; Debug builds), how it is built
+   for the board (no ARM cross compiler here), and how it is started on a
+   node.
+
+**Why it is needed:** Without these, OLSRd2 has no interface to run on, and
+nothing can carry its packets to `hh_netif`.
+
+**Where it must come from:** Network owner (E6) and system architect; items 5
+and 6 with the MAC owners; item 8 with the build owner.
+
+**What can proceed:** The `hh_netif` adapter itself, which needs none of the
+above and is built and tested on an emulated medium (`test_netif`,
+`test_netif_emulation`). A test-only binding can be prototyped in network
+namespaces once items 1 to 6 are chosen for the test, labelled as test
+choices, not contract.
+
+**Related:** the general `hh_radio_ops_t` callback, buffer-lifetime and close
+rules that `hh_netif` relies on are U-25, not part of this entry. Test choices
+made here must not settle them.
+
+---
+
+## U-25 — Radio interface callback, buffer-lifetime and close semantics
+
+**Status:** OPEN
+
+**Scope:** `hh_radio_ops_t` and its use by `hh_netif`. This is the general
+radio contract, separate from the F01 emulation and protocol test choices in
+U-24 and MAC-NETWORK-INTERFACE DP-11.
+
+**What is missing:** `include/hhsdr/radio/radio.h` does not answer:
+
+1. Does `transmit()` have to copy the frame, or finish using it, before it
+   returns? Or may the radio keep the pointer it was given?
+2. Can the receive callback be given NULL link metrics? If so, what should
+   the adapter do?
+3. Must the radio guarantee that no receive callback happens after `close()`
+   returns?
+4. If `close()` fails, is the radio closed, open, or in an unknown state?
+   What cleanup and freeing rules apply?
+
+**Current implementation assumptions** (not approved API requirements):
+
+- `hh_netif` passes a frame on its stack to `transmit()`, so it assumes the
+  radio uses or copies it before `transmit()` returns. The mock radio copies.
+- `hh_netif` passes NULL metrics to its sink unchanged. The legacy
+  `hh_node_on_frame()` drops such frames instead.
+- `hh_netif` clears its receive callback on close and drops any delivery
+  after close.
+- `hh_netif` stays closed when the radio's `close()` fails, and returns the
+  error.
+
+**Why it is needed:** Each adapter (mock, `hw_adapter`, `mock_backend`, a
+future PL adapter) and each user of the seam must agree on these rules. If
+they do not, a frame can be read after it is freed, or a callback can reach
+an object that no longer exists.
+
+**Where it must come from:** System architect, with the radio adapter owners.
+
+**Required resolution:**
+
+- Review the radio API and every adapter that implements it.
+- Write the ownership, callback and close rules into `radio.h`.
+- Add a contract test for each agreed rule.
+
+**What can proceed:** `hh_netif` and its tests, built on the assumptions
+above. They protect `hh_netif` either way and do not make the assumptions
+binding.
+
+---
+
 ## Summary
 
 | ID | Topic | Status | Primary source |
@@ -766,7 +896,7 @@ conditions only.
 | U-06 | ICD-1 PDU descriptor layout | BLOCKING | E5 + E1–E4 |
 | U-07 | ICD-3 time register map | BLOCKING | E5 + E1–E4 |
 | U-08 | MANET STROBE semantics | BLOCKING | E1–E4 |
-| U-09 | OLSRv2 vs existing stack | DEFERRED | Architect + E6 |
+| U-09 | OLSRv2 vs existing stack | DECIDED 2026-10-08: OLSRd2, external | Architect + E6 |
 | U-10 | Socket path + permissions | PARTIAL | Architect / integrator |
 | U-11 | C vs C++ at the ACI | PARTIAL (C++ decided; cross-build open) | Build owner |
 | U-12 | Threading model | PARTIAL | Architect |
@@ -781,6 +911,8 @@ conditions only.
 | U-21 | MAC frame and slot structure | BLOCKING | Logic + network owners |
 | U-22 | Burst-mode air interface for the MAC | BLOCKING | E1–E4 + architect |
 | U-23 | Network entry and slot allocation | BLOCKING | Network owner |
+| U-24 | Linux interface binding for OLSRv2 | BLOCKING | E6 + architect |
+| U-25 | Radio callback, buffer-lifetime and close rules | OPEN | Architect + radio adapter owners |
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol
@@ -791,3 +923,10 @@ one OpenCPI application through the ACI. It takes the application and every
 property from configuration and names nothing itself, and is tested on the
 development host against real OpenCPI 2.4.7 applications. Board operation
 waits on U-17 and U-19.
+
+**Added 2026-10-08:** the OLSRv2 architecture (U-09 decided). The
+network-interface adapter `hh_netif` (`src/netif/`) carries payloads between
+a host interface and `hh_radio_ops_t`, with the next hop as the MAC
+destination and broadcast as id 0. It invents none of U-24's items: the frame
+kind is the caller's, destination ids are passed through, and the payload is
+opaque. Tested on an emulated three-node medium; no OLSRd2 is involved yet.
