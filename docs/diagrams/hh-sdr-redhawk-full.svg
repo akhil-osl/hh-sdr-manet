@@ -1,0 +1,210 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="4200" height="3240" viewBox="0 0 2100 1620">
+<rect x="0" y="0" width="2100" height="1620" fill="#FFFFFF"/>
+<rect x="40.0" y="150.0" width="2020.0" height="800.0" rx="0" ry="0" fill="none" stroke="#2A4674" stroke-width="1.5" stroke-dasharray="6 4"/>
+<rect x="790.0" y="330.0" width="900.0" height="420.0" rx="0" ry="0" fill="#F7F3FB" stroke="#6E4D8F" stroke-width="1.5" stroke-dasharray="6 4"/>
+<rect x="40.0" y="990.0" width="1730.0" height="450.0" rx="0" ry="0" fill="none" stroke="#2C7A55" stroke-width="1.5" stroke-dasharray="6 4"/>
+<rect x="1800.0" y="990.0" width="260.0" height="450.0" rx="0" ry="0" fill="none" stroke="#B83732" stroke-width="1.5" stroke-dasharray="6 4"/>
+<rect x="70.0" y="200.0" width="250.0" height="110.0" rx="0" ry="0" fill="#EEF0F3" stroke="#5A6475" stroke-width="1.5"/>
+<text x="195.0" y="235.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">APPLICATIONS</text>
+<text x="195.0" y="249.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Voice (MELPe on PS)</text>
+<text x="195.0" y="264.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Data / C2 / HMI</text>
+<text x="195.0" y="278.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">IP sockets on manet0</text>
+<rect x="370.0" y="200.0" width="280.0" height="110.0" rx="0" ry="0" fill="#DCE6F5" stroke="#2A4674" stroke-width="1.5"/>
+<text x="510.0" y="235.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">MANET ROUTING</text>
+<text x="510.0" y="249.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">OLSRv2 daemon (RFC 7181)</text>
+<text x="510.0" y="264.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Neighbour stats from librc</text>
+<text x="510.0" y="278.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">IPv4 / IPv6</text>
+<rect x="1760.0" y="200.0" width="280.0" height="110.0" rx="0" ry="0" fill="#FCE6CD" stroke="#C2701C" stroke-width="1.5"/>
+<text x="1900.0" y="235.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">TEST AUTOMATION</text>
+<text x="1900.0" y="249.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">ATP / BIT scripts</text>
+<text x="1900.0" y="264.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">iperf3, MGEN, CORE/EMANE</text>
+<text x="1900.0" y="278.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">radioctl CLI</text>
+<rect x="830.0" y="380.0" width="380.0" height="100.0" rx="0" ry="0" fill="#EADFF5" stroke="#6E4D8F" stroke-width="1.5"/>
+<text x="1020.0" y="417.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">REDHAWK CORE FRAMEWORK</text>
+<text x="1020.0" y="432.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">DomainManager · DeviceManager</text>
+<text x="1020.0" y="446.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">ApplicationFactory · omniORB</text>
+<rect x="1270.0" y="380.0" width="380.0" height="100.0" rx="0" ry="0" fill="#EADFF5" stroke="#6E4D8F" stroke-width="1.5"/>
+<text x="1460.0" y="417.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">DOMAIN PROFILE ($SDRROOT)</text>
+<text x="1460.0" y="432.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">SPD · SCD · PRF · SAD · DCD</text>
+<text x="1460.0" y="446.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">PRF = 23 props from resource.c</text>
+<rect x="830.0" y="530.0" width="380.0" height="100.0" rx="0" ry="0" fill="#EADFF5" stroke="#6E4D8F" stroke-width="1.5"/>
+<text x="1020.0" y="567.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">MANET_Node — CF::Resource</text>
+<text x="1020.0" y="582.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">C++ servant : Resource_impl</text>
+<text x="1020.0" y="596.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">LifeCycle · PropertySet · PortSupplier</text>
+<rect x="1270.0" y="530.0" width="380.0" height="100.0" rx="0" ry="0" fill="#EADFF5" stroke="#6E4D8F" stroke-width="1.5"/>
+<text x="1460.0" y="567.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Radio — CF::Device</text>
+<text x="1460.0" y="582.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">DeviceManager-owned</text>
+<text x="1460.0" y="596.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">blocked on PL contract</text>
+<rect x="830.0" y="670.0" width="820.0" height="60.0" rx="0" ry="0" fill="#EADFF5" stroke="#6E4D8F" stroke-width="1.5"/>
+<text x="1240.0" y="694.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">ORB THREAD → CONTROL-LOOP BOUNDARY</text>
+<text x="1240.0" y="709.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">omniORB dispatch threads → bounded queue, drained by hh_node_tick()</text>
+<rect x="370.0" y="420.0" width="280.0" height="100.0" rx="0" ry="0" fill="#DCE6F5" stroke="#2A4674" stroke-width="1.5"/>
+<text x="510.0" y="457.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">LINUX IP STACK</text>
+<text x="510.0" y="472.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">skb priority / DSCP →</text>
+<text x="510.0" y="486.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">bearer class</text>
+<rect x="70.0" y="600.0" width="280.0" height="100.0" rx="0" ry="0" fill="#DCE6F5" stroke="#2A4674" stroke-width="1.5"/>
+<text x="210.0" y="637.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">librc / radioctl</text>
+<text x="210.0" y="652.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">C API + CLI</text>
+<text x="210.0" y="666.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">versioned TLV over UNIX socket</text>
+<rect x="1760.0" y="600.0" width="280.0" height="110.0" rx="0" ry="0" fill="#D6F0F5" stroke="#1F7A8C" stroke-width="1.5"/>
+<text x="1900.0" y="635.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">RADIO CLOCK DRIVER</text>
+<text x="1900.0" y="649.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">/dev/ptpN (PHC) + time regs</text>
+<text x="1900.0" y="664.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">frame / slot / hop / ns</text>
+<text x="1900.0" y="678.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">seqlock read-only to users</text>
+<rect x="370.0" y="780.0" width="280.0" height="120.0" rx="0" ry="0" fill="#FBEBD2" stroke="#B07D2B" stroke-width="1.5"/>
+<text x="510.0" y="820.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">manet0 net_device DRIVER</text>
+<text x="510.0" y="834.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">pdu_dma rings (E5)</text>
+<text x="510.0" y="849.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">descriptor length + TLAST</text>
+<text x="510.0" y="863.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">zero-copy, per-class queues</text>
+<rect x="830.0" y="790.0" width="380.0" height="110.0" rx="0" ry="0" fill="#DCE6F5" stroke="#2A4674" stroke-width="1.5"/>
+<text x="1020.0" y="825.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">radiod — PL OWNER</text>
+<text x="1020.0" y="839.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Holds OpenCPI ACI Application</text>
+<text x="1020.0" y="854.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Only process that opens OpenCPI</text>
+<text x="1020.0" y="868.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Events, fault registry</text>
+<rect x="830.0" y="1030.0" width="820.0" height="70.0" rx="0" ry="0" fill="#DCE6F5" stroke="#2A4674" stroke-width="1.5"/>
+<text x="1240.0" y="1059.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">RCC WORKERS (PS)</text>
+<text x="1240.0" y="1074.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">waveform_ctrl | drc | mac_ps | ad9361_config_proxy | telemetry</text>
+<rect x="70.0" y="1150.0" width="250.0" height="110.0" rx="0" ry="0" fill="#D8F0E2" stroke="#2C7A55" stroke-width="1.5"/>
+<text x="195.0" y="1185.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">audio_pl</text>
+<text x="195.0" y="1199.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">I2S slave (codec master)</text>
+<text x="195.0" y="1214.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">AEC (NLMS) + NS (Wiener)</text>
+<text x="195.0" y="1228.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">AXI-Stream → PS</text>
+<rect x="370.0" y="1150.0" width="280.0" height="110.0" rx="0" ry="0" fill="#D8F0E2" stroke="#2C7A55" stroke-width="1.5"/>
+<text x="510.0" y="1192.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">pdu_dma_tx / pdu_dma_rx</text>
+<text x="510.0" y="1207.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">AXI-HP DMA, descriptor len</text>
+<text x="510.0" y="1221.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">TLAST = PDU boundary</text>
+<rect x="700.0" y="1150.0" width="300.0" height="110.0" rx="0" ry="0" fill="#D8F0E2" stroke="#2C7A55" stroke-width="1.5"/>
+<text x="850.0" y="1185.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">mac_pl</text>
+<text x="850.0" y="1199.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">TDMA slot timer, slot gating</text>
+<text x="850.0" y="1214.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">PDU CRC, hop-synchronous frame</text>
+<text x="850.0" y="1228.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Generates MANET STROBE</text>
+<rect x="1050.0" y="1150.0" width="300.0" height="110.0" rx="0" ry="0" fill="#D8F0E2" stroke="#2C7A55" stroke-width="1.5"/>
+<text x="1200.0" y="1185.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">MODEM CHAIN</text>
+<text x="1200.0" y="1199.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">framer / FEC / modulator (TX)</text>
+<text x="1200.0" y="1214.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">demod / FEC / deframer (RX)</text>
+<text x="1200.0" y="1228.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">runtime properties</text>
+<rect x="1400.0" y="1150.0" width="300.0" height="110.0" rx="0" ry="0" fill="#D8F0E2" stroke="#2C7A55" stroke-width="1.5"/>
+<text x="1550.0" y="1192.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">ad9361 DEVICE WORKERS</text>
+<text x="1550.0" y="1207.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">adc / dac / data_sub</text>
+<text x="1550.0" y="1221.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">LVDS 2R2T DDR</text>
+<rect x="1830.0" y="1150.0" width="210.0" height="110.0" rx="0" ry="0" fill="#FBDEDE" stroke="#B83732" stroke-width="1.5"/>
+<text x="1935.0" y="1192.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">AD9361 RFIC</text>
+<text x="1935.0" y="1207.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">LVDS DDR 122.88 MHz</text>
+<text x="1935.0" y="1221.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">SPI control</text>
+<rect x="70.0" y="1310.0" width="250.0" height="110.0" rx="0" ry="0" fill="#D6F0F5" stroke="#1F7A8C" stroke-width="1.5"/>
+<text x="195.0" y="1352.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">GNSS 1PPS (Card 2)</text>
+<text x="195.0" y="1367.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">L1 + NavIC L5 (E7 item)</text>
+<text x="195.0" y="1381.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">SYS_1PPS on backplane</text>
+<rect x="370.0" y="1310.0" width="280.0" height="110.0" rx="0" ry="0" fill="#D6F0F5" stroke="#1F7A8C" stroke-width="1.5"/>
+<text x="510.0" y="1352.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">PL TIME BASE</text>
+<text x="510.0" y="1367.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">1PPS disciplined counters</text>
+<text x="510.0" y="1381.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">frame / slot / hop / ns</text>
+<rect x="700.0" y="1310.0" width="300.0" height="110.0" rx="0" ry="0" fill="#D8F0E2" stroke="#2C7A55" stroke-width="1.5"/>
+<text x="850.0" y="1352.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">fh_controller</text>
+<text x="850.0" y="1367.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">1000 hop/s LO retune</text>
+<text x="850.0" y="1381.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">HOP_TRIG / ACK, dwell</text>
+<rect x="1050.0" y="1310.0" width="400.0" height="110.0" rx="0" ry="0" fill="#D8F0E2" stroke="#2C7A55" stroke-width="1.5"/>
+<text x="1250.0" y="1352.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">rf_ctrl_fsm</text>
+<text x="1250.0" y="1367.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">RF_OFF/RX_PREP/RX/TX_PREP/TX</text>
+<text x="1250.0" y="1381.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">TURNAROUND/FAULT/SAFE</text>
+<rect x="1830.0" y="1310.0" width="210.0" height="110.0" rx="0" ry="0" fill="#FBDEDE" stroke="#B83732" stroke-width="1.5"/>
+<text x="1935.0" y="1352.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">RF FRONT-END</text>
+<text x="1935.0" y="1367.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">PA / LNA / T-R switch</text>
+<text x="1935.0" y="1381.1" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Interlock (HW)</text>
+<rect x="40.0" y="1470.0" width="1180.0" height="130.0" rx="0" ry="0" fill="none" stroke="#BFBFBF" stroke-width="1.0"/>
+<rect x="1250.0" y="1470.0" width="810.0" height="130.0" rx="0" ry="0" fill="none" stroke="#BFBFBF" stroke-width="1.0"/>
+<rect x="1262.0" y="1503.0" width="46.0" height="3.0" rx="0" ry="0" fill="#2A5CB8" stroke="none" stroke-width="1.0"/>
+<rect x="1262.0" y="1521.0" width="46.0" height="3.0" rx="0" ry="0" fill="#C2701C" stroke="none" stroke-width="1.0"/>
+<rect x="1262.0" y="1539.0" width="46.0" height="3.0" rx="0" ry="0" fill="#6E4D8F" stroke="none" stroke-width="1.0"/>
+<rect x="1262.0" y="1557.0" width="46.0" height="3.0" rx="0" ry="0" fill="#1F7A8C" stroke="none" stroke-width="1.0"/>
+<rect x="1262.0" y="1575.0" width="46.0" height="3.0" rx="0" ry="0" fill="#A03060" stroke="none" stroke-width="1.0"/>
+<rect x="1262.0" y="1593.0" width="46.0" height="3.0" rx="0" ry="0" fill="#B83732" stroke="none" stroke-width="1.0"/>
+<polyline points="320.0,255.0 370.0,255.0" fill="none" stroke="#2A5CB8" stroke-width="2.5"/>
+<polygon points="370.0,255.0 361.2,259.7 361.2,250.3" fill="#2A5CB8" stroke="#2A5CB8"/>
+<polyline points="510.0,310.0 510.0,420.0" fill="none" stroke="#2A5CB8" stroke-width="2.5"/>
+<polygon points="510.0,420.0 505.3,411.2 514.7,411.2" fill="#2A5CB8" stroke="#2A5CB8"/>
+<polyline points="510.0,520.0 510.0,780.0" fill="none" stroke="#2A5CB8" stroke-width="2.5"/>
+<polygon points="510.0,780.0 505.3,771.2 514.7,771.2" fill="#2A5CB8" stroke="#2A5CB8"/>
+<polyline points="510.0,900.0 510.0,1150.0" fill="none" stroke="#2A5CB8" stroke-width="2.5"/>
+<polygon points="510.0,1150.0 505.3,1141.2 514.7,1141.2" fill="#2A5CB8" stroke="#2A5CB8"/>
+<polyline points="70.0,1205.0 40.0,1205.0 40.0,1200.0 40.0,260.0 195.0,260.0 195.0,255.0" fill="none" stroke="#2A5CB8" stroke-width="2.5"/>
+<polygon points="195.0,255.0 199.7,263.8 190.3,263.8" fill="#2A5CB8" stroke="#2A5CB8"/>
+<polyline points="370.0,255.0 360.0,255.0 360.0,260.0 360.0,650.0 350.0,650.0" fill="none" stroke="#C2701C" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="350.0,650.0 358.8,645.3 358.8,654.7" fill="#C2701C" stroke="#C2701C"/>
+<polyline points="350.0,650.0 820.0,650.0 820.0,840.0 1020.0,840.0 1020.0,845.0" fill="none" stroke="#C2701C" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="1020.0,845.0 1015.3,836.2 1024.7,836.2" fill="#C2701C" stroke="#C2701C"/>
+<polyline points="1760.0,255.0 1750.0,255.0 1750.0,260.0 1750.0,190.0 330.0,190.0 330.0,590.0 210.0,590.0 210.0,600.0" fill="none" stroke="#C2701C" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="210.0,600.0 205.3,591.2 214.7,591.2" fill="#C2701C" stroke="#C2701C"/>
+<polyline points="1020.0,900.0 1020.0,1020.0 1240.0,1020.0 1240.0,1030.0" fill="none" stroke="#C2701C" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="1240.0,1030.0 1235.3,1021.2 1244.7,1021.2" fill="#C2701C" stroke="#C2701C"/>
+<polyline points="1240.0,1100.0 1240.0,1110.0 850.0,1110.0 850.0,1150.0" fill="none" stroke="#C2701C" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="850.0,1150.0 845.3,1141.2 854.7,1141.2" fill="#C2701C" stroke="#C2701C"/>
+<polyline points="1240.0,1100.0 1240.0,1140.0 1200.0,1140.0 1200.0,1150.0" fill="none" stroke="#C2701C" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="1200.0,1150.0 1195.3,1141.2 1204.7,1141.2" fill="#C2701C" stroke="#C2701C"/>
+<polyline points="1240.0,1100.0 1240.0,1110.0 1550.0,1110.0 1550.0,1150.0" fill="none" stroke="#C2701C" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="1550.0,1150.0 1545.3,1141.2 1554.7,1141.2" fill="#C2701C" stroke="#C2701C"/>
+<polyline points="1240.0,1065.0 1240.0,1090.0 690.0,1090.0 690.0,1300.0 850.0,1300.0 850.0,1310.0" fill="none" stroke="#C2701C" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="850.0,1310.0 845.3,1301.2 854.7,1301.2" fill="#C2701C" stroke="#C2701C"/>
+<polyline points="1700.0,1205.0 1830.0,1205.0" fill="none" stroke="#C2701C" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="1830.0,1205.0 1821.2,1209.7 1821.2,1200.3" fill="#C2701C" stroke="#C2701C"/>
+<polyline points="1210.0,430.0 1270.0,430.0" fill="none" stroke="#6E4D8F" stroke-width="2.5" stroke-dasharray="6 4"/>
+<polygon points="1270.0,430.0 1261.2,434.7 1261.2,425.3" fill="#6E4D8F" stroke="#6E4D8F"/>
+<polyline points="1020.0,480.0 1020.0,530.0" fill="none" stroke="#6E4D8F" stroke-width="2.5" stroke-dasharray="6 4"/>
+<polygon points="1020.0,530.0 1015.3,521.2 1024.7,521.2" fill="#6E4D8F" stroke="#6E4D8F"/>
+<polyline points="1460.0,480.0 1460.0,530.0" fill="none" stroke="#6E4D8F" stroke-width="2.5" stroke-dasharray="6 4"/>
+<polygon points="1460.0,530.0 1455.3,521.2 1464.7,521.2" fill="#6E4D8F" stroke="#6E4D8F"/>
+<polyline points="1020.0,630.0 1020.0,660.0 1240.0,660.0 1240.0,670.0" fill="none" stroke="#6E4D8F" stroke-width="2.5" stroke-dasharray="6 4"/>
+<polygon points="1240.0,670.0 1235.3,661.2 1244.7,661.2" fill="#6E4D8F" stroke="#6E4D8F"/>
+<polyline points="1460.0,630.0 1460.0,660.0 1240.0,660.0 1240.0,670.0" fill="none" stroke="#6E4D8F" stroke-width="2.5" stroke-dasharray="6 4"/>
+<polygon points="1240.0,670.0 1235.3,661.2 1244.7,661.2" fill="#6E4D8F" stroke="#6E4D8F"/>
+<polyline points="1240.0,730.0 1240.0,740.0 1020.0,740.0 1020.0,790.0" fill="none" stroke="#6E4D8F" stroke-width="2.5" stroke-dasharray="6 4"/>
+<polygon points="1020.0,790.0 1015.3,781.2 1024.7,781.2" fill="#6E4D8F" stroke="#6E4D8F"/>
+<polyline points="650.0,255.0 660.0,255.0 660.0,260.0 660.0,430.0 830.0,430.0" fill="none" stroke="#6E4D8F" stroke-width="2.5" stroke-dasharray="6 4"/>
+<polygon points="830.0,430.0 821.2,434.7 821.2,425.3" fill="#6E4D8F" stroke="#6E4D8F"/>
+<polyline points="320.0,1365.0 370.0,1365.0" fill="none" stroke="#1F7A8C" stroke-width="1.8" stroke-dasharray="6 4"/>
+<polygon points="370.0,1365.0 361.2,1369.7 361.2,1360.3" fill="#1F7A8C" stroke="#1F7A8C"/>
+<polyline points="650.0,1365.0 700.0,1365.0" fill="none" stroke="#1F7A8C" stroke-width="1.8" stroke-dasharray="6 4"/>
+<polygon points="700.0,1365.0 691.2,1369.7 691.2,1360.3" fill="#1F7A8C" stroke="#1F7A8C"/>
+<polyline points="510.0,1310.0 510.0,1300.0 670.0,1300.0 670.0,1200.0 850.0,1200.0 850.0,1205.0" fill="none" stroke="#1F7A8C" stroke-width="1.8" stroke-dasharray="6 4"/>
+<polygon points="850.0,1205.0 845.3,1196.2 854.7,1196.2" fill="#1F7A8C" stroke="#1F7A8C"/>
+<polyline points="1650.0,1065.0 1660.0,1065.0 1660.0,1060.0 1660.0,660.0 1900.0,660.0 1900.0,655.0" fill="none" stroke="#1F7A8C" stroke-width="1.8" stroke-dasharray="6 4"/>
+<polygon points="1900.0,655.0 1904.7,663.8 1895.3,663.8" fill="#1F7A8C" stroke="#1F7A8C"/>
+<polyline points="1900.0,600.0 1900.0,310.0" fill="none" stroke="#1F7A8C" stroke-width="1.8" stroke-dasharray="6 4"/>
+<polygon points="1900.0,310.0 1904.7,318.8 1895.3,318.8" fill="#1F7A8C" stroke="#1F7A8C"/>
+<polyline points="850.0,1260.0 850.0,1270.0 1250.0,1270.0 1250.0,1310.0" fill="none" stroke="#A03060" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="1250.0,1310.0 1245.3,1301.2 1254.7,1301.2" fill="#A03060" stroke="#A03060"/>
+<polyline points="1000.0,1365.0 1050.0,1365.0" fill="none" stroke="#A03060" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="1050.0,1365.0 1041.2,1369.7 1041.2,1360.3" fill="#A03060" stroke="#A03060"/>
+<polyline points="1450.0,1365.0 1830.0,1365.0" fill="none" stroke="#A03060" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="1830.0,1365.0 1821.2,1369.7 1821.2,1360.3" fill="#A03060" stroke="#A03060"/>
+<polyline points="650.0,1205.0 660.0,1205.0 660.0,1200.0 660.0,1140.0 850.0,1140.0 850.0,1150.0" fill="none" stroke="#2C7A55" stroke-width="2.2"/>
+<polygon points="850.0,1150.0 845.3,1141.2 854.7,1141.2" fill="#2C7A55" stroke="#2C7A55"/>
+<polyline points="1000.0,1205.0 1050.0,1205.0" fill="none" stroke="#2C7A55" stroke-width="2.2"/>
+<polygon points="1050.0,1205.0 1041.2,1209.7 1041.2,1200.3" fill="#2C7A55" stroke="#2C7A55"/>
+<polyline points="1350.0,1205.0 1400.0,1205.0" fill="none" stroke="#2C7A55" stroke-width="2.2"/>
+<polygon points="1400.0,1205.0 1391.2,1209.7 1391.2,1200.3" fill="#2C7A55" stroke="#2C7A55"/>
+<polyline points="1700.0,1205.0 1710.0,1205.0 1710.0,1200.0 1710.0,1140.0 1940.0,1140.0 1935.0,1140.0 1935.0,1150.0" fill="none" stroke="#2C7A55" stroke-width="2.2"/>
+<polygon points="1935.0,1150.0 1930.3,1141.2 1939.7,1141.2" fill="#2C7A55" stroke="#2C7A55"/>
+<polyline points="1935.0,1260.0 1935.0,1310.0" fill="none" stroke="#B83732" stroke-width="2.5"/>
+<polygon points="1935.0,1310.0 1930.3,1301.2 1939.7,1301.2" fill="#B83732" stroke="#B83732"/>
+<text x="1050.0" y="58.2" font-family="Liberation Sans, Arial, sans-serif" font-size="18" font-weight="bold" font-style="normal" fill="#1A1A1A" text-anchor="middle">HH-SDR PS/PL SOFTWARE ARCHITECTURE — THREE-PLANE BRIDGE with REDHAWK SCA 2.2.2</text>
+<text x="1050.0" y="87.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="normal" font-style="normal" fill="#4D4E4C" text-anchor="middle">Data plane (PDU-over-DMA net_device) | Control plane (radiod / OpenCPI ACI) | Time plane (1PPS / PHC) | SCA control (REDHAWK CF / CORBA)</text>
+<text x="58.0" y="145.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="bold" font-style="normal" fill="#2A4674" text-anchor="start">PROCESSING SYSTEM — PetaLinux, dual Cortex-A9 (single PL owner: radiod)</text>
+<text x="808.0" y="325.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="bold" font-style="normal" fill="#6E4D8F" text-anchor="start">SCA 2.2.2 / REDHAWK CORE FRAMEWORK (new control layer)</text>
+<text x="58.0" y="985.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="bold" font-style="normal" fill="#2C7A55" text-anchor="start">PL (FPGA FABRIC)</text>
+<text x="1818.0" y="977.9" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="bold" font-style="normal" fill="#B83732" text-anchor="start">RF /</text>
+<text x="1818.0" y="992.0" font-family="Liberation Sans, Arial, sans-serif" font-size="11" font-weight="bold" font-style="normal" fill="#B83732" text-anchor="start">HW</text>
+<text x="58.0" y="1485.8" font-family="Liberation Sans, Arial, sans-serif" font-size="10" font-weight="bold" font-style="normal" fill="#1A1A1A" text-anchor="start">NOTES</text>
+<text x="58.0" y="1506.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">1. Single-owner rule: only radiod opens OpenCPI. All other processes use librc (ICD-2). Never a second ACI instance.</text>
+<text x="58.0" y="1526.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">2. REDHAWK CF sits ABOVE radiod: the Domain/Device Managers reach hardware only through librc, so Note 1 is preserved.</text>
+<text x="58.0" y="1546.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">3. ORB threads never call the MANET stack directly. They enqueue; hh_node_tick() drains. Keeps the single-threaded, no-locks invariant.</text>
+<text x="58.0" y="1566.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">4. Data contract ICD-1: one PDU = one descriptor = one skb; TLAST marks PDU boundary; length carried in descriptor, not in payload.</text>
+<text x="58.0" y="1586.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">5. MANET STROBE from mac_pl is the sole RF state authority; rf_ctrl_fsm may only add safety (interlock), never contradict it.</text>
+<text x="1268.0" y="1485.8" font-family="Liberation Sans, Arial, sans-serif" font-size="10" font-weight="bold" font-style="normal" fill="#1A1A1A" text-anchor="start">LEGEND</text>
+<text x="1326.0" y="1506.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">DATA plane — PDU / IQ / audio stream</text>
+<text x="1326.0" y="1524.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">CONTROL plane — properties / API / SPI</text>
+<text x="1326.0" y="1542.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">SCA / CORBA — REDHAWK control (new)</text>
+<text x="1326.0" y="1560.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">TIME plane — 1PPS / slot / hop timing</text>
+<text x="1326.0" y="1578.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">MANET STROBE / RF state authority</text>
+<text x="1326.0" y="1596.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">RF / analogue path</text>
+</svg>

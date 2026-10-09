@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="2800" height="1560" viewBox="0 0 1400 780">
+<rect x="0" y="0" width="1400" height="780" fill="#FFFFFF"/>
+<rect x="580.0" y="40.0" width="560.0" height="360.0" rx="0" ry="0" fill="#F7F4FA" stroke="#6E4D8F" stroke-width="1.0" stroke-dasharray="6 4"/>
+<rect x="20.0" y="545.0" width="1360.0" height="120.0" rx="0" ry="0" fill="#F0F7F4" stroke="#3E7A5E" stroke-width="1.0" stroke-dasharray="6 4"/>
+<rect x="40.0" y="70.0" width="230.0" height="70.0" rx="0" ry="0" fill="#E7ECF3" stroke="#2A4674" stroke-width="1.5"/>
+<text x="155.0" y="99.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Applications</text>
+<text x="155.0" y="114.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">voice · data · C2</text>
+<rect x="310.0" y="70.0" width="230.0" height="70.0" rx="0" ry="0" fill="#E7ECF3" stroke="#2A4674" stroke-width="1.5"/>
+<text x="425.0" y="99.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">MANET routing</text>
+<text x="425.0" y="114.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">hh_node_t</text>
+<rect x="600.0" y="70.0" width="240.0" height="70.0" rx="0" ry="0" fill="#ECE5F3" stroke="#6E4D8F" stroke-width="1.5"/>
+<text x="720.0" y="99.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">REDHAWK Core Framework</text>
+<text x="720.0" y="114.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">DomainMgr · DeviceMgr · ORB</text>
+<rect x="880.0" y="70.0" width="240.0" height="70.0" rx="0" ry="0" fill="#ECE5F3" stroke="#6E4D8F" stroke-width="1.5"/>
+<text x="1000.0" y="99.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Domain profile</text>
+<text x="1000.0" y="114.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">SPD · SCD · PRF · SAD · DCD</text>
+<rect x="600.0" y="190.0" width="240.0" height="70.0" rx="0" ry="0" fill="#ECE5F3" stroke="#6E4D8F" stroke-width="1.5"/>
+<text x="720.0" y="219.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">MANET_Node</text>
+<text x="720.0" y="234.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">CF::Resource</text>
+<rect x="880.0" y="190.0" width="240.0" height="70.0" rx="0" ry="0" fill="#ECE5F3" stroke="#6E4D8F" stroke-width="1.5"/>
+<text x="1000.0" y="219.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Radio</text>
+<text x="1000.0" y="234.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">CF::Device</text>
+<rect x="600.0" y="310.0" width="520.0" height="70.0" rx="0" ry="0" fill="#ECE5F3" stroke="#6E4D8F" stroke-width="1.5"/>
+<text x="860.0" y="339.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">ORB thread boundary</text>
+<text x="860.0" y="354.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">queue drained by hh_node_tick()</text>
+<rect x="40.0" y="430.0" width="230.0" height="70.0" rx="0" ry="0" fill="#F3E9D6" stroke="#B07D2B" stroke-width="1.5"/>
+<text x="155.0" y="459.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Linux IP stack</text>
+<text x="155.0" y="474.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">skb · DSCP</text>
+<rect x="310.0" y="430.0" width="230.0" height="70.0" rx="0" ry="0" fill="#E7ECF3" stroke="#2A4674" stroke-width="1.5"/>
+<text x="425.0" y="459.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">librc / radioctl</text>
+<text x="425.0" y="474.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">C API + CLI</text>
+<rect x="600.0" y="430.0" width="240.0" height="70.0" rx="0" ry="0" fill="#E7ECF3" stroke="#2A4674" stroke-width="1.5"/>
+<text x="720.0" y="459.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">radiod</text>
+<text x="720.0" y="474.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">PL owner · opens OpenCPI</text>
+<rect x="880.0" y="430.0" width="240.0" height="70.0" rx="0" ry="0" fill="#F3E9D6" stroke="#B07D2B" stroke-width="1.5"/>
+<text x="1000.0" y="459.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">manet0 net_device</text>
+<text x="1000.0" y="474.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">pdu_dma rings</text>
+<rect x="1160.0" y="430.0" width="200.0" height="70.0" rx="0" ry="0" fill="#DDEBEE" stroke="#2C6E7F" stroke-width="1.5"/>
+<text x="1260.0" y="459.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">Radio clock driver</text>
+<text x="1260.0" y="474.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">PHC · time regs</text>
+<rect x="310.0" y="570.0" width="230.0" height="70.0" rx="0" ry="0" fill="#DEEDE6" stroke="#3E7A5E" stroke-width="1.5"/>
+<text x="425.0" y="599.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">hh_radio_ops_t</text>
+<text x="425.0" y="614.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">hardware seam</text>
+<rect x="600.0" y="570.0" width="240.0" height="70.0" rx="0" ry="0" fill="#DEEDE6" stroke="#3E7A5E" stroke-width="1.5"/>
+<text x="720.0" y="599.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">RCC workers</text>
+<text x="720.0" y="614.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">OpenCPI PS</text>
+<rect x="880.0" y="570.0" width="240.0" height="70.0" rx="0" ry="0" fill="#DEEDE6" stroke="#3E7A5E" stroke-width="1.5"/>
+<text x="1000.0" y="599.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">PL fabric</text>
+<text x="1000.0" y="614.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">mac · modem · dma</text>
+<rect x="40.0" y="570.0" width="230.0" height="70.0" rx="0" ry="0" fill="#DEEDE6" stroke="#3E7A5E" stroke-width="1.5"/>
+<text x="155.0" y="607.2" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">AD9361 + RF front-end</text>
+<rect x="1160.0" y="570.0" width="200.0" height="70.0" rx="0" ry="0" fill="#DDEBEE" stroke="#2C6E7F" stroke-width="1.5"/>
+<text x="1260.0" y="599.5" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">PL time base</text>
+<text x="1260.0" y="614.8" font-family="Liberation Sans, Arial, sans-serif" font-size="12" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="middle">1PPS · frame / slot</text>
+<rect x="40.0" y="700.0" width="26.0" height="16.0" rx="0" ry="0" fill="#E7ECF3" stroke="#2A4674" stroke-width="1.5"/>
+<rect x="270.0" y="700.0" width="26.0" height="16.0" rx="0" ry="0" fill="#ECE5F3" stroke="#6E4D8F" stroke-width="1.5"/>
+<rect x="500.0" y="700.0" width="26.0" height="16.0" rx="0" ry="0" fill="#F3E9D6" stroke="#B07D2B" stroke-width="1.5"/>
+<rect x="730.0" y="700.0" width="26.0" height="16.0" rx="0" ry="0" fill="#DDEBEE" stroke="#2C6E7F" stroke-width="1.5"/>
+<rect x="960.0" y="700.0" width="26.0" height="16.0" rx="0" ry="0" fill="#DEEDE6" stroke="#3E7A5E" stroke-width="1.5"/>
+<polyline points="270.0,105.0 310.0,105.0" fill="none" stroke="#2A4674" stroke-width="2.0"/>
+<polygon points="310.0,105.0 301.2,109.7 301.2,100.3" fill="#2A4674" stroke="#2A4674"/>
+<polyline points="425.0,140.0 425.0,430.0" fill="none" stroke="#2A4674" stroke-width="2.0"/>
+<polygon points="425.0,430.0 420.3,421.2 429.7,421.2" fill="#2A4674" stroke="#2A4674"/>
+<polyline points="540.0,465.0 600.0,465.0" fill="none" stroke="#2A4674" stroke-width="2.0"/>
+<polygon points="600.0,465.0 591.2,469.7 591.2,460.3" fill="#2A4674" stroke="#2A4674"/>
+<polyline points="840.0,105.0 880.0,105.0" fill="none" stroke="#6E4D8F" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="880.0,105.0 871.2,109.7 871.2,100.3" fill="#6E4D8F" stroke="#6E4D8F"/>
+<polyline points="720.0,140.0 720.0,190.0" fill="none" stroke="#6E4D8F" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="720.0,190.0 715.3,181.2 724.7,181.2" fill="#6E4D8F" stroke="#6E4D8F"/>
+<polyline points="1000.0,140.0 1000.0,190.0" fill="none" stroke="#6E4D8F" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="1000.0,190.0 995.3,181.2 1004.7,181.2" fill="#6E4D8F" stroke="#6E4D8F"/>
+<polyline points="840.0,225.0 850.0,225.0 850.0,220.0 850.0,300.0 860.0,300.0 860.0,310.0" fill="none" stroke="#6E4D8F" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="860.0,310.0 855.3,301.2 864.7,301.2" fill="#6E4D8F" stroke="#6E4D8F"/>
+<polyline points="1000.0,260.0 1000.0,300.0 860.0,300.0 860.0,310.0" fill="none" stroke="#6E4D8F" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="860.0,310.0 855.3,301.2 864.7,301.2" fill="#6E4D8F" stroke="#6E4D8F"/>
+<polyline points="860.0,380.0 860.0,390.0 720.0,390.0 720.0,430.0" fill="none" stroke="#2A4674" stroke-width="2.0"/>
+<polygon points="720.0,430.0 715.3,421.2 724.7,421.2" fill="#2A4674" stroke="#2A4674"/>
+<polyline points="155.0,140.0 155.0,430.0" fill="none" stroke="#B07D2B" stroke-width="2.0"/>
+<polygon points="155.0,430.0 150.3,421.2 159.7,421.2" fill="#B07D2B" stroke="#B07D2B"/>
+<polyline points="155.0,465.0 160.0,465.0 160.0,510.0 870.0,510.0 870.0,460.0 1000.0,460.0 1000.0,465.0" fill="none" stroke="#B07D2B" stroke-width="2.0"/>
+<polygon points="1000.0,465.0 995.3,456.2 1004.7,456.2" fill="#B07D2B" stroke="#B07D2B"/>
+<polyline points="1000.0,500.0 1000.0,570.0" fill="none" stroke="#B07D2B" stroke-width="2.0"/>
+<polygon points="1000.0,570.0 995.3,561.2 1004.7,561.2" fill="#B07D2B" stroke="#B07D2B"/>
+<polyline points="720.0,500.0 720.0,570.0" fill="none" stroke="#2A4674" stroke-width="2.0"/>
+<polygon points="720.0,570.0 715.3,561.2 724.7,561.2" fill="#2A4674" stroke="#2A4674"/>
+<polyline points="840.0,605.0 880.0,605.0" fill="none" stroke="#3E7A5E" stroke-width="2.0"/>
+<polygon points="880.0,605.0 871.2,609.7 871.2,600.3" fill="#3E7A5E" stroke="#3E7A5E"/>
+<polyline points="310.0,605.0 270.0,605.0" fill="none" stroke="#3E7A5E" stroke-width="2.0"/>
+<polygon points="270.0,605.0 278.8,600.3 278.8,609.7" fill="#3E7A5E" stroke="#3E7A5E"/>
+<polyline points="540.0,605.0 600.0,605.0" fill="none" stroke="#3E7A5E" stroke-width="2.0"/>
+<polygon points="600.0,605.0 591.2,609.7 591.2,600.3" fill="#3E7A5E" stroke="#3E7A5E"/>
+<polyline points="1260.0,500.0 1260.0,570.0" fill="none" stroke="#2C6E7F" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="1260.0,570.0 1255.3,561.2 1264.7,561.2" fill="#2C6E7F" stroke="#2C6E7F"/>
+<polyline points="1160.0,605.0 1120.0,605.0" fill="none" stroke="#2C6E7F" stroke-width="2.0" stroke-dasharray="6 4"/>
+<polygon points="1120.0,605.0 1128.8,600.3 1128.8,609.7" fill="#2C6E7F" stroke="#2C6E7F"/>
+<text x="596.0" y="31.8" font-family="Liberation Sans, Arial, sans-serif" font-size="10" font-weight="normal" font-style="normal" fill="#6E4D8F" text-anchor="start">SCA 2.2.2 / REDHAWK</text>
+<text x="36.0" y="536.8" font-family="Liberation Sans, Arial, sans-serif" font-size="10" font-weight="normal" font-style="normal" fill="#3E7A5E" text-anchor="start">PL / RF — contracts undefined</text>
+<text x="80.0" y="709.8" font-family="Liberation Sans, Arial, sans-serif" font-size="10" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">control plane</text>
+<text x="310.0" y="709.8" font-family="Liberation Sans, Arial, sans-serif" font-size="10" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">SCA / CORBA</text>
+<text x="540.0" y="709.8" font-family="Liberation Sans, Arial, sans-serif" font-size="10" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">data plane</text>
+<text x="770.0" y="709.8" font-family="Liberation Sans, Arial, sans-serif" font-size="10" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">time plane</text>
+<text x="1000.0" y="709.8" font-family="Liberation Sans, Arial, sans-serif" font-size="10" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">PL / RF</text>
+</svg>
