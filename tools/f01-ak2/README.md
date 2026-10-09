@@ -23,6 +23,7 @@ command in `sg docker -c '...'`.
 | `profiles/*.env` | Waveform profiles: RATE, DELAY, JITTER, LOSS, MTU |
 | `topologies/*.txt` | Node pairs that cannot hear each other |
 | `maoi_bridge.py` | Sends the mesh's OLSRd2 links to the MA-OI topology view |
+| `topo_web.py` | Read-only web page with the live topology, routes and link changes |
 
 ## How the mesh works
 
@@ -229,7 +230,28 @@ The bridge also prints each node's links and route count to its terminal.
 After `./mesh.sh link-down B C`, the B-C link goes in about 20 s and C shows
 OFFLINE. After `link-up` it comes back.
 
-## 9. Stop
+## 9. Topology web page
+
+`topo_web.py` serves a small read-only web page with the live topology:
+
+- **Graph:** nodes with their IPs, and links as OLSRd2 reports them. A link is
+  green when both ends see it as symmetric, orange otherwise.
+- **Routes:** each node's kernel routes to the other nodes, with the next hop.
+- **Link changes:** a log with UTC timestamps, for example
+  `link B-C: good -> none`.
+
+It reads the mesh once a second and serves every browser from that reading.
+It uses only the Python standard library.
+
+```bash
+./topo_web.py                    # this PC only: http://127.0.0.1:8000/
+./topo_web.py --host 0.0.0.0     # other machines on the LAN: http://<this-pc-ip>:8000/
+```
+
+The page has no login. Only use `--host 0.0.0.0` on a trusted network.
+`--port` changes the port.
+
+## 10. Stop
 
 ```bash
 ./mesh.sh down

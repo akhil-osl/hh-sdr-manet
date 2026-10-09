@@ -14,7 +14,7 @@ ts()  { date -u +%H:%M:%S.%3N; }
 log() { echo "$(ts) mesh $*"; }
 
 node_ip()  { local i; i=$(printf '%d' "'$1"); echo "10.99.0.$((i - 64 + 10))"; }
-nodes()    { $DOCKER ps --filter "name=^${PREFIX}" --format '{{.Names}}' | sed "s/^${PREFIX}//" | sort; }
+nodes()    { $DOCKER ps "$@" --filter "name=^${PREFIX}" --format '{{.Names}}' | sed "s/^${PREFIX}//" | sort; }
 dx()       { local n=$1; shift; $DOCKER exec "${PREFIX}${n}" "$@"; }
 dxi()      { local n=$1; shift; $DOCKER exec -i "${PREFIX}${n}" "$@"; }
 node_mac() { dx "$1" cat /sys/class/net/eth0/address; }
@@ -51,7 +51,7 @@ cmd_up() {
     [ "$count" -ge 2 ] && [ "$count" -le 26 ] || die "node count must be 2..26"
     [ -f "$topo" ] || topo="$HERE/topologies/$topo.txt"
     [ -f "$topo" ] || die "no topology $2"
-    [ -z "$(nodes)" ] || die "mesh already up; run '$0 down' first"
+    [ -z "$(nodes -a)" ] || die "mesh already up or left stopped; run '$0 down' first"
 
     $DOCKER network inspect "$NET" >/dev/null 2>&1 || \
         $DOCKER network create --internal --subnet "$SUBNET" "$NET" >/dev/null
@@ -92,7 +92,7 @@ NFT
 
 cmd_down() {
     local n
-    for n in $(nodes); do $DOCKER rm -f "${PREFIX}${n}" >/dev/null; done
+    for n in $(nodes -a); do $DOCKER rm -f "${PREFIX}${n}" >/dev/null; done
     $DOCKER network rm "$NET" >/dev/null 2>&1 || true
     log "down"
 }
