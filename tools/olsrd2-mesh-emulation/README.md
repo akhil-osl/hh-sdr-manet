@@ -7,7 +7,7 @@ and carries traffic, before any radio exists.
 All commands run from this folder:
 
 ```bash
-cd tools/f01-ak2
+cd tools/olsrd2-mesh-emulation
 ```
 
 If your user is not yet in the `docker` group for this login, wrap each
