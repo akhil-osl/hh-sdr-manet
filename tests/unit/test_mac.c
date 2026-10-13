@@ -64,6 +64,7 @@ static void rx_pdu(hh_node_id_t src, hh_node_id_t dst, const char *text, uint32_
     hh_mac_on_rx(&mac, &p);
 }
 
+/* Default settings are correct; out-of-range settings are refused. */
 static void test_config_defaults_and_limits(void)
 {
     hh_mac_config_t cfg;
@@ -85,6 +86,7 @@ static void test_config_defaults_and_limits(void)
     hh_log_reset();
 }
 
+/* A frame comes out of the queue exactly as it went in. */
 static void test_enqueue_dequeue_unchanged(void)
 {
     hh_mac_tx_frame_t f;
@@ -101,6 +103,7 @@ static void test_enqueue_dequeue_unchanged(void)
     HH_ASSERT(!hh_mac_next_pdu(&mac, &f));
 }
 
+/* Within one class queue, the oldest frame goes first. */
 static void test_fifo_within_class(void)
 {
     setup();
@@ -108,6 +111,7 @@ static void test_fifo_within_class(void)
     for (uint8_t i = 1; i <= 5; i++) HH_ASSERT_EQ_INT(next_tag(), i);
 }
 
+/* Control goes before data, even data sent earlier. */
 static void test_control_before_data(void)
 {
     setup();
@@ -121,6 +125,7 @@ static void test_control_before_data(void)
     HH_ASSERT_EQ_INT(next_tag(), 2);
 }
 
+/* A full queue returns TRY_AGAIN and drops nothing already queued. */
 static void test_overflow_try_again_nothing_evicted(void)
 {
     hh_mac_config_t cfg;
@@ -146,6 +151,7 @@ static void test_overflow_try_again_nothing_evicted(void)
     HH_ASSERT_EQ_INT(next_tag(), 0xFF);
 }
 
+/* Of 1000 sends, only 64 data and 16 control frames are accepted. */
 static void test_queue_bounded_at_configured_depth(void)
 {
     int accepted = 0;
@@ -160,6 +166,7 @@ static void test_queue_bounded_at_configured_depth(void)
     HH_ASSERT_EQ_INT(accepted, 16);
 }
 
+/* Starvation limit off: data waits while control keeps coming. */
 static void test_strict_priority_starves_data_when_off(void)
 {
     setup();
@@ -171,6 +178,7 @@ static void test_strict_priority_starves_data_when_off(void)
     HH_ASSERT_EQ_INT(next_tag(), 1);
 }
 
+/* Starvation limit 3: data gets every 4th slot. */
 static void test_starvation_limit_gives_data_a_share(void)
 {
     hh_mac_config_t cfg;
@@ -195,6 +203,7 @@ static void test_starvation_limit_gives_data_a_share(void)
     HH_ASSERT_EQ_INT(data_seen, 3);
 }
 
+/* Starvation limit on, no data waiting: control goes every slot. */
 static void test_starvation_limit_does_not_delay_control_without_data(void)
 {
     hh_mac_config_t cfg;
@@ -206,6 +215,7 @@ static void test_starvation_limit_does_not_delay_control_without_data(void)
     for (int i = 0; i < 5; i++) HH_ASSERT_EQ_INT(next_tag(), 9);
 }
 
+/* Each wrong call gets the right refusal code and is counted. */
 static void test_refusals_and_counters(void)
 {
     hh_mac_status_t st;
@@ -237,6 +247,7 @@ static void test_refusals_and_counters(void)
     HH_ASSERT_EQ_INT(st.queue_depth[HH_MAC_CLASS_DATA], 3);
 }
 
+/* Outside STEADY nothing goes to MAC logic; queued frames are kept. */
 static void test_no_pdu_outside_steady_frames_kept(void)
 {
     setup();
@@ -247,6 +258,7 @@ static void test_no_pdu_outside_steady_frames_kept(void)
     HH_ASSERT_EQ_INT(next_tag(), 1);
 }
 
+/* Close discards and counts queued frames; a second Close is safe. */
 static void test_close_discards_and_is_safe_twice(void)
 {
     hh_mac_status_t st;
@@ -267,6 +279,7 @@ static void test_close_discards_and_is_safe_twice(void)
     HH_ASSERT_EQ_INT(st.state, HH_MAC_WAIT_TIME);
 }
 
+/* Received frames come up only on collect, and only for this node or broadcast. */
 static void test_receive_only_on_collect_with_filter(void)
 {
     hh_mac_rx_frame_t f;
@@ -301,6 +314,7 @@ static void test_receive_only_on_collect_with_filter(void)
     HH_ASSERT_EQ_INT(st.frames_rx, 2);
 }
 
+/* A full receive buffer drops the newest frame and counts it. */
 static void test_rx_overflow_drops_newest(void)
 {
     hh_mac_config_t cfg;
@@ -325,6 +339,7 @@ static void test_rx_overflow_drops_newest(void)
     HH_ASSERT(!got);
 }
 
+/* Frames received in LISTEN are not delivered by default. */
 static void test_rx_outside_steady_not_delivered_by_default(void)
 {
     hh_mac_rx_frame_t f;
@@ -341,6 +356,7 @@ static void test_rx_outside_steady_not_delivered_by_default(void)
     HH_ASSERT(!st.operational_known);
 }
 
+/* Unknown neighbour gives NOT_FOUND; averaged values are not valid. */
 static void test_link_report_valid_flags(void)
 {
     hh_mac_link_report_t r;
@@ -360,6 +376,7 @@ static void test_link_report_valid_flags(void)
     HH_ASSERT(!r.per.valid);
 }
 
+/* A full neighbour table counts the overflow and does not grow. */
 static void test_neighbor_table_bounded(void)
 {
     hh_mac_status_t st;
@@ -371,6 +388,7 @@ static void test_neighbor_table_bounded(void)
     HH_ASSERT_EQ_INT(st.neighbor_table_full, 5);
 }
 
+/* Status gives the right operational flag and counts CRC failures. */
 static void test_status_operational(void)
 {
     hh_mac_status_t st;
@@ -386,6 +404,7 @@ static void test_status_operational(void)
     HH_ASSERT_EQ_INT(st.rx_crc_fail, 1);
 }
 
+/* NULL arguments do not crash. */
 static void test_null_safety(void)
 {
     hh_mac_tx_frame_t f;
