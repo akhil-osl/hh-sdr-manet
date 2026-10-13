@@ -35,6 +35,30 @@ hh_add_test(test_node        unit/test_node.c)
 hh_add_test(test_status_events unit/test_status_events.c)
 hh_add_test(test_interface_compliance unit/test_interface_compliance.c)
 
+# Not hh_add_test: these must link without hhsdr_core, so the linker
+# catches any dependency on the legacy stack.
+add_library(hhemu STATIC sim/mock_radio.c sim/emu_medium.c)
+target_link_libraries(hhemu PUBLIC hhsdr_core_base)
+
+foreach(t test_netif:unit/test_netif.c
+          test_netif_emulation:integration/test_netif_emulation.c)
+  string(REPLACE ":" ";" parts ${t})
+  list(GET parts 0 name)
+  list(GET parts 1 src)
+  add_executable(${name} ${src})
+  target_link_libraries(${name} PRIVATE hhsdr_netif hhemu)
+  add_test(NAME ${name} COMMAND ${name})
+endforeach()
+
+# Protocol codec test. Lives with the codec under protocol/, and links
+# hhsdr_protocol rather than reaching into the daemon.
+add_executable(test_rc_protocol ${CMAKE_SOURCE_DIR}/protocol/tests/test_rc_protocol.c)
+target_link_libraries(test_rc_protocol PRIVATE hhsdr_protocol)
+add_test(NAME test_rc_protocol COMMAND test_rc_protocol)
+
+# radiod's and radioctl's own tests are registered by their component
+# CMakeLists, alongside the code they exercise.
+
 # Tests for the simulation tooling itself. Needs the tools/sim sources, which
 # are development tooling and never linked into the production library.
 add_executable(test_simui unit/test_simui.c ${CMAKE_SOURCE_DIR}/tools/sim/simui.c)

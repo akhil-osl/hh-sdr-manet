@@ -4,6 +4,16 @@ A C11 implementation of a self-healing mobile ad-hoc network (MANET) control
 plane, data plane, and radio abstraction — the application/control-software
 and networking portion of the HH-SDR software-defined radio architecture.
 
+> **New here?** Read [ARCHITECTURE.md](ARCHITECTURE.md) first — it maps how
+> every component relates, and what is built versus still blocked.
+
+> **Routing engine (2026-10-08):** OLSRv2, run by OLSRd2 (OONF) as an
+> external Linux routing daemon. HH-SDR provides the network-interface
+> adapter `hh_netif` (`src/netif/`) between the Linux interface and the
+> radio abstraction. The self-healing distance-vector stack described below
+> is kept as the legacy reference and simulator workload. See
+> ARCHITECTURE.md, "OLSRv2: who owns routing", and `unknown.md` U-09, U-24.
+
 ---
 
 ## Overview
@@ -121,17 +131,38 @@ stack changes.
 
 ## Repository structure
 
+The radio-control plane is organised as self-contained components, each with
+its own headers, sources, tests and `CMakeLists.txt`. Dependencies flow one
+way: `radioctl -> librc -> protocol`, and `radiod -> protocol`. A client never
+links the daemon.
+
 ```
+radiod/                 The radio-control daemon (control plane)
+  include/hhsdr/radiod/  radiod.h, config.h, events.h, mock_backend.h
+  src/                   radiod.c, config.c, events.c
+    backends/            mock_backend.c, hw_adapter.c (stub)
+  radiod_main.c          daemon entry point
+  tests/
+
+librc/                  Radio-control client library — depends on protocol only
+radioctl/               Radio-control CLI — depends on librc only
+protocol/               Control-protocol codec, shared by daemon and clients
+
+drivers/                EMPTY — manet0 net_device, radio clock/PHC (see unknown.md)
+workers/                EMPTY — OpenCPI RCC workers (see unknown.md)
+fpga/                   EMPTY — PL/FPGA fabric (see unknown.md)
+
 include/hhsdr/          Public headers
   core/                 types, sequence arithmetic, clock, log, config, events, dispatcher
   radio/                radio.h — the hardware abstraction; wire format
-  manet/                discovery, neighbor, link_health, routing, route_table,
-                        failure_detector, topology, self_healing, node, telemetry
-  dataplane/            forwarder.h — the fast path
+  netif/                netif.h — network interface ↔ radio adapter (OLSRv2 path)
+  manet/                legacy stack: discovery, neighbor, link_health, routing,
+                        route_table, failure_detector, topology, self_healing,
+                        node, telemetry
+  dataplane/            forwarder.h — the legacy stack's fast path
   sca/                  resource.h — SCA 2.2.2 compatibility layer
 
 src/                    Implementations, mirroring include/
-  adapters/hw/           hardware radio adapter
   main.c                 hh-manet daemon entry point
 
 tests/
