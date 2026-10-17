@@ -2,8 +2,8 @@
 
 | Item | Value |
 |---|---|
-| Version | 1.0 |
-| Date | 2026-10-01 |
+| Version | 1.2 |
+| Date | 2026-10-15 |
 | Status | Issued for review by the logic, software and network owners |
 
 ## Revision history
@@ -11,6 +11,8 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-10-01 | First issue |
+| 1.1 | 2026-10-15 | Time source: GNSS or an external GNSS feed, otherwise network time from a member with better time quality (section 8.5, OI-9). Replaces "GNSS only" |
+| 1.2 | 2026-10-15 | Slot conflict costs only the conflicting slot, declared on positive evidence; LISTEN only when it was the last own slot (section 9.1) |
 
 ## Contents
 
@@ -38,6 +40,7 @@
   - [8.2 Inside a slot](#82-inside-a-slot)
   - [8.3 Timing precision requirement](#83-timing-precision-requirement)
   - [8.4 Holdover](#84-holdover)
+  - [8.5 Network time](#85-network-time)
 - [9. State machine](#9-state-machine)
   - [9.1 States](#91-states)
   - [9.2 Network entry](#92-network-entry)
@@ -93,21 +96,23 @@ flowchart TB
 | Software | Code running on the processor under Linux |
 | `mac_pl` | The MAC timing engine in logic: slot timer, slot gating, PDU CRC, hop-synchronous framing, MANET STROBE |
 | `mac_ps` | The MAC policy in software |
-| Time base | Counters in logic for superframe, frame, slot, hop and fine time, disciplined by GNSS 1PPS |
+| Time base | Counters in logic for superframe, frame, slot, hop and fine time, disciplined by GNSS 1PPS, or by network time when GNSS is not available |
+| Net time | The one time all nodes use for superframe numbers and the hop pattern |
+| Time quality (q) | A node's own time source class and estimated error. Carried in beacons (section 8.5) |
 | `fh_controller` | Logic block that retunes the local oscillator on each hop, with a trigger and acknowledge handshake |
 | `rf_ctrl_fsm` | Logic state machine for RF state: RF_OFF, RX_PREP, RX, TX_PREP, TX, TURNAROUND, FAULT, SAFE |
 | MANET STROBE | Signal from `mac_pl` that commands RF state |
 | PDU | One MAC unit carried in one slot |
 | Dwell | Time spent on one hop frequency |
 | Slot, frame, superframe | Nested time divisions, defined in section 8 |
-| ε | The largest error of a node's time base against GNSS time |
+| ε | The largest error of a node's time base against net time |
 
 ## 3. Known inputs
 
 | Input | Value |
 |---|---|
 | Hop rate | 1000 hop/s, so one dwell is 1 ms |
-| Time source | GNSS 1PPS only. There is no network time fallback |
+| Time source | GNSS 1PPS (IRNSS by default, user selectable) or an external GNSS feed. Without either, network time from a member with better time quality (section 8.5). Required by the RFI synchronisation clause (Non-negotiable) |
 | RF state authority | MANET STROBE is the only RF state authority. `rf_ctrl_fsm` may add safety but never contradict it |
 | Network layer frame | Kind (beacon, routing, data), source id, destination id (0 means broadcast), payload up to 512 bytes |
 | Network layer metrics per received frame | RSSI, SNR, packet error rate, PHY errors. Each with a flag that says whether it is valid |
@@ -120,9 +125,11 @@ Three consequences follow, and they shape the rest of the design.
 1. **The MAC needs half-duplex burst operation.** All nodes share one
    frequency per hop and take turns to transmit. The current waveform
    transmits continuously, so a burst-mode modem is needed (OI-2).
-2. **Without GNSS, a node can neither transmit nor receive.** The hop pattern
-   is keyed to GNSS time, so a node without GNSS time does not know which
-   frequency to listen on.
+2. **Without time, a node can neither transmit nor receive.** The hop pattern
+   is keyed to net time, so a node without time does not know which
+   frequency to listen on. Without GNSS it takes time from a member
+   (section 8.5). How a node with no time first hears a member is open
+   (OI-9).
 3. **A network layer frame may not fit one PHY frame.** The network layer
    allows 512 bytes and the current PHY frame carries 280. The MAC must
    fragment, or the slot must carry a larger PDU, or the network layer limit
@@ -144,7 +151,7 @@ Three consequences follow, and they shape the rest of the design.
    software fault never harms other nodes.
 6. **STROBE is the only RF authority.** Software never drives T/R switching
    or RF state.
-7. **Every counter is stamped with GNSS time.** Records from different nodes
+7. **Every counter is stamped with net time.** Records from different nodes
    can then be lined up against each other.
 8. **Planes stay separate.** PDUs never travel over the radio control channel,
    and timing never waits behind control messages.
@@ -440,7 +447,7 @@ design value.
 
 ### 8.3 Timing precision requirement
 
-Each node places its slot edges from its own copy of GNSS time, with an error
+Each node places its slot edges from its own copy of net time, with an error
 of at most ε. A burst from node A reaches node B shifted by up to:
 
 ```text
@@ -476,6 +483,7 @@ The same ε applies to the hop instant: two nodes hop together to within 2ε.
 | GNSS 1PPS error | TBD, set by the receiver chosen (OI-7) |
 | Time base discipline error | TBD (OI-7) |
 | Drift during holdover | Section 8.4 |
+| Network time error, growing with each hop | Section 8.5 (OI-9) |
 | Slot edge rounding to one logic clock | Fixed once the logic clock is chosen |
 
 T_guard, T_turnaround and d_max are TBD (OI-1, OI-2). Once they are known, ε
@@ -498,9 +506,32 @@ The node may keep transmitting until ε(t) reaches the budget from 8.3:
 t_holdover = ( ε_budget − ε_lock ) / drift
 ```
 
-Drift depends on the oscillator, which is TBD (OI-7). GNSS is the only time
-source, so when the holdover limit is reached the node must stop
-transmitting.
+Drift depends on the oscillator, which is TBD (OI-7). Before the holdover
+limit is reached, the node takes network time from a member with better time
+quality if it hears one (section 8.5). If it hears none, it must stop
+transmitting at the limit.
+
+### 8.5 Network time
+
+A net must keep running, and nodes must still join, when GNSS is jammed or
+denied. Sources, in order of preference: own GNSS, an external GNSS feed,
+network time from a member, own holdover.
+
+Rules:
+
+1. Members carry the superframe number, time of day and their time quality
+   q in their beacons.
+2. A node without GNSS or an external feed takes time only from an
+   authenticated member whose q is strictly better than its own, so time
+   cannot loop between nodes.
+3. q gets worse with each hop of network time.
+4. A node on network time uses a wider guard (section 8.3).
+5. A node that gets GNSS back returns to GNSS time at a superframe boundary,
+   without moving its slot edges by more than the guard.
+
+Open (OI-9): the q scale, the beacon fields, a hop limit, the guard for each
+q, the external feed input, how a node with no time finds the net, and which
+node starts net time when no node has GNSS.
 
 ## 9. State machine
 
@@ -510,13 +541,13 @@ transmitting.
 stateDiagram-v2
     [*] --> OFF
     OFF --> WAIT_TIME: enable
-    WAIT_TIME --> LISTEN: GNSS locked and time base disciplined
+    WAIT_TIME --> LISTEN: time base in budget, GNSS or network time
     LISTEN --> ENTRY: listened for N superframes
     ENTRY --> STEADY: own slot confirmed
     ENTRY --> LISTEN: slot conflict or entry timeout
-    STEADY --> LISTEN: slot conflict detected
+    STEADY --> LISTEN: conflict on last own slot
     STEADY --> HOLDOVER: 1PPS lost
-    HOLDOVER --> STEADY: 1PPS back, error within budget
+    HOLDOVER --> STEADY: 1PPS back or network time, error within budget
     HOLDOVER --> LOST: holdover limit reached
     LOST --> WAIT_TIME: re-entry
     WAIT_TIME --> SAFE: fault
@@ -531,24 +562,32 @@ stateDiagram-v2
 | State | TX | RX | Moved on by | Leaves when | TBD |
 |---|---|---|---|---|---|
 | OFF | No | No | Software | Enabled | |
-| WAIT_TIME | No | No | Logic reports, software decides | GNSS locked and time base within budget | Lock criteria (OI-7) |
+| WAIT_TIME | No | Only to take network time | Logic reports, software decides | Time base within budget, from GNSS or network time | Lock criteria (OI-7), acquisition without time (OI-9) |
 | LISTEN | No | Yes | Software | N superframes heard, slot use known | N (OI-3) |
 | ENTRY | Entry or own slot only | Yes | Software | Own slot confirmed, or conflict | Entry method (OI-3) |
-| STEADY | Own slots | Yes | Software; logic on sync loss | 1PPS lost, conflict, fault, disable | |
-| HOLDOVER | Own slots | Yes | Logic | 1PPS back, or limit reached | Limit (OI-7) |
+| STEADY | Own slots | Yes | Software; logic on sync loss | 1PPS lost, conflict on its last own slot, fault, disable | |
+| HOLDOVER | Own slots | Yes | Logic | 1PPS back, network time from a better member, or limit reached | Limit (OI-7), network time (OI-9) |
 | LOST | **No, inhibited by logic** | Best effort | Logic stops TX, software starts re-entry | Re-entry begins | |
 | SAFE | No | No | Logic or software on fault | Operator reset | Fault list (OI-8) |
 
 Rules:
 
-- **WAIT_TIME has no RX.** Without GNSS time the node does not know the hop
-  pattern.
+- **WAIT_TIME has no RX on the hop pattern.** Without time the node does not
+  know the pattern. A node without GNSS receives only to take network time
+  (section 8.5).
 - **LOST never goes straight back to STEADY.** A node that lost sync goes
   through WAIT_TIME and LISTEN again, so it never transmits on an old
   schedule.
 - **HOLDOVER returns to STEADY without re-entry** if the error never left the
-  budget. Whether the time base then steps or slews back to GNSS time is TBD
-  (OI-7). Either way, the correction is applied at a superframe boundary.
+  budget. Whether the time base then steps or slews back to GNSS or network
+  time is TBD (OI-7). Either way, the correction is applied at a superframe
+  boundary.
+- **A slot conflict costs only that slot.** A conflict is declared only on
+  positive evidence, such as a neighbour announcing the same slot. CRC
+  failures alone are not a conflict: a late burst from a far node or a
+  hidden-node collision looks the same. The node gives up the conflicting
+  slot and stays in STEADY on its other own slots. It moves to LISTEN only
+  if that was its last own slot.
 - **Logic moves into LOST and inhibits TX** within one slot. Software learns
   of it from the event.
 - **STROBE drives RF state in every state.** In OFF, WAIT_TIME, LOST and SAFE
@@ -600,7 +639,7 @@ sequenceDiagram
 
 ## 10. Counters and diagnostics
 
-Every counter snapshot carries the superframe number (GNSS time), the
+Every counter snapshot carries the superframe number (net time), the
 schedule version and the hopset id. With these, records from every node in a
 failing network can be lined up slot by slot. That turns a multi-node failure
 from a guess into a diagnosis.
@@ -685,6 +724,7 @@ flowchart TB
 | OI-6 | Frame preparation slack: how far ahead Linux software can prepare frames on the board | Software |
 | OI-7 | Time base: GNSS receiver 1PPS accuracy, lock criteria, discipline error, oscillator drift, holdover limit, step or slew on 1PPS return | Logic and hardware |
 | OI-8 | Fault list for SAFE: which faults stop the MAC and how they are reported | System |
+| OI-9 | Network time: time quality scale, beacon fields, hop limit, guard for each quality, external GNSS feed input, acquisition by a node with no time, who starts net time when no node has GNSS | System and logic |
 
 ## 12. Sign-off
 
@@ -693,7 +733,7 @@ their open items.
 
 | Owner | Accepts | Answers |
 |---|---|---|
-| Logic | Sections 5, 7, 8, the logic parts of 9, and 10.2. Rules 3 to 6 | OI-1 guard, OI-2, OI-4, OI-5, OI-7 |
+| Logic | Sections 5, 7, 8, the logic parts of 9, and 10.2. Rules 3 to 6 | OI-1 guard, OI-2, OI-4, OI-5, OI-7, OI-9 |
 | Software | Sections 6, 7, 9 and 10.3. Rules 2, 3 and 7 | OI-6 |
 | Network | Section 6 and the candidate frame structure | OI-1 nodes and range, OI-3 |
 
