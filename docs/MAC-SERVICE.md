@@ -3,41 +3,55 @@
 | Item | Value |
 |---|---|
 | Task | F02-AK-2, MAC to network interface code skeleton |
-| Implements | MAC to network layer interface note (MAC-NETWORK-INTERFACE, F01-AK-3, version 1.0) |
+| Implements | MAC to network layer interface specification, version 1.1 (`docs/MAC-NETWORK-INTERFACE.md`) |
 | Code | `include/hhsdr/mac/mac.h`, `src/mac/mac.c` |
-| Tests | `tests/unit/test_mac.c` (19 cases, run by ctest) |
+| Tests | `tests/unit/test_mac.c` (30 cases, run by ctest) |
 | Library | `hhsdr_mac` (links `hhsdr_core_base` only) |
 | Status | Skeleton. Both sides are callable; neither is joined to real code yet |
 
 ## 1. What was done
 
-The interface note says what the MAC offers the network layer: seven
-operations, two priority classes, queue rules, a receive buffer, status and
-link metrics. This task turns that into C code with unit tests.
+The interface specification says what the MAC offers the network layer. This
+code turns version 1.1 of it into C with unit tests. Version 1.0 of the code
+(2026-10-13) had two classes and collected delivery; it was updated to 1.1 on
+2026-10-22.
 
 What exists now:
 
-- The seven operations of the note: Open, Close, Send, Receive (collect),
-  Status, Link metrics, Channel select.
-- One bounded first-in, first-out queue per class: control (beacon and
-  routing frames) and data.
-- Priority: control before data, with an optional limit so data is not
-  starved.
-- A bounded receive buffer, filled from the MAC logic side and emptied only
-  when the network layer collects.
-- Per-frame metrics (RSSI, SNR, PER) and a per-neighbour link report, every
-  value with a valid flag.
-- Status with the MAC state and counters for every refusal and drop.
-- Unit tests for all of the above.
+- The operations of specification section 6: Open, Close, Send, Receive
+  (pushed), Status, Link metrics, Net preset select.
+- Five traffic classes in the order CONTROL > EMERGENCY > VOICE > VIDEO >
+  DATA, one bounded first-in, first-out queue each, with the drop policy of
+  specification section 9.1: voice and video drop their oldest frame when
+  full, the others refuse with `TRY_AGAIN`.
+- A lifetime per frame. A frame not sent in time is discarded and counted.
+- Transmit inhibit: Send returns `TX_INHIBITED` and nothing goes to logic.
+- A control cap (token bucket) and a minimum share for user traffic
+  (specification section 10.4). Both are off by default because their values
+  are open (DP-10).
+- Push delivery of received frames and events through one callback. If the
+  network layer cannot take a delivery, the MAC holds it in a holding buffer
+  per class that drops the oldest frame when full.
+- The address filter: this node, broadcast (0) and any group id.
+- Events: neighbour heard, link report, state changed, transmit inhibit on
+  and off, break-in on and off, own slots changed, parameters changed, entry
+  failed.
+- Per-frame metrics (RSSI, SNR, RX gain, arrival offset) and a per-neighbour
+  record, each value with a valid bit, in the units of specification section
+  8.5.
+- Status with the fields of specification section 19 that the MAC can fill
+  today, and counters for every refusal and drop.
 
 What does not exist yet:
 
-- The real MAC logic in the programmable logic (slots, CRC, RF). The skeleton
-  gives it three entry points; nothing calls them except the tests.
-- The real network layer on top. Joining `hh_mac` to `hh_netif` and OLSRd2 is
-  planned for F03.
-- Link metric averaging, a PER definition, metric units and channel select.
-  These are open in the note and marked `TODO` in the code.
+- The real MAC logic (slots, CRC, RF) and the real network layer. The tests
+  stand in for both. Joining `hh_mac` to `hh_netif` and OLSRd2 is planned for
+  F03.
+- Anything that needs slot ownership (OI-3) or the on-air header (OI-2):
+  the neighbour silent event, PER, the CRC fail count per neighbour, per-hop
+  retransmission for data, and several frames per slot. Each is a `TODO`.
+- Averaged RSSI and SNR. The averaging method is open (DP-6), so these stay
+  not valid.
 
 ## 2. Where it sits
 
@@ -46,36 +60,37 @@ What does not exist yet:
 flowchart TB
     NET["Network layer<br/>today: unit tests<br/>later (F03): hh_netif, OLSRd2"]
     subgraph MAC["hh_mac (MAC software)"]
-        Q["Control queue | Data queue"]
-        RX["Receive buffer"]
+        Q["Five class queues<br/>control cap, minimum share"]
+        RX["Holding buffer per class<br/>and event queue"]
         NB["Neighbour table, status counters"]
     end
     LOGIC["MAC logic (slots, CRC, RF)<br/>today: unit tests<br/>later: real logic binding"]
     NET -->|"hh_mac_send()"| Q
-    RX -->|"hh_mac_collect()"| NET
+    RX -->|"receive callback"| NET
     NB -->|"hh_mac_status(), hh_mac_link_metrics()"| NET
     Q -->|"hh_mac_next_pdu()"| LOGIC
-    LOGIC -->|"hh_mac_on_rx(), hh_mac_on_crc_fail()"| RX
-    LOGIC -->|"hh_mac_set_state()"| NB
+    LOGIC -->|"hh_mac_on_rx(), hh_mac_on_*()"| RX
+    LOGIC -->|"hh_mac_set_*()"| NB
 ```
 
-The network layer calls the top seven functions. MAC logic calls the bottom
-four. `hh_mac` never calls out to either side: frames go down only when logic
-asks for one, and come up only when the network layer collects.
+The network layer calls the operations and gives one receive callback. MAC
+logic asks for a frame before each own slot, hands up every CRC-good frame,
+and reports what it observes. The MAC pushes frames and events up through the
+callback as soon as they occur.
 
 ## 3. Files
 
 | File | Content |
 |---|---|
 | `include/hhsdr/mac/mac.h` | All public types, the configuration, and every function |
-| `src/mac/mac.c` | The implementation: queues, priority, receive path, neighbour table, status |
+| `src/mac/mac.c` | The implementation |
 | `tests/unit/test_mac.c` | Unit tests |
 | `CMakeLists.txt` | Builds library `hhsdr_mac` |
 | `tests/CMakeLists.txt` | Builds and registers `test_mac` |
 
-`mac.h` includes `hhsdr/core/types.h` (node id, basic types) and
-`hhsdr/radio/radio.h` (only for `hh_frame_kind_t`, so frame kinds are the same
-everywhere in the project).
+`mac.h` includes `hhsdr/core/types.h`, `hhsdr/core/clock.h` (the injected
+clock used for lifetimes, the control cap and time in holdover) and
+`hhsdr/radio/radio.h` (only for `hh_frame_kind_t`).
 
 ## 4. Types in `mac.h`
 
@@ -83,77 +98,87 @@ everywhere in the project).
 
 | Name | Value | Meaning |
 |---|---|---|
-| `HH_MAC_PAYLOAD_MAX` | 512 | Largest payload, in bytes. The current network limit; it may change |
-| `HH_MAC_QUEUE_CAP` | 128 | Most frames one class queue can ever hold |
-| `HH_MAC_RXBUF_CAP` | 64 | Most frames the receive buffer can ever hold |
-| `HH_MAC_NEIGHBOR_CAP` | 32 | Most neighbours tracked |
-| `HH_MAC_BROADCAST` | 0 | Broadcast destination id |
+| `HH_MAC_PAYLOAD_MAX` | 1532 | Largest payload the buffers can hold. The larger target of OI-2. The configured default is 1280, the IPv6 minimum link MTU |
+| `HH_MAC_TX_POOL_CAP` | 256 | Frames shared by all transmit queues. The configured depths must add up to no more than this |
+| `HH_MAC_RX_POOL_CAP` | 128 | Frames shared by all holding buffers |
+| `HH_MAC_EVENT_CAP` | 32 | Events waiting for delivery. When full, the oldest is dropped and counted |
+| `HH_MAC_NEIGHBOR_CAP` | 32 | Neighbours tracked |
+| `HH_MAC_BROADCAST` | 0 | Broadcast id |
+| `HH_MAC_GROUP_FIRST`, `HH_MAC_GROUP_LAST` | 0xF0000000, 0xFFFFFFFE | Group id range |
+| `HH_MAC_ID_RESERVED` | 0xFFFFFFFF | Reserved id |
 
-These caps fix the memory size at build time. The configuration sets the
-working values below them.
+Frames live in two shared pools, so memory is fixed at build time and does
+not grow with the number of classes. `hh_mac_t` is about 600 KB. Put it in
+static memory or a long-lived object, not on a stack.
 
 ### 4.2 Enumerations
 
 | Type | Values | Used for |
 |---|---|---|
-| `hh_mac_result_t` | `OK`, `ACCEPTED`, `TRY_AGAIN`, `WRONG_STATE`, `TOO_LARGE`, `INVALID_ARGUMENT`, `INVALID_CONFIG`, `NOT_OPEN`, `NOT_FOUND`, `UNSUPPORTED`, `FAULT` | Return value of every network-side call. Names are the note's logical names. `ACCEPTED` is Send's success; the other calls return `OK` |
-| `hh_mac_state_t` | `OFF`, `WAIT_TIME`, `LISTEN`, `ENTRY`, `STEADY`, `HOLDOVER`, `LOST`, `SAFE` | The MAC state of the note. Send is accepted only in `STEADY` and `HOLDOVER` |
-| `hh_mac_class_t` | `CONTROL`, `DATA` | Priority class. Derived from the frame kind, never passed by the caller |
+| `hh_mac_result_t` | `OK`, `ACCEPTED`, `TRY_AGAIN`, `WRONG_STATE`, `TX_INHIBITED`, `TOO_LARGE`, `INVALID_ARGUMENT`, `INVALID_CONFIG`, `NOT_OPEN`, `NOT_FOUND`, `UNSUPPORTED`, `FAULT` | Return values, specification section 16.2. `ACCEPTED` is Send's success; the other calls return `OK` |
+| `hh_mac_state_t` | `OFF`, `WAIT_TIME`, `LISTEN`, `ENTRY`, `STEADY`, `HOLDOVER`, `LOST`, `SAFE` | MAC state, specification section 21 |
+| `hh_mac_class_t` | `CONTROL`, `EMERGENCY`, `VOICE`, `VIDEO`, `DATA` | Traffic class. Values 0 to 4 as specification section 8.5 |
+| `hh_mac_inhibit_t` | `NONE`, `SULK`, `ZEROISE`, `FAULT`, `SYNC_LOSS`, `HOLDOVER_LIMIT` | Transmit inhibit reason |
+| `hh_mac_time_source_t` | `GNSS`, `EXTERNAL_GNSS`, `NETWORK`, `HOLDOVER` | Time source in Status |
+| `hh_mac_event_kind_t` | the events of specification section 6.8 | Event kind |
+| `hh_mac_entry_fail_t` | `RETRIES_EXHAUSTED`, `NOT_AUTHORISED` | Reason in `ENTRY_FAILED` |
 
 ### 4.3 Structures
 
 | Type | Who fills it | Content |
 |---|---|---|
-| `hh_mac_metric_t` | `hh_mac` | One measured value plus `valid`. When `valid` is false the value means nothing and must not be used |
-| `hh_mac_frame_metrics_t` | `hh_mac` | Per-frame RSSI, SNR, PER |
-| `hh_mac_tx_frame_t` | `hh_mac`, handed to logic | Kind, source (this node), destination (next hop or broadcast), length, payload |
-| `hh_mac_rx_pdu_t` | MAC logic | A CRC-good frame as received, any destination: kind, source, destination, payload pointer, RSSI, SNR, superframe number |
-| `hh_mac_rx_frame_t` | `hh_mac`, given to the network layer | A received frame for this node or broadcast: kind, source, destination, payload copy, per-frame metrics, receive superframe |
-| `hh_mac_link_report_t` | `hh_mac` | One neighbour: averaged RSSI, SNR, PER (not valid yet), last heard superframe, receive count |
-| `hh_mac_status_t` | `hh_mac` | Operational flag, state, frame counts, queue depths, and counters for every refusal and drop |
-| `hh_mac_config_t` | Caller, before init | Node id, payload limit, queue depths, receive buffer depth, starvation limit, receive-in-all-states switch |
-| `hh_mac_t` | `hh_mac` | The whole MAC instance. The caller owns the memory and never touches the fields directly |
-
-`hh_mac_t` is large (about 150 KB with the default caps), because every
-queue slot holds a full 512-byte payload. Put it in static memory or a
-long-lived object, not on a small stack.
+| `hh_mac_frame_metrics_t` | MAC logic | Flags byte (RSSI, SNR, RX gain and arrival offset valid, RSSI calibrated), RSSI, SNR and RX gain in 0.25 dB steps, arrival offset in ns |
+| `hh_mac_tx_frame_t` | `hh_mac`, handed to logic | Kind, class, source (this node), destination, length, payload |
+| `hh_mac_rx_pdu_t` | MAC logic | A CRC-good frame, any destination: kind, class, source, destination, superframe, metrics, payload pointer |
+| `hh_mac_rx_frame_t` | `hh_mac`, pushed to the network layer | The same fields with a payload copy |
+| `hh_mac_link_report_t` | `hh_mac` | Per-neighbour record of specification section 12.2, with a 16-bit valid flags field |
+| `hh_mac_event_t` | `hh_mac` | Event kind, node, superframe, 32-bit detail, and the record for `LINK_REPORT` |
+| `hh_mac_indication_t` | `hh_mac` | One delivery: a frame or an event |
+| `hh_mac_status_t` | `hh_mac` | Status of specification section 19 and all counters |
+| `hh_mac_config_t` | Caller, before init | Node id, clock, payload limit, queue and holding depths, report period, control cap, minimum share, receive callback |
+| `hh_mac_t` | `hh_mac` | The whole MAC instance. The caller owns the memory and never touches the fields |
 
 ## 5. Functions
 
 ### 5.1 Setup
 
-| Function | Caller | What it does | Results |
-|---|---|---|---|
-| `hh_mac_config_default(cfg, node_id)` | Owner | Fills `cfg` with the defaults (section 7) | none |
-| `hh_mac_init(mac, cfg)` | Owner | Checks the configuration against the caps, clears `mac`, stores `cfg`. State becomes `OFF` | `OK`, `INVALID_CONFIG`, `INVALID_ARGUMENT` |
+| Function | What it does | Results |
+|---|---|---|
+| `hh_mac_config_default(cfg, node_id, clock)` | Fills `cfg` with the defaults (section 7) | none |
+| `hh_mac_init(mac, cfg)` | Clears `mac`, checks the configuration, stores it. State `OFF` | `OK`, `INVALID_CONFIG`, `INVALID_ARGUMENT` |
 
-### 5.2 Network layer side (note section 6)
+### 5.2 Network layer side (specification section 6)
 
-| Function | Note operation | What it does | Results |
+| Function | Operation | What it does | Results |
 |---|---|---|---|
-| `hh_mac_open(mac)` | Open | Enables the MAC. State becomes `WAIT_TIME`. It does not mean the node can transmit yet | `OK` |
-| `hh_mac_close(mac)` | Close | Discards and counts every queued frame, empties the receive buffer, state becomes `OFF`. Safe to call twice | `OK` |
-| `hh_mac_send(mac, kind, dst, payload, len)` | Send | Checks state, size, kind, then room in the class queue, and copies the frame in. Never blocks | `ACCEPTED`, `NOT_OPEN`, `WRONG_STATE`, `TOO_LARGE`, `INVALID_ARGUMENT`, `TRY_AGAIN` |
-| `hh_mac_collect(mac, out, &got)` | Receive (collect) | Takes the oldest frame from the receive buffer. `got` is false when nothing is waiting, which is a normal result | `OK`, `NOT_OPEN` |
-| `hh_mac_status(mac, out)` | Status | Copies state, operational flag, queue depths and all counters | `OK`, `NOT_OPEN` |
-| `hh_mac_link_metrics(mac, neighbor, out)` | Link metrics | Returns the record kept for one neighbour | `OK`, `NOT_FOUND`, `NOT_OPEN` |
-| `hh_mac_channel_select(mac, channel)` | Channel select | Not defined yet | `UNSUPPORTED`, `NOT_OPEN` |
+| `hh_mac_open(mac)` | Open | Enables the MAC. State becomes `WAIT_TIME`. Open when open changes nothing | `OK`, `INVALID_CONFIG` |
+| `hh_mac_close(mac)` | Close | Discards and counts queued and held frames, state `OFF`. No delivery after it returns. Safe twice and after a failed init | `OK` |
+| `hh_mac_send(mac, kind, cls, dst, lifetime_ms, payload, len)` | Send | Checks, then queues. Never blocks | `ACCEPTED`, `NOT_OPEN`, `WRONG_STATE`, `TX_INHIBITED`, `TOO_LARGE`, `INVALID_ARGUMENT`, `TRY_AGAIN` |
+| receive callback in `cfg` | Receive | Called with each frame and event. Must only enqueue and return; returns false if it cannot take it now | |
+| `hh_mac_flush(mac)` | | Retries held deliveries after the callback refused one | |
+| `hh_mac_status(mac, out)` | Status | Copies status and counters | `OK`, `NOT_OPEN` |
+| `hh_mac_link_metrics(mac, neighbor, out)` | Link metrics | The record for one neighbour | `OK`, `NOT_FOUND`, `NOT_OPEN` |
+| `hh_mac_net_preset_select(mac, preset)` | Net preset select | Not defined until OI-4 | `UNSUPPORTED`, `NOT_OPEN` |
 
 ### 5.3 MAC logic side
 
 | Function | What it does |
 |---|---|
-| `hh_mac_next_pdu(mac, out)` | Logic asks for the frame for its next own slot. Returns true and fills `out`, or false when there is nothing to send or the state is not `STEADY` or `HOLDOVER` |
-| `hh_mac_on_rx(mac, pdu)` | Logic hands up one CRC-good frame. `hh_mac` updates the neighbour record, applies the address filter, and stores the frame for collection |
-| `hh_mac_on_crc_fail(mac)` | Logic reports a frame with a bad CRC. Only a counter goes up |
-| `hh_mac_set_state(mac, state)` | Logic or the MAC state machine sets the MAC state. Logged |
+| `hh_mac_next_pdu(mac, out)` | Logic asks for the frame for its next own slot. One call, one frame |
+| `hh_mac_on_rx(mac, pdu)` | Logic hands up one CRC-good frame. The MAC updates the neighbour record, filters, holds and pushes it |
+| `hh_mac_on_crc_fail(mac)`, `hh_mac_on_tx_underrun(mac)`, `hh_mac_on_tx_inhibited_slot(mac)` | Counters only |
+| `hh_mac_on_superframe(mac, sf)` | Superframe boundary. Sets the time for events and sends link reports every report period |
+| `hh_mac_on_break_in(mac, node, on)` | `BREAK_IN_ON` or `BREAK_IN_OFF` |
+| `hh_mac_on_entry_failed(mac, reason)` | `ENTRY_FAILED` |
+| `hh_mac_on_reset(mac)` | A MAC reset: restart count up, state `WAIT_TIME` |
+| `hh_mac_set_state(mac, state)` | New state, `STATE_CHANGED` |
+| `hh_mac_set_tx_inhibit(mac, reason)` | Inhibit on (any reason) or off (`NONE`), with the event |
+| `hh_mac_set_own_slots(mac, n)` | Own slots per frame, `OWN_SLOTS_CHANGED` |
+| `hh_mac_set_time_source(mac, src)` | Time source for Status |
+| `hh_mac_set_max_payload(mac, n)` | New maximum payload, `PARAMETERS_CHANGED` |
 
-### 5.4 Helpers
-
-| Function | What it does |
-|---|---|
-| `hh_mac_class_of(kind)` | Beacon and routing give `CONTROL`, data gives `DATA` |
-| `hh_mac_result_str(r)`, `hh_mac_state_str(s)` | Names for logs |
+Helpers: `hh_mac_result_str`, `hh_mac_state_str`, `hh_mac_class_str` give
+names for logs.
 
 ## 6. From start to end
 
@@ -165,21 +190,20 @@ sequenceDiagram
     participant N as Network layer
     participant M as hh_mac
     participant L as MAC logic
-    N->>M: hh_mac_config_default, hh_mac_init
-    N->>M: hh_mac_open
+    N->>M: hh_mac_config_default, hh_mac_init, hh_mac_open
     Note over N,M: state WAIT_TIME, Send refused
     L->>M: hh_mac_set_state(STEADY)
-    N->>M: hh_mac_send(routing, dst 0, update)
+    M-->>N: event STATE_CHANGED
+    N->>M: hh_mac_send(data, VOICE, next hop, lifetime 60 ms)
     M-->>N: ACCEPTED (queued only)
     L->>M: hh_mac_next_pdu
-    M-->>L: control frame first, then data
-    L->>M: hh_mac_on_rx(received frame + RSSI, SNR)
-    Note over M,L: neighbour record, address filter, receive buffer
-    N->>M: hh_mac_collect (about every 10 ms)
-    M-->>N: frame + RSSI, SNR, PER, each with valid flag
-    N->>M: hh_mac_status, hh_mac_link_metrics
+    M-->>L: highest class first
+    L->>M: hh_mac_on_rx(frame, metrics, superframe)
+    M-->>N: event NEIGHBOUR_HEARD, then the frame
+    L->>M: hh_mac_on_superframe
+    M-->>N: event LINK_REPORT per neighbour
     N->>M: hh_mac_close
-    Note over N,M: queued frames discarded and counted, state OFF
+    Note over N,M: queued and held frames discarded and counted, state OFF
 ```
 
 ### 6.2 The same, as code
@@ -189,142 +213,149 @@ sequenceDiagram
 
 static hh_mac_t mac;                          /* large: keep it off the stack */
 
-void example(void)
+static bool on_receive(void *ctx, const hh_mac_indication_t *ind)
+{
+    (void)ctx;
+    /* Only enqueue here; process on the network layer's own thread.
+     * Return false if the queue is full: the MAC holds the delivery. */
+    if (ind->type == HH_MAC_IND_FRAME) { /* copy ind->frame */ }
+    else                               { /* copy ind->event */ }
+    return true;
+}
+
+void example(const hh_clock_t *clock)
 {
     hh_mac_config_t cfg;
     hh_mac_tx_frame_t tx;
-    hh_mac_rx_frame_t rx;
-    bool got;
-    const uint8_t update[] = {0x01, 0x02};
+    const uint8_t voice[] = {0x01, 0x02};
 
     /* 1. Configure and start. */
-    hh_mac_config_default(&cfg, 7);           /* this node is id 7 */
-    cfg.data_share_n = 3;                     /* optional starvation limit */
+    hh_mac_config_default(&cfg, 7, clock);    /* this node is id 7 */
+    cfg.receive = on_receive;
     if (hh_mac_init(&mac, &cfg) != HH_MAC_OK) return;
     hh_mac_open(&mac);                        /* state WAIT_TIME */
 
     /* 2. MAC logic reports it is synchronised. */
     hh_mac_set_state(&mac, HH_MAC_STEADY);
 
-    /* 3. Network layer sends: next hop 3, or HH_MAC_BROADCAST. */
-    switch (hh_mac_send(&mac, HH_FRAME_ROUTING, HH_MAC_BROADCAST, update, sizeof update)) {
-    case HH_MAC_ACCEPTED:    break;           /* queued, not yet sent */
-    case HH_MAC_TRY_AGAIN:   break;           /* queue full: drop, keep or replace; do not spin */
-    case HH_MAC_WRONG_STATE: break;           /* not STEADY or HOLDOVER: read status */
-    default:                 break;           /* caller error: do not retry unchanged */
+    /* 3. Network layer sends voice to next hop 3, dropped if not sent in 60 ms. */
+    switch (hh_mac_send(&mac, HH_FRAME_DATA, HH_MAC_CLASS_VOICE, 3, 60, voice, sizeof voice)) {
+    case HH_MAC_ACCEPTED:     break;          /* queued, not yet sent */
+    case HH_MAC_TRY_AGAIN:    break;          /* queue full: hold, drop or replace; do not spin */
+    case HH_MAC_WRONG_STATE:  break;          /* wait for STATE_CHANGED */
+    case HH_MAC_TX_INHIBITED: break;          /* stop offering traffic */
+    default:                  break;          /* caller error: do not retry unchanged */
     }
 
     /* 4. MAC logic takes the frame for its next own slot. */
     if (hh_mac_next_pdu(&mac, &tx)) {
-        /* transmit tx.payload, tx.len to tx.dst */
+        /* transmit tx.payload, tx.len to tx.dst, class tx.cls */
     }
 
-    /* 5. MAC logic hands up a received frame. */
-    hh_mac_rx_pdu_t pdu = { .kind = HH_FRAME_DATA, .src = 4, .dst = 7,
-                            .len = 2, .payload = update,
-                            .rssi = { -60.0f, true }, .snr = { 0.0f, false } };
+    /* 5. MAC logic hands up a received frame; it is pushed to on_receive. */
+    hh_mac_rx_pdu_t pdu = { .kind = HH_FRAME_DATA, .cls = HH_MAC_CLASS_VOICE,
+                            .src = 4, .dst = 7, .superframe = 100,
+                            .metrics = { .flags = HH_MAC_M_RSSI_VALID, .rssi_qdb = -240 },
+                            .len = 2, .payload = voice };
     hh_mac_on_rx(&mac, &pdu);
 
-    /* 6. Network layer collects, on its own timer. */
-    while (hh_mac_collect(&mac, &rx, &got) == HH_MAC_OK && got) {
-        if (rx.metrics.rssi.valid) { /* use rx.metrics.rssi.value */ }
-    }
-
-    /* 7. Stop. */
+    /* 6. Stop. */
     hh_mac_close(&mac);
 }
 ```
 
 ### 6.3 Send path in detail
 
-`hh_mac_send()` checks in this order and stops at the first failure:
+`hh_mac_send()` checks in the order of specification section 7.3 and stops at
+the first failure:
 
 | Step | Check | Result if it fails | Counter |
 |---|---|---|---|
 | 1 | Initialised and open | `NOT_OPEN` | none |
 | 2 | State is `STEADY` or `HOLDOVER` | `WRONG_STATE` | `refused_state` |
-| 3 | `len` within `max_payload` | `TOO_LARGE` | `refused_too_large` |
-| 4 | Kind is beacon, routing or data; payload present when `len > 0` | `INVALID_ARGUMENT` | `refused_invalid` |
-| 5 | Class queue has room | `TRY_AGAIN` | `queue_full[class]` |
-| 6 | Copy into the queue, source set to this node | `ACCEPTED` | queue depth + 1 |
+| 3 | Transmit not inhibited | `TX_INHIBITED` | `refused_inhibited` |
+| 4 | `len` within the current maximum payload | `TOO_LARGE` | `refused_too_large` |
+| 5 | Kind and class known; data uses a class other than control; payload present when `len > 0` | `INVALID_ARGUMENT` | `refused_invalid` |
+| 6 | Class queue has room. Voice and video drop their oldest frame instead | `TRY_AGAIN` | `queue_full[class]`, or `drop_oldest[class]` |
+| 7 | Copy in, source set to this node, lifetime start noted | `ACCEPTED` | queue depth + 1 |
 
-`ACCEPTED` only means queued. Nothing reports whether the frame was later sent
-or received. Destination ids are not checked; which ids are invalid is still to
-be decided.
+Beacon and routing kinds always go in the control class, whatever class the
+caller gives. `ACCEPTED` only means queued. Destination ids are not checked;
+which ids are invalid is still open (DP-11).
 
 ### 6.4 Choosing the next frame (`hh_mac_next_pdu`)
 
-1. If the state is not `STEADY` or `HOLDOVER`, return nothing. Queued frames
-   stay queued.
-2. If the starvation limit is on, `control_run >= data_share_n`, and a data
-   frame is waiting: take the oldest data frame.
-3. Otherwise, if a control frame is waiting: take the oldest control frame.
-4. Otherwise, if a data frame is waiting: take the oldest data frame.
-5. Otherwise the slot carries nothing.
+1. If the state is not `STEADY` or `HOLDOVER`, or transmit is inhibited,
+   return nothing. Queued frames stay queued.
+2. Discard every frame at the head of a queue whose lifetime has passed.
+3. Refill the control token bucket for the time since the last call.
+4. If the minimum share is on, user traffic is queued, and the last N minus 1
+   own slots carried no user frame, take the oldest frame of the highest user
+   class.
+5. Otherwise, if a control frame is waiting and the token bucket allows it,
+   take it.
+6. Otherwise take the oldest frame of the highest non-empty user class.
+7. Otherwise the slot carries nothing.
 
-`control_run` counts control frames taken in a row. Taking a data frame resets
-it.
+User classes are emergency, voice, video and data, in that order.
 
-### 6.5 Receive path in detail (`hh_mac_on_rx` then `hh_mac_collect`)
+### 6.5 Receive path in detail
 
 | Step | What happens | Counter if dropped |
 |---|---|---|
 | 1 | Logic passes up a CRC-good frame, whatever its destination | |
-| 2 | The sender's neighbour record is updated: receive count, last heard superframe | `neighbor_table_full` if no free entry |
-| 3 | Address filter: kept only if the destination is this node or 0 | `rx_not_addressed` |
-| 4 | Kept only in `STEADY` or `HOLDOVER`, unless `rx_deliver_all_states` is set | `rx_not_delivered_state` |
-| 5 | Stored in the receive buffer. If full, this newest frame is dropped | `rx_overflow` |
-| 6 | The network layer collects it, oldest first. PER is marked not valid | `frames_rx` counts deliveries |
+| 2 | The sender's record is updated: receive count, last heard superframe. A new neighbour raises `NEIGHBOUR_HEARD` | `neighbor_table_full` if no free entry |
+| 3 | Address filter: kept if the destination is this node, 0 or a group id | `rx_not_addressed` |
+| 4 | Kept in `LISTEN`, `ENTRY`, `STEADY`, `HOLDOVER` and `LOST`; not in `OFF`, `WAIT_TIME` or `SAFE` (DP-9 option (a)) | `rx_not_delivered_state` |
+| 5 | Put in the holding buffer of its class. If full, the oldest frame of that class is dropped | `hold_overflow[class]` |
+| 6 | Frames and events are pushed in the order they happened until the callback refuses one | `delivery_refused`, `frames_rx` counts deliveries |
 
-The network layer must not filter by address again: every frame it collects is
-already for this node or broadcast.
+The network layer keeps group frames only for groups it belongs to. It does
+not filter by node id again.
 
 ## 7. Configuration
 
 | Field | Default | Allowed | Meaning |
 |---|---|---|---|
-| `node_id` | given | not 0 | This node's id, used as the source of every frame sent |
-| `max_payload` | 512 | 1 to 512 | Larger payloads get `TOO_LARGE` |
-| `queue_depth[CONTROL]` | 16 | 1 to 128 | Control frames that can wait |
-| `queue_depth[DATA]` | 64 | 1 to 128 | Data frames that can wait |
-| `rx_buffer_depth` | 16 | 1 to 64 | Received frames held until collected |
-| `data_share_n` | 0 | 0 or more | Starvation limit. 0 = strict priority |
-| `rx_deliver_all_states` | false | true, false | Deliver received frames outside `STEADY` and `HOLDOVER` |
+| `node_id` | given | not 0, not a group id, not 0xFFFFFFFF | Source of every frame sent |
+| `clock` | given | not NULL | Injected clock |
+| `max_payload` | 1280 | 1 to 1532 | Larger payloads get `TOO_LARGE`. Can change while open |
+| `queue_depth[]` | 16, 8, 8, 32, 64 | at least 1, sum at most 256 | Control, emergency, voice, video, data. Specification section 9.1 |
+| `hold_depth[]` | 16 each | at least 1, sum at most 128 | Holding buffer per class. Open (DP-5) |
+| `report_period_sf` | 1 | 0 or more | Link report every N superframes. 0 = off |
+| `ctl_cap_pdus_per_s`, `ctl_burst_pdus` | 0, 0 | burst at least 1 when the rate is set | Control cap in PDUs. Rate 0 = off |
+| `ctl_cap_bytes_per_s`, `ctl_burst_bytes` | 0, 0 | burst at least `max_payload` when the rate is set | Control cap in bytes. Rate 0 = off |
+| `min_share_n` | 0 | 0 or more | One own slot in N carries a user frame while one is queued. 0 = off |
+| `receive`, `receive_ctx` | NULL | | Receive callback. Without it, deliveries wait in the holding buffer |
 
 Values outside the allowed range make `hh_mac_init()` return
 `INVALID_CONFIG`.
 
-**Queue depth** is the number of frames a class can hold while waiting for a
-slot. A full queue refuses with `TRY_AGAIN` instead of growing, so memory never
-runs out. Control traffic is small and regular, so 16 is enough. Data traffic
-is bursty, so it gets 64. A deeper queue holds more but makes frames wait
-longer: at one own slot per 20 ms frame, 64 data frames take about 1.3 s to
-drain.
-
-**Starvation limit.** The note fixes strict priority: control always before
-data. If control keeps arriving, data never goes. `data_share_n = N` lets one
-waiting data frame through after N control frames in a row:
+**Control cap and minimum share.** Strict priority lets control starve user
+traffic at a busy relay. The token bucket limits control to C PDUs and B bytes
+per second with a burst allowance; control over the cap waits in its queue
+while user frames go. The minimum share gives user traffic at least one own
+slot in N:
 
 ```
-data_share_n = 0 (strict):  C C C C C C C C ...   data waits while control is queued
-data_share_n = 3:           C C C D C C C D ...   data gets at least 1 slot in 4
+min_share_n = 0 (strict):  C C C C C C ...   user waits while control is queued
+min_share_n = 3:           C C U C C U ...   user gets at least 1 slot in 3
 ```
 
-When no data is waiting, control is never delayed. The default is 0, so the
-default behaviour matches the note.
+Both are off by default because their values are open (DP-10).
 
 ## 8. Link quality
 
 | Where | Fields | Valid today |
 |---|---|---|
-| Each collected frame (`rx.metrics`) | RSSI, SNR from logic | As logic reports them |
-| | PER | Never: a single frame has no error rate, and PER is not defined yet |
-| Link report (`hh_mac_link_metrics`) | Averaged RSSI, SNR, PER | Never: the averaging method is not decided |
-| | Last heard superframe | When logic gave a superframe number |
-| | Receive count | Always. Counts every CRC-good frame from that neighbour, including frames addressed to others, so it can be higher than what the network layer collected |
+| Each delivered frame | RSSI, SNR, RX gain, arrival offset | As logic reports them, by their valid bits |
+| Per-neighbour record (Link metrics and `LINK_REPORT`) | Averaged RSSI and SNR | Never: averaging method open (DP-6) |
+| | PER from and towards the neighbour, CRC fail count | Never: needs slot ownership and MAC control fields (OI-2, OI-3) |
+| | Data rates, latency | Never: not measured yet |
+| | Last heard superframe, receive count | Always. The count includes frames addressed to others |
 
-Rule for the network layer: when `valid` is false, do not use the value. A
-missing measurement is not a bad link.
+Rule for the network layer: when a valid bit is clear, do not use the value.
+A missing measurement is not a bad link.
 
 ## 9. Building and linking
 
@@ -342,10 +373,6 @@ Use it from another target:
 target_link_libraries(my_target PRIVATE hhsdr_mac)
 ```
 
-```c
-#include "hhsdr/mac/mac.h"
-```
-
 Dependency rule: `hhsdr_mac` links `hhsdr_core_base` only. It must not link
 `hhsdr_core` (the legacy stack), `hhsdr_netif`, `radiod` or anything under
 `tests/`.
@@ -354,52 +381,62 @@ Dependency rule: `hhsdr_mac` links `hhsdr_core_base` only. It must not link
 
 | Join | What is needed | When |
 |---|---|---|
-| Network side | A small adapter that maps `hh_netif` (or the `manet0` interface used by OLSRd2) onto `hh_mac_send()` and `hh_mac_collect()`, and maps results to the caller's error codes | F03 |
-| MAC logic side | Code that calls `hh_mac_next_pdu()` before each own slot, and `hh_mac_on_rx()`, `hh_mac_on_crc_fail()`, `hh_mac_set_state()` from the logic's events. Depends on the logic interface, which is not defined yet | When the MAC logic interface exists |
-| Link metrics to routing | Per-neighbour values to OLSRd2, for example as a data rate | With the routing integration |
-
-Until then the unit tests stand in for both sides.
+| Network side | An adapter that maps `hh_netif` (or the `manet0` interface used by OLSRd2) onto `hh_mac_send()` and the receive callback, including DSCP to class (specification section 7.1) | F03 |
+| MAC logic side | Code that calls `hh_mac_next_pdu()` before each own slot and the `hh_mac_on_*()` and `hh_mac_set_*()` calls from the logic's events. Depends on the logic interface, which is not defined yet | When the MAC logic interface exists |
+| Link metrics to routing | Per-neighbour record to OLSRd2 | With the routing integration |
 
 ## 11. Tests (`test_mac`)
 
 | Test | Checks |
 |---|---|
-| `test_config_defaults_and_limits` | Defaults; out-of-range config refused |
-| `test_enqueue_dequeue_unchanged` | A frame comes out with the same kind, source, destination and payload |
+| `test_config_defaults_and_limits` | Defaults of section 9.1; invalid config refused; Close safe after a failed init |
+| `test_open_and_send_states` | Open to `WAIT_TIME`, idempotent; Send refused outside `STEADY` and `HOLDOVER` |
+| `test_enqueue_dequeue_unchanged` | Frame out equals frame in; source and class filled |
+| `test_kind_and_class_rules` | Beacon and routing forced to control; data may not use control; unknown values refused |
+| `test_class_order` | CONTROL > EMERGENCY > VOICE > VIDEO > DATA |
 | `test_fifo_within_class` | Oldest first within a class |
-| `test_control_before_data` | Control taken before data that was sent earlier |
-| `test_overflow_try_again_nothing_evicted` | Full queue gives `TRY_AGAIN`, nothing removed, control still accepted |
-| `test_queue_bounded_at_configured_depth` | 1000 sends: exactly 64 data and 16 control accepted |
-| `test_strict_priority_starves_data_when_off` | Limit off: data waits behind control |
-| `test_starvation_limit_gives_data_a_share` | `data_share_n = 3`: data in every 4th slot |
-| `test_starvation_limit_does_not_delay_control_without_data` | Limit on, no data: control every slot |
-| `test_refusals_and_counters` | `NOT_OPEN`, `WRONG_STATE`, `TOO_LARGE`, `INVALID_ARGUMENT`, `UNSUPPORTED`, and their counters |
-| `test_no_pdu_outside_steady_frames_kept` | Nothing handed to logic outside `STEADY`; frames kept |
-| `test_close_discards_and_is_safe_twice` | Close discards and counts; second Close is safe |
-| `test_receive_only_on_collect_with_filter` | Collect only; address filter; metrics and valid flags |
-| `test_rx_overflow_drops_newest` | Full receive buffer drops the newest frame |
-| `test_rx_outside_steady_not_delivered_by_default` | No delivery in `LISTEN` by default |
-| `test_link_report_valid_flags` | `NOT_FOUND`; counts include other destinations; averaged values not valid |
-| `test_neighbor_table_bounded` | Table full is counted, not grown |
-| `test_status_operational` | Operational flag; CRC fail counter |
+| `test_try_again_classes_drop_nothing` | Control, emergency, data: `TRY_AGAIN`, nothing removed |
+| `test_voice_video_drop_oldest` | Voice, video: oldest dropped and counted |
+| `test_full_class_does_not_block_others` | One full class does not stop another |
+| `test_lifetime` | Expired frames discarded and counted; lifetime 0 never expires |
+| `test_tx_inhibit` | `TX_INHIBITED`, nothing to logic, events with reason, receive still delivered |
+| `test_max_payload` | 1280 default; change raises `PARAMETERS_CHANGED` |
+| `test_control_cap_pdus`, `test_control_cap_bytes` | Token bucket holds control back; user frames go meanwhile |
+| `test_strict_priority_when_share_off` | Without a share, control starves user traffic |
+| `test_minimum_share` | One slot in N for user traffic, highest user class first |
+| `test_receive_filter_and_push` | This node, broadcast and group delivered; others counted |
+| `test_received_frame_fields` | Fields and metrics unchanged, payload byte-identical |
+| `test_delivery_by_state` | Delivered in `LISTEN`, `ENTRY`, `LOST`; not in `WAIT_TIME`, `SAFE` |
+| `test_holding_buffer` | Held when refused, oldest dropped per class, flushed in order |
+| `test_neighbour_heard` | Once per neighbour, before its first frame |
+| `test_link_report_period` | Every report period, valid bits clear |
+| `test_events` | State, break-in, own slots, entry failed |
+| `test_status` | Operational by state, time in holdover, restart count, counters |
+| `test_link_metrics_results` | `NOT_FOUND`, `NOT_OPEN` |
+| `test_close` | Discards counted, safe twice, nothing delivered after |
+| `test_net_preset_unsupported` | `UNSUPPORTED` |
+| `test_neighbor_table_bounded` | Table full counted, not grown |
+| `test_pool_holds_all_queues` | Every queue full at once fits in the pool |
 | `test_null_safety` | NULL arguments do not crash |
 
 ## 12. Still open
 
-Each of these is a `TODO` in the code and an open item in the interface note.
+Each of these is a `TODO` in the code and an open item in the specification.
 
 | Open point | What the code does now |
 |---|---|
-| Units of RSSI and SNR | Values passed through as given |
-| PER definition | Per-frame PER never valid |
-| Link metric averaging | Averaged values never valid |
-| Which destination ids are invalid | None refused |
-| Queued frames when leaving `STEADY` or `HOLDOVER` | Kept, sent after return |
-| Delivery and operational flag in `LISTEN`, `ENTRY`, `LOST`, `WAIT_TIME` | Not delivered by default; operational flag marked unknown |
-| Open when already open | Returns `OK`, no change |
-| Channel select | Returns `UNSUPPORTED` |
-| Queue depth unit and values | Frames; 16 and 64, configurable |
-| Starvation limit | Built, off by default |
+| Neighbour silent, PER, CRC fail count per neighbour (OI-3) | Not raised; valid bits clear |
+| Per-hop retransmission for data (DP-1, OI-2) | Not built |
+| Several frames per slot (OI-2) | One frame per own slot |
+| Averaging method (DP-6) | Averaged values not valid |
+| Which destination ids are invalid (DP-11) | None refused |
+| Queued frames when leaving `STEADY` or `HOLDOVER`, while inhibited, or on a reset (DP-3) | Kept |
+| Operational flag in `WAIT_TIME`, `LISTEN`, `ENTRY`, `LOST` (DP-9) | Marked unknown |
+| Holding buffer depth (DP-5) | 16 per class, configurable |
+| Control cap and share values (DP-10) | Built, off by default |
+| Net preset meaning (OI-4) | `UNSUPPORTED` |
+| Sync quality, TX power, range profile, slot and frame length, schedule version, net preset in Status | Not in Status yet |
+| Latency units | Field not valid |
 
 ## 13. The whole system: where `hh_mac` fits
 
@@ -522,7 +559,7 @@ How to read it:
 | Netlink | OLSRd2 and Linux | Routes | Standard, works in the Docker mesh (F01-AK-2) and on the board (F01-AK-5) |
 | `manet0` | Linux and `hh_netif` | IP packets | Not built (U-24) |
 | `hh_netif` API | `manet0` binding and the radio side | Bytes, next hop, per-frame metrics | Built, tested |
-| `hh_mac` network side | Network layer and `hh_mac` | Send, collect, status, link metrics | Built, tested (this task) |
+| `hh_mac` network side | Network layer and `hh_mac` | Send, receive callback, status, link metrics | Built, tested (this task) |
 | `hh_mac` logic side | `hh_mac` and MAC logic | Next frame, received frame, state | Built, tested; real binding not defined (U-21) |
 | ICD-1 (DMA) | Processor and `mac_pl` | Frames | Not specified (U-06) |
 | `hh_radio_ops_t` | Software and the radio | 8 functions: open, close, transmit, receive callback, status, metrics, channel, poll | Built; mock radio only |
@@ -541,7 +578,7 @@ How to read it:
 | User data | Data apps | Network layer | Socket |
 | Routing messages (HELLO, TC) | OLSRd2 | Other nodes' OLSRd2 | Linux, `manet0`, MAC control class |
 | Routes | OLSRd2 | Linux routing table | Netlink |
-| Received frames | `mac_pl` (CRC good) | `hh_mac`, then the network layer | DMA, `hh_mac_on_rx()`, `hh_mac_collect()` |
+| Received frames | `mac_pl` (CRC good) | `hh_mac`, then the network layer | DMA, `hh_mac_on_rx()`, receive callback |
 | RSSI, SNR | `mac_pl`, measured per burst | `hh_mac` per-frame metrics and link report | `hh_mac_on_rx()` |
 | PER | `hh_mac` (from counts) | Link report | Definition still TODO |
 | MAC state | `mac_pl` | `hh_mac`, status | `hh_mac_set_state()` |
@@ -565,15 +602,14 @@ sequenceDiagram
     V->>N: UDP / RTP packet
     N->>N: route lookup gives next hop
     N->>H: IP packet, next hop
-    H->>M: hh_mac_send(data, next hop, bytes)
+    H->>M: hh_mac_send(data, VOICE, next hop, bytes)
     M-->>H: ACCEPTED (queued)
     L->>M: hh_mac_next_pdu() before own slot
-    M->>L: oldest frame, control first
+    M->>L: oldest frame of the highest class
     L->>L: CRC, modulate, transmit in slot
     Note over H,L: Radio link to the next node
-    L->>M: hh_mac_on_rx(frame, RSSI, SNR)
-    H->>M: hh_mac_collect()
-    M->>H: frame and metrics
+    L->>M: hh_mac_on_rx(frame, metrics)
+    M->>H: receive callback: frame and metrics
     H->>N: IP packet
     N->>V: deliver (a relay node forwards instead)
     V->>V: vocoder decodes
@@ -586,10 +622,9 @@ The playback path from the voice app to the speaker is not described in the
 target drawing (U-13).
 
 **Priority today.** The given order for user traffic is audio, then video,
-then data. `hh_mac` has two classes: control (beacons, routing) and data. All
-user traffic, voice included, goes into the data class, so voice is not ahead
-of a file transfer yet. More classes are an open point (OI-10 in
-`docs/TRAFFIC-PROFILE.md`).
+then data. `hh_mac` has five classes, control, emergency, voice, video and
+data, so voice goes ahead of a file transfer. The mapping from DSCP to class at
+the Linux binding (specification section 7.1) is not built yet.
 
 ### 13.6 A control command, end to end
 

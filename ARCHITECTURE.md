@@ -122,7 +122,7 @@ collision the moment a working backend exists. Tracked as
 | [`librc/`](librc/README.md) | client library — the C API to reach `radiod` | ✅ working |
 | [`radioctl/`](radioctl/README.md) | CLI front end | ✅ working |
 | [`protocol/`](protocol/README.md) | wire codec shared by daemon and clients | ✅ working (**not** ICD-2) |
-| `src/mac/` | MAC service for the network layer: queues per class, priority, receive buffer, link reports (MAC-NETWORK-INTERFACE note) | ✅ skeleton; lower side to MAC logic not bound (U-21 to U-23) |
+| `src/mac/` | MAC service for the network layer: five class queues, priority with control cap, pushed receive with events, link records (MAC-NETWORK-INTERFACE v1.1) | ✅ skeleton; lower side to MAC logic not bound (U-21 to U-23) |
 | `src/netif/` | network-interface adapter: host interface ↔ `hh_radio_ops_t` (OLSRv2 path) | ✅ working; Linux binding not built (U-24) |
 | `src/manet/` | legacy MANET stack: discovery → distance-vector routing → self-healing | ✅ working, legacy reference |
 | `src/dataplane/` | legacy packet forwarder (fast path of the legacy stack) | ✅ working, legacy reference |
