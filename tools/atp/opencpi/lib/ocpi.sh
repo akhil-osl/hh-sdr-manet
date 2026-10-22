@@ -3,7 +3,7 @@
 # ocpi.sh — shared helpers for atp-ocpi.sh. Sourced, never executed.
 #
 # These scripts run ON THE RADIO BOARD (Xilinx 2019.2 rootfs, BusyBox). That
-# image has no jq and no timeout (CONTEXT.md §7), so unlike tools/atp/lib/atp.sh
+# image has no jq and no timeout, so unlike tools/atp/lib/atp.sh
 # this library builds evidence records with awk. The record is the same
 # schema, "hh-atp-evidence/1", so the two families of evidence can be read by
 # the same consumer.
