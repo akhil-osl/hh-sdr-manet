@@ -29,3 +29,4 @@ tools/olsrd2-mesh-emulation/ca-certificates.crt
 tools/olsrd2-arm-cross-build/out/
 tools/olsrd2-arm-cross-build/ca-certificates.crt
 TASKLIST.md
+CONTEXT.md

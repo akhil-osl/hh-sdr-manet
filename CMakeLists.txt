@@ -101,6 +101,15 @@ add_library(hhsdr_netif STATIC
 target_link_libraries(hhsdr_netif PUBLIC hhsdr_core_base)
 
 # ---------------------------------------------------------------------------
+# hhsdr_mac : MAC service for the network layer (queues, priority, link
+# quality). Links hhsdr_core_base only.
+# ---------------------------------------------------------------------------
+add_library(hhsdr_mac STATIC
+  src/mac/mac.c
+)
+target_link_libraries(hhsdr_mac PUBLIC hhsdr_core_base)
+
+# ---------------------------------------------------------------------------
 # protocol : the control-protocol codec, shared by radiod and its clients.
 # Kept separate from both so that a client library never has to link the
 # daemon. See protocol/CMakeLists.txt.

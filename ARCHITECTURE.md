@@ -122,13 +122,14 @@ collision the moment a working backend exists. Tracked as
 | [`librc/`](librc/README.md) | client library — the C API to reach `radiod` | ✅ working |
 | [`radioctl/`](radioctl/README.md) | CLI front end | ✅ working |
 | [`protocol/`](protocol/README.md) | wire codec shared by daemon and clients | ✅ working (**not** ICD-2) |
+| `src/mac/` | MAC service for the network layer: five class queues, priority with control cap, pushed receive with events, link records (MAC-NETWORK-INTERFACE v1.1) | ✅ skeleton; lower side to MAC logic not bound (U-21 to U-23) |
 | `src/netif/` | network-interface adapter: host interface ↔ `hh_radio_ops_t` (OLSRv2 path) | ✅ working; Linux binding not built (U-24) |
 | `src/manet/` | legacy MANET stack: discovery → distance-vector routing → self-healing | ✅ working, legacy reference |
 | `src/dataplane/` | legacy packet forwarder (fast path of the legacy stack) | ✅ working, legacy reference |
 | `src/core/` | types, clock, log, config, events, dispatcher | ✅ shared primitives |
 | `src/radio/` | `radio.h` hardware seam + beacon wire format | ✅ the key boundary |
 | `src/sca/` | SCA 2.2.2 compatibility layer (wraps the legacy node) | ✅ compatible, not conformant |
-| `tests/`, `tools/sim/` | test harness, simulator, emulated medium, dev tooling | ✅ 36 tests |
+| `tests/`, `tools/sim/` | test harness, simulator, emulated medium, dev tooling | ✅ 37 tests |
 | [`tools/atp/`](tools/atp/README.md) | ATP/BIT evidence scripts, Wireshark dissector | ✅ working, validated off-radio |
 | [`drivers/`](drivers/README.md) | manet0, radio clock | ❌ empty |
 | [`workers/`](workers/README.md) | OpenCPI RCC workers | ❌ empty |
@@ -252,7 +253,7 @@ OLSRv2 control and user traffic use, how radio metrics reach OLSRd2, the OONF
 version, and how OLSRd2 is deployed.
 
 **What happens to the legacy stack.** Nothing on the OLSRv2 path calls it.
-It stays, unchanged, because the simulator and 24 of the 36 tests exercise it,
+It stays, unchanged, because the simulator and 24 of the 37 tests exercise it,
 and because some parts may feed the new path later:
 
 | Component | In the OLSRv2 architecture |
@@ -378,7 +379,7 @@ drops into `radiod/src/backends/`.
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j8
-ctest --test-dir build                      # 36 tests, a few seconds
+ctest --test-dir build                      # 37 tests, a few seconds
 ```
 
 Drive the control plane — **two terminals**, so daemon logs and command output

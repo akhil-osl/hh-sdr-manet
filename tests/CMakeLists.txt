@@ -50,6 +50,10 @@ foreach(t test_netif:unit/test_netif.c
   add_test(NAME ${name} COMMAND ${name})
 endforeach()
 
+add_executable(test_mac unit/test_mac.c)
+target_link_libraries(test_mac PRIVATE hhsdr_mac)
+add_test(NAME test_mac COMMAND test_mac)
+
 # Protocol codec test. Lives with the codec under protocol/, and links
 # hhsdr_protocol rather than reaching into the daemon.
 add_executable(test_rc_protocol ${CMAKE_SOURCE_DIR}/protocol/tests/test_rc_protocol.c)
