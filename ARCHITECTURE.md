@@ -123,12 +123,13 @@ collision the moment a working backend exists. Tracked as
 | [`radioctl/`](radioctl/README.md) | CLI front end | ✅ working |
 | [`protocol/`](protocol/README.md) | wire codec shared by daemon and clients | ✅ working (**not** ICD-2) |
 | `src/netif/` | network-interface adapter: host interface ↔ `hh_radio_ops_t` (OLSRv2 path) | ✅ working; Linux binding not built (U-24) |
+| [`apps/dataterm/`](apps/dataterm/README.md) | data terminal: text messages over UDP with ACK and retry (F02-AK-4) | ✅ working on the host; not yet run on boards |
 | `src/manet/` | legacy MANET stack: discovery → distance-vector routing → self-healing | ✅ working, legacy reference |
 | `src/dataplane/` | legacy packet forwarder (fast path of the legacy stack) | ✅ working, legacy reference |
 | `src/core/` | types, clock, log, config, events, dispatcher | ✅ shared primitives |
 | `src/radio/` | `radio.h` hardware seam + beacon wire format | ✅ the key boundary |
 | `src/sca/` | SCA 2.2.2 compatibility layer (wraps the legacy node) | ✅ compatible, not conformant |
-| `tests/`, `tools/sim/` | test harness, simulator, emulated medium, dev tooling | ✅ 36 tests |
+| `tests/`, `tools/sim/` | test harness, simulator, emulated medium, dev tooling | ✅ 39 tests |
 | [`tools/atp/`](tools/atp/README.md) | ATP/BIT evidence scripts, Wireshark dissector | ✅ working, validated off-radio |
 | [`drivers/`](drivers/README.md) | manet0, radio clock | ❌ empty |
 | [`workers/`](workers/README.md) | OpenCPI RCC workers | ❌ empty |
@@ -150,6 +151,8 @@ hh-manet ──► hhsdr_core ──► hhsdr_core_base          (legacy stack)
                   └──► manet, dataplane, sca, wire
 
              hhsdr_netif ──► hhsdr_core_base          (OLSRv2 path)
+
+dataterm ──► hhsdr_dataterm ──► hhsdr_core_base       (UDP application)
 ```
 
 **Arrows point one way. No cycles.** Two rules hold this together:

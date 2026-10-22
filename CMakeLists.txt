@@ -135,6 +135,12 @@ add_subdirectory(radiod)
 # ---------------------------------------------------------------------------
 add_subdirectory(radioctl)
 
+# ---------------------------------------------------------------------------
+# dataterm : data terminal application over UDP. Data plane user, never the
+# control socket. See apps/dataterm/README.md.
+# ---------------------------------------------------------------------------
+add_subdirectory(apps/dataterm)
+
 add_subdirectory(tests)
 
 # ---------------------------------------------------------------------------
