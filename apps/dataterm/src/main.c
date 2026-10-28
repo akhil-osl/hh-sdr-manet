@@ -1,13 +1,13 @@
 /*
- * dataterm: send and receive text messages over UDP with ACK and retry.
+ * dataterm: send and receive text messages as CoAP over UDP.
  *
  *   dataterm -n ID [options] recv
  *   dataterm -n ID [options] chat DEST
  *   dataterm -n ID [options] send DEST --count N [--interval MS] [--size B]
  */
+#include "hhsdr/core/clock.h"
 #include "hhsdr/core/log.h"
 #include "hhsdr/dataterm/dataterm.h"
-#include "hhsdr/dataterm/udp.h"
 #include <errno.h>
 #include <getopt.h>
 #include <inttypes.h>
@@ -19,7 +19,6 @@
 #include <unistd.h>
 
 #define COMP "dataterm"
-#define DEFAULT_PORT 5000
 
 static volatile sig_atomic_t g_stop;
 static void on_signal(int sig) { (void)sig; g_stop = 1; }
@@ -40,11 +39,12 @@ static void usage(FILE *f)
         "       dataterm -n ID [options] send DEST --count N [--interval MS] [--size B]\n"
         "\n"
         "  -n, --node ID         this node's id (required)\n"
-        "  -p, --port PORT       UDP port to bind and default peer port (5000)\n"
+        "  -p, --port PORT       CoAP UDP port to bind and default peer port (5683)\n"
         "  -b, --bind IP         local address to bind (all)\n"
         "  -P, --peer ID=IP[:PORT]  node id to address, repeatable\n"
-        "  -t, --timeout MS      first ACK wait, doubles per retry (1000)\n"
-        "  -r, --retries N       retries per message, 0 = retry off (4)\n"
+        "  -t, --timeout MS      first ACK wait, at least 1000. libcoap adds up to 50 %%,\n"
+        "                        doubles per retry (2000)\n"
+        "  -r, --retries N       retransmissions per message, 0 = retry off (4)\n"
         "  -m, --max-payload B   largest message, bytes (1232)\n"
         "  -d, --dscp D          DSCP on sent packets, 0 to 63 (0)\n"
         "  -c, --count N         send: messages to send\n"
@@ -65,12 +65,13 @@ static bool parse_u64(const char *s, uint64_t max, uint64_t *out)
     return true;
 }
 
-static void on_deliver(hh_node_id_t from, hh_seq_t seq, const uint8_t *data, size_t len,
-                       void *ctx)
+static void on_deliver(hh_node_id_t from, const char *from_ip, uint16_t mid,
+                       const uint8_t *data, size_t len, void *ctx)
 {
     app_t *app = ctx;
     if (app->quiet) return;
-    printf("[%u #%" PRIu32 "] ", from, seq);
+    if (from) printf("[%u #%u] ", from, mid);
+    else printf("[%s #%u] ", from_ip, mid);
     for (size_t i = 0; i < len; i++) {
         unsigned char ch = data[i];
         putchar(ch >= 0x20 && ch < 0x7f ? ch : '.');
@@ -79,30 +80,13 @@ static void on_deliver(hh_node_id_t from, hh_seq_t seq, const uint8_t *data, siz
     fflush(stdout);
 }
 
-static void on_result(hh_node_id_t to, hh_seq_t seq, bool acked, uint8_t attempts, void *ctx)
+static void on_result(hh_node_id_t to, uint16_t mid, bool acked, const char *reason,
+                      void *ctx)
 {
     app_t *app = ctx;
     app->sent_done++;
     if (acked) app->sent_acked++;
-    HH_LOGD(COMP, "result", "to=%u seq=%" PRIu32 " acked=%d attempts=%u", to, seq,
-            acked, attempts);
-}
-
-static void drain_socket(hh_dt_t *dt, hh_dt_udp_t *u)
-{
-    uint8_t buf[HH_DT_MSG_MAX];
-    for (;;) {
-        size_t n = 0;
-        struct sockaddr_in from;
-        hh_status_t s = hh_dt_udp_rx(u, buf, sizeof buf, &n, &from);
-        if (s == HH_ERR_AGAIN || s == HH_ERR_IO || s == HH_ERR_INVAL) return;
-        if (s != HH_OK) continue;
-        hh_dt_hdr_t h;
-        /* Learn the reply address before the engine sends its ACK. */
-        if (hh_dt_decode(buf, n, &h, NULL) == HH_DT_RX_OK && h.dst == dt->self)
-            hh_dt_udp_learn(u, h.src, &from);
-        hh_dt_input(dt, buf, n);
-    }
+    (void)to; (void)mid; (void)reason;
 }
 
 static void chat_line(hh_dt_t *dt, hh_node_id_t dest, const char *line, size_t len)
@@ -112,28 +96,29 @@ static void chat_line(hh_dt_t *dt, hh_node_id_t dest, const char *line, size_t l
     if (s == HH_ERR_AGAIN) fprintf(stderr, "busy: line not sent, try again\n");
     else if (s == HH_ERR_INVAL) fprintf(stderr, "too long: %zu bytes, limit %u\n", len,
                                         dt->cfg.max_payload);
+    else if (s == HH_ERR_NOTFOUND) fprintf(stderr, "no address for node %u, add --peer\n",
+                                           dest);
     else if (s != HH_OK) fprintf(stderr, "not sent: %s\n", hh_status_str(s));
 }
 
-static void log_summary(const hh_dt_t *dt, const hh_dt_udp_t *u)
+static void log_summary(const hh_dt_t *dt)
 {
     const hh_dt_counters_t *c = hh_dt_counters(dt);
     hh_dt_log_stats(dt);
     if (c->tx_data) {
         HH_LOGI(COMP, "summary_tx",
-                "sent=%" PRIu64 " acked=%" PRIu64 " given_up=%" PRIu64
-                " first_try_loss_pct=%.2f residual_loss_pct=%.2f no_route=%" PRIu64,
-                c->tx_data, c->tx_acked, c->tx_given_up,
-                100.0 * (double)(c->tx_data - c->tx_acked_first_try) / (double)c->tx_data,
-                100.0 * (double)c->tx_given_up / (double)c->tx_data, u->tx_no_route);
+                "sent=%" PRIu64 " acked=%" PRIu64 " given_up=%" PRIu64 " rst=%" PRIu64
+                " refused=%" PRIu64 " unreachable=%" PRIu64 " residual_loss_pct=%.2f",
+                c->tx_data, c->tx_acked, c->tx_given_up, c->tx_rst, c->tx_refused,
+                c->tx_unreachable,
+                100.0 * (double)(c->tx_data - c->tx_acked) / (double)c->tx_data);
     }
     if (c->rx_delivered || c->rx_gaps) {
         HH_LOGI(COMP, "summary_rx",
-                "delivered=%" PRIu64 " missing=%" PRIu64 " loss_pct=%.2f duplicates=%" PRIu64
-                " bad=%" PRIu64,
+                "delivered=%" PRIu64 " missing=%" PRIu64 " loss_pct=%.2f duplicates=%" PRIu64,
                 c->rx_delivered, c->rx_gaps,
                 100.0 * (double)c->rx_gaps / (double)(c->rx_delivered + c->rx_gaps),
-                c->rx_duplicates, c->rx_bad);
+                c->rx_duplicates);
     }
 }
 
@@ -152,10 +137,10 @@ int main(int argc, char **argv)
 
     hh_dt_config_t cfg;
     hh_dt_config_default(&cfg);
-    uint64_t node = 0, port = DEFAULT_PORT, dscp = 0, count = 0, interval = 100,
+    uint64_t node = 0, port = HH_DT_COAP_PORT, dscp = 0, count = 0, interval = 100,
              size = 32, duration = 0, v;
     const char *bind_ip = NULL;
-    const char *peers[HH_DT_MAX_PEERS];
+    const char *peer_args[HH_DT_MAX_PEERS];
     int npeers = 0;
     app_t app = { 0 };
     hh_log_level_t lvl;
@@ -169,10 +154,13 @@ int main(int argc, char **argv)
         case 'b': bind_ip = optarg; break;
         case 'P':
             ok = npeers < HH_DT_MAX_PEERS;
-            if (ok) peers[npeers++] = optarg;
+            if (ok) peer_args[npeers++] = optarg;
             break;
-        case 't': ok = parse_u64(optarg, 600000, &v) && v; cfg.timeout_ms = (uint32_t)v; break;
-        case 'r': ok = parse_u64(optarg, 255, &v); cfg.max_retries = (uint8_t)v; break;
+        case 't':
+            ok = parse_u64(optarg, 600000, &v) && v >= HH_DT_ACK_TIMEOUT_MIN_MS;
+            cfg.ack_timeout_ms = (uint32_t)v;
+            break;
+        case 'r': ok = parse_u64(optarg, 255, &v); cfg.max_retransmit = (uint8_t)v; break;
         case 'm': ok = parse_u64(optarg, HH_DT_PAYLOAD_MAX, &v); cfg.max_payload = (uint16_t)v; break;
         case 'd': ok = parse_u64(optarg, 63, &dscp); break;
         case 'c': ok = parse_u64(optarg, UINT32_MAX, &count); break;
@@ -221,20 +209,21 @@ int main(int argc, char **argv)
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
-    static hh_dt_udp_t udp;
+    static hh_dt_peers_t peers;
     static hh_dt_t dt;
-    if (hh_dt_udp_open(&udp, bind_ip, (uint16_t)port, (int)dscp) != HH_OK) return 1;
+    hh_dt_peers_init(&peers);
     for (int i = 0; i < npeers; i++) {
-        if (hh_dt_udp_add_peer_str(&udp, peers[i], (uint16_t)port) != HH_OK) {
-            fprintf(stderr, "dataterm: bad --peer %s (want ID=IP or ID=IP:PORT)\n", peers[i]);
+        if (hh_dt_peers_add_str(&peers, peer_args[i], (uint16_t)port) != HH_OK) {
+            fprintf(stderr, "dataterm: bad --peer %s (want ID=IP or ID=IP:PORT)\n",
+                    peer_args[i]);
             return 2;
         }
     }
-    const hh_clock_t *clk = hh_clock_monotonic();
-    if (hh_dt_init(&dt, (hh_node_id_t)node, &cfg, clk, hh_dt_udp_tx, &udp) != HH_OK) return 1;
+    if (hh_dt_open(&dt, bind_ip, (uint16_t)port, (int)dscp, &cfg, &peers) != HH_OK) return 1;
     hh_dt_set_deliver(&dt, on_deliver, &app);
     hh_dt_set_result(&dt, on_result, &app);
 
+    const hh_clock_t *clk = hh_clock_monotonic();
     hh_time_ms_t start = hh_now(clk);
     hh_time_ms_t next_send = start;
     uint64_t queued = 0;
@@ -245,7 +234,7 @@ int main(int argc, char **argv)
     uint8_t payload[HH_DT_PAYLOAD_MAX];
 
     HH_LOGI(COMP, "start", "mode=%s node=%" PRIu64 " dest=%" PRIu64 " port=%u", m, node,
-            dest, udp.port);
+            dest, dt.port);
 
     while (!g_stop) {
         hh_time_ms_t now = hh_now(clk);
@@ -274,7 +263,7 @@ int main(int argc, char **argv)
             if (ds < wait) wait = ds;
         }
 
-        struct pollfd pfd[2] = { { .fd = udp.fd, .events = POLLIN },
+        struct pollfd pfd[2] = { { .fd = hh_dt_fd(&dt), .events = POLLIN },
                                  { .fd = STDIN_FILENO, .events = POLLIN } };
         int nfds = (mode == MODE_CHAT && !input_done) ? 2 : 1;
         int r = poll(pfd, (nfds_t)nfds, (int)wait);
@@ -282,7 +271,7 @@ int main(int argc, char **argv)
             HH_LOGE(COMP, "poll_failed", "errno=%d (%s)", errno, strerror(errno));
             break;
         }
-        if (r > 0 && (pfd[0].revents & POLLIN)) drain_socket(&dt, &udp);
+        hh_dt_process(&dt);
         if (r > 0 && nfds == 2 && (pfd[1].revents & (POLLIN | POLLHUP))) {
             ssize_t n = read(STDIN_FILENO, line + line_len, sizeof line - line_len);
             if (n <= 0) {
@@ -305,10 +294,9 @@ int main(int argc, char **argv)
                 }
             }
         }
-        hh_dt_poll(&dt);
     }
 
-    log_summary(&dt, &udp);
-    hh_dt_udp_close(&udp);
+    log_summary(&dt);
+    hh_dt_close(&dt);
     return 0;
 }
