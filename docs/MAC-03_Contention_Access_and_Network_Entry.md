@@ -461,7 +461,7 @@ than its own (section 5.5).
 | A-10 | Each node's random generator is seeded independently, for example from node id and a hardware source | **Unconfirmed.** Proposed requirement (D-7) |
 | A-11 | No capture effect: two overlapping bursts are both lost | Unconfirmed. **Used only for the analysis** in section 8. A real receiver may capture the stronger burst |
 | A-12 | Entry PDUs are never acknowledged | The interface note proposes an acknowledgement for unicast data-class frames only (interface note, section 17). Entry requests, grants and leave messages are MAC management PDUs and have none |
-| A-13 | Largest net size N_net | **Unknown.** Not stated in either customer requirement. Raised for the requirements clarification register. Design value meanwhile: analysed up to 32 nodes. BE_max, S_e and the storm analysis depend on it |
+| A-13 | Largest net size N_net | **Decided by the project owner on 2026-10-23:** at most 4 nodes in the demonstration, at most 32 in the field. Not stated in either customer requirement. BE_max, S_e and the storm analysis depend on it |
 | A-14 | Range | Handheld: 4 km or more on one hop. Vehicular: more than 30 km. Sets d_max and the guard (section 7.2) |
 
 ### 5.5 Time sources and network time
