@@ -157,3 +157,6 @@ add_subdirectory(tests)
 # golden-capture generator. Development tooling, never linked into production.
 # ---------------------------------------------------------------------------
 add_subdirectory(tools/atp)
+
+# Host test application for evaluation boards (Python, development tooling).
+add_subdirectory(tools/hosttest)
