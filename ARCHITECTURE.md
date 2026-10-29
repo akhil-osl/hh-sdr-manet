@@ -124,7 +124,7 @@ collision the moment a working backend exists. Tracked as
 | [`protocol/`](protocol/README.md) | wire codec shared by daemon and clients | ✅ working (**not** ICD-2) |
 | `src/mac/` | MAC service for the network layer: five class queues, priority with control cap, pushed receive with events, link records (MAC-NETWORK-INTERFACE v1.1) | ✅ skeleton; lower side to MAC logic not bound (U-21 to U-23) |
 | `src/netif/` | network-interface adapter: host interface ↔ `hh_radio_ops_t` (OLSRv2 path) | ✅ working; Linux binding not built (U-24) |
-| [`apps/dataterm/`](apps/dataterm/README.md) | data terminal: text messages over UDP with ACK and retry (F02-AK-4) | ✅ working on the host; not yet run on boards |
+| [`apps/dataterm/`](apps/dataterm/README.md) | data terminal: text messages as CoAP over UDP with libcoap, ACK and retry (F02-AK-4) | ✅ working on the host; not yet run on boards |
 | `src/manet/` | legacy MANET stack: discovery → distance-vector routing → self-healing | ✅ working, legacy reference |
 | `src/dataplane/` | legacy packet forwarder (fast path of the legacy stack) | ✅ working, legacy reference |
 | `src/core/` | types, clock, log, config, events, dispatcher | ✅ shared primitives |
@@ -153,7 +153,7 @@ hh-manet ──► hhsdr_core ──► hhsdr_core_base          (legacy stack)
 
              hhsdr_netif ──► hhsdr_core_base          (OLSRv2 path)
 
-dataterm ──► hhsdr_dataterm ──► hhsdr_core_base       (UDP application)
+dataterm ──► hhsdr_dataterm ──► hhsdr_core_base, libcoap   (CoAP application)
 ```
 
 **Arrows point one way. No cycles.** Two rules hold this together:
