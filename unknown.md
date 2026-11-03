@@ -884,6 +884,89 @@ binding.
 
 ---
 
+## U-26 — Evaluation board test command and reply contract
+
+**Status:** BLOCKING (for the real-board run only)
+
+**Scope:** the host test application `tools/hosttest/`, which talks to a test
+board over TCP from a host PC. Development tooling, not part of `radiod`.
+
+**What is missing:** the board side of the link is not specified:
+
+- Message framing (line, length prefix, fixed size) and text or binary encoding
+- Command names and arguments the board accepts, and what each should return
+- How a reply carries the tag that ties it to its command, and the tag type
+- Reply status values and the error reply form
+- The query that returns the board ID and the firmware version
+- Whether the board runs a test responder today, and on which port
+
+**Current implementation assumptions** (placeholders, not requirements):
+
+- `hosttest/codec.py` uses one ASCII line each way: `<tag> <command> [arg ...]`
+  out, `<tag> <status> [key=value ...]` back. It is marked `TODO`.
+- The command names in `config/hosttest.example.json` are examples. They are
+  not commands of any real board.
+- The identity query and its two reply fields are named in the config.
+
+**Why it is needed:** Without the contract the tool can only be proved against
+a fake board. Results logged from a real board need the real board ID and
+firmware version to be traceable into a test report.
+
+**Where it must come from:** The test and hardware engineers who own the board
+test responder, from the host test application work package summary.
+
+**Required resolution:**
+
+- Supply one example of each message type, the tag rule and the identity query.
+- Replace `codec.py` and the example config, and add a contract test for each.
+
+**What can proceed:** the transport, command layer, results log, runner, CLI and
+GUI, all tested against the fake board.
+
+---
+
+## U-27 — Data terminal call setup and priority classes
+
+**Status:** OPEN (PROPOSED values in code)
+
+**What is missing:** The data terminal now sends voice call setup and class
+priority messages with values nobody has specified:
+
+- Call setup payload: CoAP POST to `/call`, Content-Format 42, four bytes: call
+  id (16 bits, big endian, never 0), type (1 request, 2 accept, 3 reject, 4
+  release), reason (0 none, 1 busy, 2 declined, 3 timeout, 4 normal).
+- Call timeouts: 10 s waiting for accept or reject, 30 s ringing. An active
+  call has no timeout, because no keepalive or media contract exists.
+- Both sides calling each other at once end in a busy reject on both sides.
+- Send order voice, signalling, video, data; voice limited to a burst of 8
+  then one send per 20 ms; data sent at least once in every 8 sends while it
+  waits.
+- Call setup is marked CS5, as RFC 4594 names for signalling. Interface spec
+  7.1 has no CS5 row, so the MAC treats it as Data and call setup can wait
+  behind other data on the air.
+- CoAP keeps NSTART at 1, so each class session has one message outstanding
+  and a second voice message waits for the first one's ACK. Raising NSTART for
+  the voice and signalling sessions would change congestion behaviour.
+
+**Why it is needed:** The payload layout is a wire contract between terminals.
+The numbers decide how voice and data share the link. The CS5 mapping decides
+whether call setup is delayed behind data.
+
+**Where it must come from:** Network owner (payload, timeouts, glare rule, CS5
+mapping, NSTART) and QA (traffic shares).
+
+**Required resolution:**
+
+- Approve or replace the payload layout and the two timeouts.
+- Add a CS5 row, or choose another DSCP, in interface spec 7.1.
+- Fix the voice cap, the data share and the NSTART value.
+- Define an active-call keepalive.
+
+**What can proceed:** the call state machine, the send queue and the tests,
+with every value above a named constant or marked `TODO`.
+
+---
+
 ## Summary
 
 | ID | Topic | Status | Primary source |
@@ -913,6 +996,8 @@ binding.
 | U-23 | Network entry and slot allocation | BLOCKING | Network owner |
 | U-24 | Linux interface binding for OLSRv2 | BLOCKING | E6 + architect |
 | U-25 | Radio callback, buffer-lifetime and close rules | OPEN | Architect + radio adapter owners |
+| U-26 | Evaluation board test command and reply contract | BLOCKING | Test and hardware engineers |
+| U-27 | Data terminal call setup and priority classes | OPEN | Network owner + QA |
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol

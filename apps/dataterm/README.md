@@ -42,6 +42,37 @@ A newer sender can add features without breaking older receivers:
 - DSCP is set on every socket with `--dscp` (default 0, the data class value is not decided yet). libcoap gives no access to its sockets, so dataterm finds them among its own open files.
 - The node id to IP table comes from `--peer`.
 
+## Build and test on PC
+
+**Build Comands**
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j8
+```
+**Terminal 1 (*Node 1*)**
+```bash
+./build/apps/dataterm/dataterm -n 1 -b 127.0.0.1 -p 5800 -P 2=127.0.0.1:5801 -v info chat 2
+```
+**Terminal 2 (*Node 2*)**
+```bash
+./build/apps/dataterm/dataterm -n 2 -b 127.0.0.1 -p 5801 -P 1=127.0.0.1:5800 -v info chat 1
+```
+**Then type in terminal 1:**
+
+- `/call`: terminal 2 shows `[call] incoming from node 1`.
+- In terminal 2 type `/accept`: both show `[call] active`.
+- `/hello`: data message.
+- `/voice hi`: voice class message.
+- `/hangup`: both show `[call] ended`.
+- Other commands: `/reject`, `/video TEXT`. Ctrl-D or Ctrl-C to quit.
+
+**Notes:**
+
+- Use `-v debug` to see class and DSCP per message in the log.
+- Receive-only: `./build/apps/dataterm/dataterm -n 2 -b 127.0.0.1 -p 5801 -P 1=127.0.0.1:5800 recv`.
+- Ports 5800 and 5801 are my pick. Any free pair works.
+- Check DSCP on wire: `sudo tcpdump -i lo -v udp port 5801 while sending`.
+- `--help` lists all flags.
 ## Use
 
 ```bash
@@ -187,3 +218,33 @@ They run in real time with libcoap's minimum timeout of 1 s, about 6 s in all. R
 - The node id to IP table (D11) is not yet confirmed by the project owner.
 - Group and broadcast messages (NON to a multicast address) are not in scope yet.
 - Message security (OSCORE, RFC 8613) waits for the security decision.
+
+## Priority classes
+
+`hh_dt_send_class()` queues a message in one of three classes. At each `hh_dt_process()` the queued messages leave in class order, voice first, then video, then data. Plain `hh_dt_send()` and chat text are data.
+
+| Class | DSCP | Notes |
+|---|---|---|
+| Voice | 46 (EF) | Limited by a token bucket, so a voice flood cannot take every send |
+| Video | 34 (AF41) | |
+| Data | the `--dscp` value (0) | Sent at least once in every 8 sends while it waits |
+| Signalling | 40 (CS5) | Call setup only |
+
+Each destination and class has its own CoAP session and so its own socket, marked once with the class DSCP, so a retransmission keeps its class. A received stream is therefore one source IP and port, and Message IDs are counted per stream.
+
+CoAP allows one outstanding message per session (NSTART 1). A second voice message waits for the ACK of the first, while the first message of each other class can already be on the wire. The values above are placeholders until the unknown entry U-27 is settled.
+
+## Voice call setup
+
+Call setup is signalling only, with no media. One call at a time. It is a state machine in `call.c` with the states idle, calling, ringing and active.
+
+| Message | Sent by | Effect |
+|---|---|---|
+| request | caller | callee rings, caller waits 10 s |
+| accept | callee | both active |
+| reject | callee | caller idle, reason declined, busy or timeout |
+| release | either | both idle |
+
+A callee that is not idle answers a new request with reject (busy). A request not answered within the timeout is released by the caller, and a ring not answered within 30 s is rejected by the callee, so no state is left behind. The payload is four bytes in a CoAP POST to `/call`, Content-Format 42, marked PROPOSED in `call.h`.
+
+In `chat` mode: `/call`, `/accept`, `/reject`, `/hangup` for the call with the chat destination, and `/voice TEXT` or `/video TEXT` to send in a class.

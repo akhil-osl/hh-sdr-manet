@@ -31,6 +31,8 @@ unset(CMAKE_REQUIRED_LIBRARIES)
 
 add_library(hhsdr_dataterm STATIC
   src/peers.c
+  src/call.c
+  src/sched.c
   src/dataterm.c
 )
 target_include_directories(hhsdr_dataterm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -45,7 +47,8 @@ add_executable(dataterm src/main.c)
 target_link_libraries(dataterm PRIVATE hhsdr_dataterm)
 
 if(HH_BUILD_TESTS)
-  foreach(t test_dataterm_peers test_dataterm_coap test_dataterm_wire)
+  foreach(t test_dataterm_peers test_dataterm_coap test_dataterm_wire test_dataterm_call test_dataterm_sched
+           test_dataterm_priority)
     add_executable(${t} tests/${t}.c)
     target_include_directories(${t} PRIVATE ${CMAKE_SOURCE_DIR}/tests)
     target_include_directories(${t} SYSTEM PRIVATE ${COAP_STATIC_INCLUDE_DIRS})

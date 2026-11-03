@@ -38,6 +38,9 @@ static void usage(FILE *f)
         "       dataterm -n ID [options] chat DEST\n"
         "       dataterm -n ID [options] send DEST --count N [--interval MS] [--size B]\n"
         "\n"
+        "chat commands: /call, /accept, /reject, /hangup (voice call setup with DEST),\n"
+        "               /voice TEXT, /video TEXT (priority classes; plain text is data)\n"
+        "\n"
         "  -n, --node ID         this node's id (required)\n"
         "  -p, --port PORT       CoAP UDP port to bind and default peer port (5683)\n"
         "  -b, --bind IP         local address to bind (all)\n"
@@ -89,10 +92,53 @@ static void on_result(hh_node_id_t to, uint16_t mid, bool acked, const char *rea
     (void)to; (void)mid; (void)reason;
 }
 
+static void on_call_event(const hh_call_event_t *ev, void *ctx)
+{
+    static const char *const reason[] = { "none", "busy", "declined", "timeout", "normal" };
+    (void)ctx;
+    if (ev->kind == HH_CALL_EV_INCOMING)
+        printf("[call] incoming from node %u, /accept or /reject\n", ev->peer);
+    else if (ev->kind == HH_CALL_EV_ACTIVE)
+        printf("[call] active with node %u\n", ev->peer);
+    else
+        printf("[call] ended with node %u (%s)\n", ev->peer, reason[ev->reason]);
+    fflush(stdout);
+}
+
+/* A line starting with / is a command. Returns true if it was one. */
+static bool chat_command(hh_dt_t *dt, hh_node_id_t dest, const char **line, size_t *len,
+                         hh_dt_class_t *cls)
+{
+    const char *l = *line;
+    if (l[0] != '/') return false;
+    size_t w = 1;
+    while (w < *len && l[w] != ' ') w++;
+    #define IS(name) (w - 1 == sizeof(name) - 1 && strncmp(l + 1, name, w - 1) == 0)
+    hh_status_t s = HH_OK;
+    if (IS("voice") || IS("video")) {
+        *cls = IS("voice") ? HH_DT_CLASS_VOICE : HH_DT_CLASS_VIDEO;
+        *line = w < *len ? l + w + 1 : l + *len;
+        *len = (size_t)(l + *len - *line);
+        return false;  /* the rest is sent as a message of that class */
+    }
+    if (IS("call")) s = hh_dt_call_request(dt, dest);
+    else if (IS("accept")) s = hh_dt_call_accept(dt);
+    else if (IS("reject")) s = hh_dt_call_reject(dt);
+    else if (IS("hangup")) s = hh_dt_call_release(dt);
+    else { fprintf(stderr, "unknown command: /call /accept /reject /hangup /voice /video\n");
+           *len = 0; return true; }
+    #undef IS
+    if (s != HH_OK) fprintf(stderr, "not possible now: %s\n", hh_status_str(s));
+    *len = 0;
+    return true;
+}
+
 static void chat_line(hh_dt_t *dt, hh_node_id_t dest, const char *line, size_t len)
 {
     if (len == 0) return;
-    hh_status_t s = hh_dt_send(dt, dest, (const uint8_t *)line, len);
+    hh_dt_class_t cls = HH_DT_CLASS_DATA;
+    if (chat_command(dt, dest, &line, &len, &cls) || len == 0) return;
+    hh_status_t s = hh_dt_send_class(dt, dest, cls, (const uint8_t *)line, len);
     if (s == HH_ERR_AGAIN) fprintf(stderr, "busy: line not sent, try again\n");
     else if (s == HH_ERR_INVAL) fprintf(stderr, "too long: %zu bytes, limit %u\n", len,
                                         dt->cfg.max_payload);
@@ -222,6 +268,7 @@ int main(int argc, char **argv)
     if (hh_dt_open(&dt, bind_ip, (uint16_t)port, (int)dscp, &cfg, &peers) != HH_OK) return 1;
     hh_dt_set_deliver(&dt, on_deliver, &app);
     hh_dt_set_result(&dt, on_result, &app);
+    hh_dt_set_call_event(&dt, on_call_event, NULL);
 
     const hh_clock_t *clk = hh_clock_monotonic();
     hh_time_ms_t start = hh_now(clk);

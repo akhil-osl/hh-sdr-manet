@@ -3,8 +3,8 @@
  * confirmable POST to /msg with Content-Format 0. libcoap owns the sockets,
  * the ACK and RST, and the retransmission timer.
  *
- * Each peer gets one client session, so Message IDs count up per peer and the
- * receiver counts lost messages from gaps. Some libcoap versions hand a
+ * Each destination and class gets one client session, so Message IDs count up
+ * per session and the receiver counts lost messages from gaps per stream. Some libcoap versions hand a
  * repeated CON to the handler again, so duplicates are also dropped here with
  * a 32-entry window.
  *
@@ -15,7 +15,9 @@
 #define HHSDR_DATATERM_DATATERM_H
 
 #include "hhsdr/core/clock.h"
+#include "hhsdr/dataterm/call.h"
 #include "hhsdr/dataterm/peers.h"
+#include "hhsdr/dataterm/sched.h"
 
 #define HH_DT_COAP_PORT     5683u
 /* Ethernet 1500 minus IPv4 20, UDP 8 and the CoAP header: the buffer bound. */
@@ -23,6 +25,10 @@
 /* Messages in flight or waiting in libcoap, per destination. */
 #define HH_DT_QUEUE_LEN     8u
 #define HH_DT_RX_WINDOW     32u
+/* Messages waiting for their turn, per class. */
+#define HH_DT_PENDING_LEN   8u
+/* One CoAP session, and so one source port, per destination and class. */
+#define HH_DT_STREAMS       (HH_DT_MAX_PEERS * HH_DT_CLASS_COUNT)
 /* libcoap accepts no shorter ACK timeout. */
 #define HH_DT_ACK_TIMEOUT_MIN_MS 1000u
 
@@ -54,6 +60,7 @@ typedef struct {
     uint64_t tx_too_large;
     uint64_t tx_queue_full;
     uint64_t tx_no_route;     /* destination not in the peer table       */
+    uint64_t tx_pending_full; /* a class queue was full                  */
     uint64_t rx_data;
     uint64_t rx_delivered;
     uint64_t rx_duplicates;
@@ -62,7 +69,7 @@ typedef struct {
                                  Message ID jumped too far               */
     uint64_t rx_bad_format;   /* Content-Format other than text, answered 4.15 */
     uint64_t rx_unknown_sender;
-    uint64_t rx_table_full;
+    uint64_t rx_table_full;   /* oldest stream dropped to make room       */
 } hh_dt_counters_t;
 
 struct coap_context_t;
@@ -79,6 +86,7 @@ typedef struct {
 typedef struct {
     bool                   used;
     hh_node_id_t           node;
+    hh_dt_class_t          cls;
     struct coap_session_t *session;
     uint8_t                outstanding;   /* CON and NON together */
     hh_dt_non_t            non[HH_DT_QUEUE_LEN];
@@ -87,7 +95,8 @@ typedef struct {
 
 typedef struct {
     bool               used;
-    struct sockaddr_in addr;
+    struct sockaddr_in addr;      /* IP and source port: one stream */
+    hh_time_ms_t       last_ms;
     hh_node_id_t       node;
     uint16_t           last_mid;
     uint32_t           window;    /* bit n: last_mid - n was received */
@@ -95,6 +104,15 @@ typedef struct {
     uint64_t           gaps;
     uint64_t           duplicates;
 } hh_dt_rx_peer_t;
+
+typedef enum { HH_DT_PATH_MSG = 0, HH_DT_PATH_CALL } hh_dt_path_t;
+
+typedef struct {
+    hh_node_id_t to;
+    hh_dt_path_t path;
+    uint16_t     len;
+    uint8_t      data[HH_DT_PAYLOAD_MAX];
+} hh_dt_pending_t;
 
 typedef struct hh_dt {
     struct coap_context_t *ctx;
@@ -107,8 +125,15 @@ typedef struct hh_dt {
     void                  *deliver_ctx;
     hh_dt_result_fn        result;
     void                  *result_ctx;
-    hh_dt_tx_peer_t        tx[HH_DT_MAX_PEERS];
-    hh_dt_rx_peer_t        rx[HH_DT_MAX_PEERS];
+    hh_dt_tx_peer_t        tx[HH_DT_STREAMS];
+    hh_dt_rx_peer_t        rx[HH_DT_STREAMS];
+    hh_dt_pending_t        pend[HH_DT_CLASS_COUNT][HH_DT_PENDING_LEN];  /* ring per class */
+    uint8_t                pend_head[HH_DT_CLASS_COUNT];
+    uint8_t                pend_n[HH_DT_CLASS_COUNT];
+    hh_dt_sched_t          sched;
+    hh_call_t              call;
+    hh_call_event_fn       call_event;
+    void                  *call_event_ctx;
     hh_dt_counters_t       counters;
 } hh_dt_t;
 
@@ -125,6 +150,25 @@ void hh_dt_set_result(hh_dt_t *dt, hh_dt_result_fn fn, void *ctx);
  * destination is not in the peer table, HH_ERR_AGAIN if HH_DT_QUEUE_LEN
  * messages to it are already outstanding, HH_ERR_IO if libcoap fails. */
 hh_status_t hh_dt_send(hh_dt_t *dt, hh_node_id_t to, const uint8_t *data, size_t len);
+
+/* Queues a message in a class. It leaves at the next hh_dt_process(), in class
+ * order (voice, video, data) with the guards in sched.h, on a socket marked
+ * with that class's DSCP. HH_ERR_INVAL for the signalling class, which only
+ * call setup uses. HH_ERR_AGAIN if HH_DT_PENDING_LEN messages already wait in
+ * the class. Other errors as hh_dt_send(). The data class is marked with the
+ * dscp given to hh_dt_open(). */
+hh_status_t hh_dt_send_class(hh_dt_t *dt, hh_node_id_t to, hh_dt_class_t cls,
+                             const uint8_t *data, size_t len);
+
+/* Voice call setup, see call.h. Signalling leaves in the signalling class
+ * (DSCP CS5) as CoAP POST to /call. HH_ERR_NOTFOUND if the destination is not
+ * in the peer table. */
+hh_status_t hh_dt_call_request(hh_dt_t *dt, hh_node_id_t to);
+hh_status_t hh_dt_call_accept(hh_dt_t *dt);
+hh_status_t hh_dt_call_reject(hh_dt_t *dt);
+hh_status_t hh_dt_call_release(hh_dt_t *dt);
+void        hh_dt_set_call_event(hh_dt_t *dt, hh_call_event_fn fn, void *ctx);
+const hh_call_t *hh_dt_call(const hh_dt_t *dt);
 
 /* File descriptor to poll. libcoap's epoll set, which also wakes for its
  * retransmission timers. */

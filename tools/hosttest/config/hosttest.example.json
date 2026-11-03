@@ -1,0 +1,34 @@
+{
+  "board": {
+    "name": "bench-1",
+    "transport": "tcp",
+    "host": "192.168.10.20",
+    "port": 9000,
+    "connect_timeout_s": 2.0,
+    "connect_attempts": 3,
+    "connect_backoff_s": 0.5
+  },
+  "log_dir": "hosttest-results",
+  "identity": {
+    "command": "EXAMPLE_ID",
+    "expect": { "status": "OK" },
+    "timeout_s": 2.0,
+    "board_id_field": "id",
+    "firmware_field": "fw"
+  },
+  "tests": [
+    {
+      "id": "example_status",
+      "command": "EXAMPLE_STATUS",
+      "expect": { "status": "OK" },
+      "timeout_s": 3.0
+    },
+    {
+      "id": "example_value",
+      "command": "EXAMPLE_READ",
+      "args": ["channel1"],
+      "expect": { "status": "OK", "value": "42" },
+      "timeout_s": 3.0
+    }
+  ]
+}
