@@ -23,7 +23,7 @@
 #define dt_session_set_app_data(s, d) coap_session_set_app_data((s), (d))
 #endif
 
-static void call_tx(hh_node_id_t to, const uint8_t *pdu, size_t len, void *ctx);
+static hh_status_t call_tx(hh_node_id_t to, const uint8_t *pdu, size_t len, void *ctx);
 static void call_ev(const hh_call_event_t *ev, void *ctx);
 static void on_call(coap_resource_t *res, coap_session_t *session, const coap_pdu_t *req,
                     const coap_string_t *query, coap_pdu_t *resp);
@@ -573,9 +573,9 @@ static void pump(hh_dt_t *dt)
     }
 }
 
-static void call_tx(hh_node_id_t to, const uint8_t *pdu, size_t len, void *ctx)
+static hh_status_t call_tx(hh_node_id_t to, const uint8_t *pdu, size_t len, void *ctx)
 {
-    pend_add(ctx, HH_DT_CLASS_SIGNAL, to, HH_DT_PATH_CALL, pdu, len);
+    return pend_add(ctx, HH_DT_CLASS_SIGNAL, to, HH_DT_PATH_CALL, pdu, len);
 }
 
 static void call_ev(const hh_call_event_t *ev, void *ctx)

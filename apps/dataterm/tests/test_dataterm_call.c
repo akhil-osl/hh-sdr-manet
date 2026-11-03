@@ -29,6 +29,7 @@ static hh_time_ms_t g_now;
 static node_t       g_n[NODES];
 static link_msg_t   g_q[QLEN];
 static int          g_qn;
+static hh_status_t  g_send_status;  /* what the link answers to a send */
 
 static hh_time_ms_t clk_now(void *ctx) { (void)ctx; return g_now; }
 static const hh_clock_t g_clk = { clk_now, NULL };
@@ -39,9 +40,14 @@ static const char *msg_name(uint8_t t)
     return t < 5 ? n[t] : "?";
 }
 
-static void on_send(hh_node_id_t to, const uint8_t *pdu, size_t len, void *ctx)
+static hh_status_t on_send(hh_node_id_t to, const uint8_t *pdu, size_t len, void *ctx)
 {
     node_t *from = ctx;
+    if (g_send_status != HH_OK) {
+        printf("    t=%-6llu node %u -> node %u  %-8s REFUSED (%s)\n", (unsigned long long)g_now,
+               from->id, to, msg_name(pdu[2]), hh_status_str(g_send_status));
+        return g_send_status;
+    }
     printf("    t=%-6llu node %u -> node %u  %-8s id=%u reason=%u\n", (unsigned long long)g_now,
            from->id, to, msg_name(pdu[2]), (pdu[0] << 8) | pdu[1], pdu[3]);
     if (g_qn < QLEN && len == HH_CALL_PDU_LEN) {
@@ -49,6 +55,7 @@ static void on_send(hh_node_id_t to, const uint8_t *pdu, size_t len, void *ctx)
         memcpy(g_q[g_qn].pdu, pdu, len);
         g_qn++;
     }
+    return HH_OK;
 }
 
 static void on_event(const hh_call_event_t *ev, void *ctx)
@@ -73,6 +80,7 @@ static void setup(void)
     cfg.ring_timeout_ms = 3000;
     g_now = 0;
     g_qn = 0;
+    g_send_status = HH_OK;
     for (int i = 0; i < NODES; i++) {
         memset(&g_n[i], 0, sizeof g_n[i]);
         g_n[i].id = (hh_node_id_t)(i + 1);
@@ -244,6 +252,55 @@ static void test_calls_refused_in_wrong_state(void)
     HH_ASSERT_ERR(hh_call_request(&node(1)->call, 3), HH_ERR_STATE);
 }
 
+static void test_refused_send_changes_no_state(void)
+{
+    puts("    -- send refused (queue full): no state moves, retry works");
+    setup();
+    g_send_status = HH_ERR_AGAIN;
+    HH_ASSERT_ERR(hh_call_request(&node(1)->call, 2), HH_ERR_AGAIN);
+    HH_ASSERT_EQ_INT(node(1)->call.state, HH_CALL_IDLE);
+    HH_ASSERT_EQ_INT(node(1)->call.id, 0);
+    HH_ASSERT_EQ_INT(node(1)->ev_count, 0);
+    HH_ASSERT_EQ_INT(hh_call_next_timeout_ms(&node(1)->call), -1);
+    g_send_status = HH_OK;
+    HH_ASSERT_OK(hh_call_request(&node(1)->call, 2));
+    HH_ASSERT_EQ_INT(node(1)->call.id, 1);  /* the refused try used no call id */
+    pump();
+    g_send_status = HH_ERR_AGAIN;
+    HH_ASSERT_ERR(hh_call_accept(&node(2)->call), HH_ERR_AGAIN);
+    HH_ASSERT_ERR(hh_call_reject(&node(2)->call), HH_ERR_AGAIN);
+    HH_ASSERT_EQ_INT(node(2)->call.state, HH_CALL_RINGING);
+    g_send_status = HH_OK;
+    HH_ASSERT_OK(hh_call_accept(&node(2)->call));
+    pump();
+    HH_ASSERT_EQ_INT(node(1)->call.state, HH_CALL_ACTIVE);
+    g_send_status = HH_ERR_AGAIN;
+    HH_ASSERT_ERR(hh_call_release(&node(1)->call), HH_ERR_AGAIN);
+    HH_ASSERT_EQ_INT(node(1)->call.state, HH_CALL_ACTIVE);
+    HH_ASSERT_EQ_INT(node(2)->call.state, HH_CALL_ACTIVE);
+    g_send_status = HH_OK;
+    HH_ASSERT_OK(hh_call_release(&node(1)->call));
+    pump();
+    HH_ASSERT_EQ_INT(node(2)->call.state, HH_CALL_IDLE);
+    HH_ASSERT_EQ_INT(node(1)->call.counters.tx_failed, 2);
+    HH_ASSERT_EQ_INT(node(2)->call.counters.tx_failed, 2);
+}
+
+static void test_timeout_ends_call_even_if_send_refused(void)
+{
+    puts("    -- timeout with the send refused still ends the call");
+    setup();
+    HH_ASSERT_OK(hh_call_request(&node(1)->call, 2));
+    drop_all();
+    g_send_status = HH_ERR_AGAIN;
+    advance(1000);
+    HH_ASSERT_EQ_INT(node(1)->call.state, HH_CALL_IDLE);
+    HH_ASSERT_EQ_INT(node(1)->last_reason, HH_CALL_REASON_TIMEOUT);
+    HH_ASSERT_EQ_INT(node(1)->call.counters.tx_failed, 1);
+    g_send_status = HH_OK;
+    HH_ASSERT_OK(hh_call_request(&node(1)->call, 2));
+}
+
 HH_TEST_MAIN_BEGIN("dataterm call setup")
     HH_RUN(test_request_accept_release);
     HH_RUN(test_reject);
@@ -253,4 +310,6 @@ HH_TEST_MAIN_BEGIN("dataterm call setup")
     HH_RUN(test_cancel_while_ringing_at_peer);
     HH_RUN(test_duplicates_and_bad_input_are_ignored);
     HH_RUN(test_calls_refused_in_wrong_state);
+    HH_RUN(test_refused_send_changes_no_state);
+    HH_RUN(test_timeout_ends_call_even_if_send_refused);
 HH_TEST_MAIN_END()

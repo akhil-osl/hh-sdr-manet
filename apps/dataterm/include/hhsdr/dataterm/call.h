@@ -54,8 +54,10 @@ typedef struct {
     hh_call_reason_t     reason;  /* HH_CALL_EV_ENDED only */
 } hh_call_event_t;
 
-/* Sends one signalling payload to a node. Failure is the sender's to log. */
-typedef void (*hh_call_send_fn)(hh_node_id_t to, const uint8_t *pdu, size_t len, void *ctx);
+/* Queues or sends one signalling payload to a node. Returns HH_OK only if the
+ * payload is on its way; a full queue returns HH_ERR_AGAIN. */
+typedef hh_status_t (*hh_call_send_fn)(hh_node_id_t to, const uint8_t *pdu, size_t len,
+                                       void *ctx);
 typedef void (*hh_call_event_fn)(const hh_call_event_t *ev, void *ctx);
 
 typedef struct {
@@ -69,6 +71,7 @@ typedef struct {
     uint64_t rx_duplicate;  /* repeated request of the current call        */
     uint64_t busy_rejected;
     uint64_t timeouts;
+    uint64_t tx_failed;     /* the send function refused a payload */
 } hh_call_counters_t;
 
 typedef struct {
@@ -90,7 +93,9 @@ void hh_call_config_default(hh_call_config_t *cfg);
 hh_status_t hh_call_init(hh_call_t *c, const hh_call_config_t *cfg, const hh_clock_t *clock,
                          hh_call_send_fn send, hh_call_event_fn event, void *ctx);
 
-/* HH_ERR_STATE unless idle. HH_ERR_INVAL for an invalid node. */
+/* Each call sends its message first. If the send function fails, the call
+ * returns that status and the state does not change, so the caller can retry.
+ * HH_ERR_STATE unless idle. HH_ERR_INVAL for an invalid node. */
 hh_status_t hh_call_request(hh_call_t *c, hh_node_id_t to);
 /* HH_ERR_STATE unless a request is ringing. */
 hh_status_t hh_call_accept(hh_call_t *c);
@@ -102,7 +107,8 @@ hh_status_t hh_call_release(hh_call_t *c);
  * acted on. */
 void hh_call_on_rx(hh_call_t *c, hh_node_id_t from, const uint8_t *pdu, size_t len);
 
-/* Runs due timeouts. */
+/* Runs due timeouts. A timeout always ends the call, even if its release or
+ * reject cannot be sent: the peer then ends it on its own timeout. */
 void hh_call_poll(hh_call_t *c);
 /* Milliseconds until the next timeout, or -1 when none is pending. */
 int64_t hh_call_next_timeout_ms(const hh_call_t *c);

@@ -53,11 +53,20 @@ static void set_state(hh_call_t *c, hh_call_state_t s)
     c->state = s;
 }
 
-static void tx(hh_call_t *c, hh_node_id_t to, uint16_t id, hh_call_msg_t m, hh_call_reason_t r)
+static hh_status_t tx(hh_call_t *c, hh_node_id_t to, uint16_t id, hh_call_msg_t m,
+                      hh_call_reason_t r)
 {
     uint8_t pdu[HH_CALL_PDU_LEN] = { (uint8_t)(id >> 8), (uint8_t)id, (uint8_t)m, (uint8_t)r };
-    HH_LOGI(COMP, "call_tx", "to=%u id=%u msg=%s reason=%s", to, id, msg_str(m), reason_str(r));
-    c->send(to, pdu, sizeof pdu, c->ctx);
+    hh_status_t s = c->send(to, pdu, sizeof pdu, c->ctx);
+    if (s != HH_OK) {
+        c->counters.tx_failed++;
+        HH_LOGW(COMP, "call_tx_failed", "to=%u id=%u msg=%s status=%s", to, id, msg_str(m),
+                hh_status_str(s));
+        return s;
+    }
+    HH_LOGI(COMP, "call_tx", "to=%u id=%u msg=%s reason=%s", to, id, msg_str(m),
+            reason_str(r));
+    return HH_OK;
 }
 
 static void emit(hh_call_t *c, hh_call_event_kind_t kind, hh_call_reason_t reason)
@@ -97,12 +106,15 @@ hh_status_t hh_call_request(hh_call_t *c, hh_node_id_t to)
 {
     if (!c || to == HH_NODE_ID_INVALID) return HH_ERR_INVAL;
     if (c->state != HH_CALL_IDLE) return HH_ERR_STATE;
-    if (++c->last_id == 0) c->last_id = 1;
+    uint16_t id = (uint16_t)(c->last_id + 1u);
+    if (id == 0) id = 1;
+    hh_status_t s = tx(c, to, id, HH_CALL_MSG_REQUEST, HH_CALL_REASON_NONE);
+    if (s != HH_OK) return s;
+    c->last_id = id;
     c->peer = to;
-    c->id = c->last_id;
+    c->id = id;
     c->deadline = hh_now(c->clock) + c->cfg.setup_timeout_ms;
     set_state(c, HH_CALL_CALLING);
-    tx(c, to, c->id, HH_CALL_MSG_REQUEST, HH_CALL_REASON_NONE);
     return HH_OK;
 }
 
@@ -110,7 +122,8 @@ hh_status_t hh_call_accept(hh_call_t *c)
 {
     if (!c) return HH_ERR_INVAL;
     if (c->state != HH_CALL_RINGING) return HH_ERR_STATE;
-    tx(c, c->peer, c->id, HH_CALL_MSG_ACCEPT, HH_CALL_REASON_NONE);
+    hh_status_t s = tx(c, c->peer, c->id, HH_CALL_MSG_ACCEPT, HH_CALL_REASON_NONE);
+    if (s != HH_OK) return s;
     c->deadline = 0;
     set_state(c, HH_CALL_ACTIVE);
     emit(c, HH_CALL_EV_ACTIVE, HH_CALL_REASON_NONE);
@@ -121,7 +134,8 @@ hh_status_t hh_call_reject(hh_call_t *c)
 {
     if (!c) return HH_ERR_INVAL;
     if (c->state != HH_CALL_RINGING) return HH_ERR_STATE;
-    tx(c, c->peer, c->id, HH_CALL_MSG_REJECT, HH_CALL_REASON_DECLINED);
+    hh_status_t s = tx(c, c->peer, c->id, HH_CALL_MSG_REJECT, HH_CALL_REASON_DECLINED);
+    if (s != HH_OK) return s;
     end_call(c, HH_CALL_REASON_DECLINED);
     return HH_OK;
 }
@@ -130,7 +144,8 @@ hh_status_t hh_call_release(hh_call_t *c)
 {
     if (!c) return HH_ERR_INVAL;
     if (c->state != HH_CALL_CALLING && c->state != HH_CALL_ACTIVE) return HH_ERR_STATE;
-    tx(c, c->peer, c->id, HH_CALL_MSG_RELEASE, HH_CALL_REASON_NORMAL);
+    hh_status_t s = tx(c, c->peer, c->id, HH_CALL_MSG_RELEASE, HH_CALL_REASON_NORMAL);
+    if (s != HH_OK) return s;
     end_call(c, HH_CALL_REASON_NORMAL);
     return HH_OK;
 }
@@ -168,7 +183,8 @@ void hh_call_on_rx(hh_call_t *c, hh_node_id_t from, const uint8_t *pdu, size_t l
         } else {
             /* TODO: both sides calling each other at once also ends here. */
             c->counters.busy_rejected++;
-            tx(c, from, id, HH_CALL_MSG_REJECT, HH_CALL_REASON_BUSY);
+            /* A lost busy reject leaves the caller to its own setup timeout. */
+            (void)tx(c, from, id, HH_CALL_MSG_REJECT, HH_CALL_REASON_BUSY);
         }
         return;
     case HH_CALL_MSG_ACCEPT:
@@ -204,10 +220,12 @@ void hh_call_poll(hh_call_t *c)
     if (hh_now(c->clock) < c->deadline) return;
     c->counters.timeouts++;
     /* TODO: end an active call when the peer goes silent. Needs a keepalive contract. */
+    /* The call ends even if this message is lost, or it would never end. The
+     * peer ends it on its own timeout. */
     if (c->state == HH_CALL_CALLING)
-        tx(c, c->peer, c->id, HH_CALL_MSG_RELEASE, HH_CALL_REASON_TIMEOUT);
+        (void)tx(c, c->peer, c->id, HH_CALL_MSG_RELEASE, HH_CALL_REASON_TIMEOUT);
     else
-        tx(c, c->peer, c->id, HH_CALL_MSG_REJECT, HH_CALL_REASON_TIMEOUT);
+        (void)tx(c, c->peer, c->id, HH_CALL_MSG_REJECT, HH_CALL_REASON_TIMEOUT);
     end_call(c, HH_CALL_REASON_TIMEOUT);
 }
 
