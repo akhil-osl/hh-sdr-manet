@@ -23,6 +23,11 @@
 #define dt_session_set_app_data(s, d) coap_session_set_app_data((s), (d))
 #endif
 
+static void call_tx(hh_node_id_t to, const uint8_t *pdu, size_t len, void *ctx);
+static void call_ev(const hh_call_event_t *ev, void *ctx);
+static void on_call(coap_resource_t *res, coap_session_t *session, const coap_pdu_t *req,
+                    const coap_string_t *query, coap_pdu_t *resp);
+
 static int     g_users;
 /* Sockets already seen, by inode, so each new libcoap socket is marked once. */
 static ino_t   g_seen_ino[DT_MAX_FDS];
@@ -82,26 +87,35 @@ static uint16_t scan_new_sockets(bool mark, int dscp)
     return port;
 }
 
+/* A stream is one source IP and port. A sender has one per class, and a
+ * restarted sender gets new ones, so Message IDs are counted per stream. */
 static hh_dt_rx_peer_t *rx_find(hh_dt_t *dt, const struct sockaddr_in *a)
 {
-    for (int i = 0; i < HH_DT_MAX_PEERS; i++)
-        if (dt->rx[i].used && dt->rx[i].addr.sin_addr.s_addr == a->sin_addr.s_addr)
+    for (int i = 0; i < HH_DT_STREAMS; i++)
+        if (dt->rx[i].used && dt->rx[i].addr.sin_addr.s_addr == a->sin_addr.s_addr &&
+            dt->rx[i].addr.sin_port == a->sin_port)
             return &dt->rx[i];
     return NULL;
 }
 
 static hh_dt_rx_peer_t *rx_new(hh_dt_t *dt, const struct sockaddr_in *a)
 {
-    for (int i = 0; i < HH_DT_MAX_PEERS; i++) {
-        if (!dt->rx[i].used) {
-            memset(&dt->rx[i], 0, sizeof dt->rx[i]);
-            dt->rx[i].used = true;
-            dt->rx[i].addr = *a;
-            dt->rx[i].node = hh_dt_peers_node_of(dt->peers, a);
-            return &dt->rx[i];
-        }
+    hh_dt_rx_peer_t *slot = NULL;
+    for (int i = 0; i < HH_DT_STREAMS && !slot; i++)
+        if (!dt->rx[i].used) slot = &dt->rx[i];
+    if (!slot) {
+        /* Table full: the stream silent for longest is most likely a dead run. */
+        slot = &dt->rx[0];
+        for (int i = 1; i < HH_DT_STREAMS; i++)
+            if (dt->rx[i].last_ms < slot->last_ms) slot = &dt->rx[i];
+        dt->counters.rx_table_full++;
+        HH_LOGW(COMP, "rx_stream_dropped", "node=%u", slot->node);
     }
-    return NULL;
+    memset(slot, 0, sizeof *slot);
+    slot->used = true;
+    slot->addr = *a;
+    slot->node = hh_dt_peers_node_of(dt->peers, a);
+    return slot;
 }
 
 /* Returns true if the message is new and must be delivered. */
@@ -175,23 +189,12 @@ static void on_post(coap_resource_t *res, coap_session_t *session, const coap_pd
     bool first = !r;
     if (first) {
         r = rx_new(dt, from);
-        if (!r) {
-            dt->counters.rx_table_full++;
-            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE);
-            return;
-        }
         if (r->node == HH_NODE_ID_INVALID) {
             dt->counters.rx_unknown_sender++;
             HH_LOGI(COMP, "rx_unknown_sender", "ip=%s", ip);
         }
-    } else if (r->addr.sin_port != from->sin_port) {
-        /* A new run of the sender: new session, new port, new Message IDs. */
-        dt->counters.rx_resync++;
-        HH_LOGI(COMP, "rx_sender_restart", "node=%u ip=%s port=%u", r->node, ip,
-                ntohs(from->sin_port));
-        r->addr = *from;
-        first = true;
     }
+    r->last_ms = hh_now(dt->clock);
 
     uint16_t mid = (uint16_t)coap_pdu_get_mid(req);
     size_t len = 0;
@@ -211,12 +214,16 @@ static void on_post(coap_resource_t *res, coap_session_t *session, const coap_pd
     coap_pdu_set_code(resp, COAP_RESPONSE_CODE_CHANGED);
 }
 
+/* Call setup answers itself at the call level, so its CoAP results are only
+ * logged and the application's result callback sees messages alone. */
 static void finish(hh_dt_tx_peer_t *p, uint16_t mid, bool acked, const char *reason)
 {
     hh_dt_t *dt = p->dt;
     if (p->outstanding) p->outstanding--;
-    HH_LOGD(COMP, "result", "to=%u mid=%u acked=%d reason=%s", p->node, mid, acked, reason);
-    if (dt->result) dt->result(p->node, mid, acked, reason, dt->result_ctx);
+    HH_LOGD(COMP, "result", "to=%u mid=%u class=%s acked=%d reason=%s", p->node, mid,
+            hh_dt_class_str(p->cls), acked, reason);
+    if (p->cls != HH_DT_CLASS_SIGNAL && dt->result)
+        dt->result(p->node, mid, acked, reason, dt->result_ctx);
 }
 
 /* The NON wait whose token the reply carries, or NULL for a CON reply. */
@@ -326,6 +333,18 @@ hh_status_t hh_dt_open(hh_dt_t *dt, const char *bind_ip, uint16_t port, int dscp
     coap_resource_set_userdata(res, dt);
     coap_register_handler(res, COAP_REQUEST_POST, on_post);
     coap_add_resource(dt->ctx, res);
+    coap_resource_t *call = coap_resource_init(coap_make_str_const("call"), 0);
+    if (!call) goto fail;
+    coap_resource_set_userdata(call, dt);
+    coap_register_handler(call, COAP_REQUEST_POST, on_call);
+    coap_add_resource(dt->ctx, call);
+    hh_dt_sched_config_t scfg;
+    hh_dt_sched_config_default(&scfg);
+    hh_call_config_t ccfg;
+    hh_call_config_default(&ccfg);
+    if (hh_dt_sched_init(&dt->sched, &scfg, hh_now(dt->clock)) != HH_OK ||
+        hh_call_init(&dt->call, &ccfg, dt->clock, call_tx, call_ev, dt) != HH_OK)
+        goto fail;
     coap_register_response_handler(dt->ctx, on_response);
     coap_register_nack_handler(dt->ctx, on_nack);
 
@@ -343,7 +362,7 @@ void hh_dt_close(hh_dt_t *dt)
 {
     if (!dt || g_users == 0) return;
     if (dt->ctx) {
-        for (int i = 0; i < HH_DT_MAX_PEERS; i++)
+        for (int i = 0; i < HH_DT_STREAMS; i++)
             if (dt->tx[i].session) dt_session_set_app_data(dt->tx[i].session, NULL);
         coap_free_context(dt->ctx);
         dt->ctx = NULL;
@@ -365,12 +384,27 @@ void hh_dt_set_result(hh_dt_t *dt, hh_dt_result_fn fn, void *ctx)
     dt->result_ctx = ctx;
 }
 
-static hh_dt_tx_peer_t *tx_get(hh_dt_t *dt, const hh_dt_peer_addr_t *pa)
+/* DSCP of a class. The data class takes the one given to hh_dt_open(). */
+static int class_dscp(const hh_dt_t *dt, hh_dt_class_t cls)
 {
-    for (int i = 0; i < HH_DT_MAX_PEERS; i++)
-        if (dt->tx[i].used && dt->tx[i].node == pa->node) return &dt->tx[i];
-    hh_dt_tx_peer_t *p = NULL;
-    for (int i = 0; i < HH_DT_MAX_PEERS && !p; i++)
+    return cls == HH_DT_CLASS_DATA ? dt->dscp : hh_dt_class_dscp(cls);
+}
+
+static hh_dt_tx_peer_t *tx_find(hh_dt_t *dt, hh_node_id_t node, hh_dt_class_t cls)
+{
+    for (int i = 0; i < HH_DT_STREAMS; i++)
+        if (dt->tx[i].used && dt->tx[i].node == node && dt->tx[i].cls == cls)
+            return &dt->tx[i];
+    return NULL;
+}
+
+/* The session for a destination and class. Each has its own socket, marked
+ * once with the class's DSCP, so a retransmission keeps its class. */
+static hh_dt_tx_peer_t *tx_get(hh_dt_t *dt, const hh_dt_peer_addr_t *pa, hh_dt_class_t cls)
+{
+    hh_dt_tx_peer_t *p = tx_find(dt, pa->node, cls);
+    if (p) return p;
+    for (int i = 0; i < HH_DT_STREAMS && !p; i++)
         if (!dt->tx[i].used) p = &dt->tx[i];
     if (!p) return NULL;
 
@@ -383,7 +417,7 @@ static hh_dt_tx_peer_t *tx_get(hh_dt_t *dt, const hh_dt_peer_addr_t *pa)
         HH_LOGE(COMP, "session_failed", "to=%u", pa->node);
         return NULL;
     }
-    scan_new_sockets(true, dt->dscp);
+    scan_new_sockets(true, class_dscp(dt, cls));
     coap_fixed_point_t t = { (uint16_t)(dt->cfg.ack_timeout_ms / 1000u),
                              (uint16_t)(dt->cfg.ack_timeout_ms % 1000u) };
     coap_session_set_ack_timeout(s, t);
@@ -393,26 +427,24 @@ static hh_dt_tx_peer_t *tx_get(hh_dt_t *dt, const hh_dt_peer_addr_t *pa)
     memset(p, 0, sizeof *p);
     p->used = true;
     p->node = pa->node;
+    p->cls = cls;
     p->session = s;
     p->dt = dt;
     dt_session_set_app_data(s, p);
     return p;
 }
 
-hh_status_t hh_dt_send(hh_dt_t *dt, hh_node_id_t to, const uint8_t *data, size_t len)
+/* Builds and sends one POST on the session of the destination and class. */
+static hh_status_t tx_post(hh_dt_t *dt, hh_node_id_t to, hh_dt_class_t cls, hh_dt_path_t path,
+                           const uint8_t *data, size_t len)
 {
-    if (!dt || !dt->ctx || (!data && len)) return HH_ERR_INVAL;
-    if (len > dt->cfg.max_payload) {
-        dt->counters.tx_too_large++;
-        return HH_ERR_INVAL;
-    }
     const hh_dt_peer_addr_t *pa = hh_dt_peers_by_node(dt->peers, to);
     if (!pa) {
         dt->counters.tx_no_route++;
         HH_LOGW(COMP, "tx_no_route", "to=%u", to);
         return HH_ERR_NOTFOUND;
     }
-    hh_dt_tx_peer_t *p = tx_get(dt, pa);
+    hh_dt_tx_peer_t *p = tx_get(dt, pa, cls);
     if (!p) return HH_ERR_IO;
     if (p->outstanding >= HH_DT_QUEUE_LEN) {
         dt->counters.tx_queue_full++;
@@ -427,10 +459,14 @@ hh_status_t hh_dt_send(hh_dt_t *dt, hh_node_id_t to, const uint8_t *data, size_t
     uint8_t token[4];
     coap_prng(token, sizeof token);
     uint8_t cf[4];
+    const bool call = path == HH_DT_PATH_CALL;
     if (!pdu || !coap_add_token(pdu, sizeof token, token) ||
-        !coap_add_option(pdu, COAP_OPTION_URI_PATH, 3, (const uint8_t *)"msg") ||
+        !coap_add_option(pdu, COAP_OPTION_URI_PATH, call ? 4 : 3,
+                         (const uint8_t *)(call ? "call" : "msg")) ||
         !coap_add_option(pdu, COAP_OPTION_CONTENT_FORMAT,
-                         coap_encode_var_safe(cf, sizeof cf, COAP_MEDIATYPE_TEXT_PLAIN), cf) ||
+                         coap_encode_var_safe(cf, sizeof cf,
+                                              call ? COAP_MEDIATYPE_APPLICATION_OCTET_STREAM
+                                                   : COAP_MEDIATYPE_TEXT_PLAIN), cf) ||
         (len && !coap_add_data(pdu, len, data))) {
         if (pdu) coap_delete_pdu(pdu);
         dt->counters.tx_errors++;
@@ -456,9 +492,148 @@ hh_status_t hh_dt_send(hh_dt_t *dt, hh_node_id_t to, const uint8_t *data, size_t
     }
     p->outstanding++;
     dt->counters.tx_data++;
-    HH_LOGD(COMP, "tx", "to=%u mid=%d len=%zu type=%s", to, mid, len, con ? "con" : "non");
+    HH_LOGD(COMP, "tx", "to=%u mid=%d len=%zu type=%s class=%s dscp=%d path=%s", to, mid, len,
+            con ? "con" : "non", hh_dt_class_str(cls), class_dscp(dt, cls), call ? "call" : "msg");
     return HH_OK;
 }
+
+static hh_status_t check_message(hh_dt_t *dt, const uint8_t *data, size_t len)
+{
+    if (!dt || !dt->ctx || (!data && len)) return HH_ERR_INVAL;
+    if (len > dt->cfg.max_payload) {
+        dt->counters.tx_too_large++;
+        return HH_ERR_INVAL;
+    }
+    return HH_OK;
+}
+
+hh_status_t hh_dt_send(hh_dt_t *dt, hh_node_id_t to, const uint8_t *data, size_t len)
+{
+    hh_status_t s = check_message(dt, data, len);
+    return s != HH_OK ? s : tx_post(dt, to, HH_DT_CLASS_DATA, HH_DT_PATH_MSG, data, len);
+}
+
+static hh_status_t pend_add(hh_dt_t *dt, hh_dt_class_t cls, hh_node_id_t to, hh_dt_path_t path,
+                            const uint8_t *data, size_t len)
+{
+    if (dt->pend_n[cls] >= HH_DT_PENDING_LEN) {
+        dt->counters.tx_pending_full++;
+        HH_LOGW(COMP, "pending_full", "class=%s to=%u", hh_dt_class_str(cls), to);
+        return HH_ERR_AGAIN;
+    }
+    hh_dt_pending_t *e = &dt->pend[cls][(dt->pend_head[cls] + dt->pend_n[cls]) % HH_DT_PENDING_LEN];
+    e->to = to;
+    e->path = path;
+    e->len = (uint16_t)len;
+    if (len) memcpy(e->data, data, len);
+    dt->pend_n[cls]++;
+    HH_LOGD(COMP, "queued", "class=%s to=%u len=%zu waiting=%u", hh_dt_class_str(cls), to, len,
+            dt->pend_n[cls]);
+    return HH_OK;
+}
+
+hh_status_t hh_dt_send_class(hh_dt_t *dt, hh_node_id_t to, hh_dt_class_t cls,
+                             const uint8_t *data, size_t len)
+{
+    hh_status_t s = check_message(dt, data, len);
+    if (s != HH_OK) return s;
+    if ((unsigned)cls >= HH_DT_CLASS_COUNT || cls == HH_DT_CLASS_SIGNAL) return HH_ERR_INVAL;
+    if (!hh_dt_peers_by_node(dt->peers, to)) {
+        dt->counters.tx_no_route++;
+        HH_LOGW(COMP, "tx_no_route", "to=%u", to);
+        return HH_ERR_NOTFOUND;
+    }
+    return pend_add(dt, cls, to, HH_DT_PATH_MSG, data, len);
+}
+
+/* True if the oldest message of a class can go now: its session has room. */
+static bool head_ready(hh_dt_t *dt, hh_dt_class_t cls)
+{
+    if (!dt->pend_n[cls]) return false;
+    const hh_dt_pending_t *e = &dt->pend[cls][dt->pend_head[cls]];
+    const hh_dt_tx_peer_t *p = tx_find(dt, e->to, cls);
+    return !p || p->outstanding < HH_DT_QUEUE_LEN;
+}
+
+/* Sends queued messages, class by class as the scheduler chooses. */
+static void pump(hh_dt_t *dt)
+{
+    for (;;) {
+        uint16_t waiting[HH_DT_CLASS_COUNT];
+        for (int c = 0; c < HH_DT_CLASS_COUNT; c++)
+            waiting[c] = head_ready(dt, (hh_dt_class_t)c) ? dt->pend_n[c] : 0;
+        int c = hh_dt_sched_pick(&dt->sched, waiting, hh_now(dt->clock));
+        if (c < 0) return;
+        hh_dt_pending_t *e = &dt->pend[c][dt->pend_head[c]];
+        hh_status_t s = tx_post(dt, e->to, (hh_dt_class_t)c, e->path, e->data, e->len);
+        if (s != HH_OK) HH_LOGW(COMP, "queued_send_failed", "class=%s to=%u status=%s",
+                                hh_dt_class_str((hh_dt_class_t)c), e->to, hh_status_str(s));
+        dt->pend_head[c] = (uint8_t)((dt->pend_head[c] + 1u) % HH_DT_PENDING_LEN);
+        dt->pend_n[c]--;
+    }
+}
+
+static void call_tx(hh_node_id_t to, const uint8_t *pdu, size_t len, void *ctx)
+{
+    pend_add(ctx, HH_DT_CLASS_SIGNAL, to, HH_DT_PATH_CALL, pdu, len);
+}
+
+static void call_ev(const hh_call_event_t *ev, void *ctx)
+{
+    hh_dt_t *dt = ctx;
+    if (dt->call_event) dt->call_event(ev, dt->call_event_ctx);
+}
+
+static void on_call(coap_resource_t *res, coap_session_t *session, const coap_pdu_t *req,
+                    const coap_string_t *query, coap_pdu_t *resp)
+{
+    (void)query;
+    hh_dt_t *dt = coap_resource_get_userdata(res);
+    const coap_address_t *ra = coap_session_get_addr_remote(session);
+    if (!dt || !ra || ra->addr.sa.sa_family != AF_INET) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_INTERNAL_ERROR);
+        return;
+    }
+    hh_node_id_t from = hh_dt_peers_node_of(dt->peers, &ra->addr.sin);
+    if (from == HH_NODE_ID_INVALID) {
+        HH_LOGW(COMP, "call_rx_refused", "reason=unknown_sender");
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_FORBIDDEN);
+        return;
+    }
+    coap_opt_iterator_t it;
+    coap_opt_t *cf = coap_check_option(req, COAP_OPTION_CONTENT_FORMAT, &it);
+    if (!cf || coap_decode_var_bytes(coap_opt_value(cf), coap_opt_length(cf)) !=
+                   COAP_MEDIATYPE_APPLICATION_OCTET_STREAM) {
+        HH_LOGW(COMP, "call_rx_refused", "from=%u reason=content_format", from);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT);
+        return;
+    }
+    size_t len = 0;
+    const uint8_t *data = NULL;
+    if (!coap_get_data(req, &len, &data)) len = 0;
+    hh_call_on_rx(&dt->call, from, data, len);
+    coap_pdu_set_code(resp, COAP_RESPONSE_CODE_CHANGED);
+}
+
+hh_status_t hh_dt_call_request(hh_dt_t *dt, hh_node_id_t to)
+{
+    if (!dt || !dt->ctx) return HH_ERR_INVAL;
+    if (!hh_dt_peers_by_node(dt->peers, to)) return HH_ERR_NOTFOUND;
+    return hh_call_request(&dt->call, to);
+}
+
+hh_status_t hh_dt_call_accept(hh_dt_t *dt)  { return dt ? hh_call_accept(&dt->call) : HH_ERR_INVAL; }
+hh_status_t hh_dt_call_reject(hh_dt_t *dt)  { return dt ? hh_call_reject(&dt->call) : HH_ERR_INVAL; }
+hh_status_t hh_dt_call_release(hh_dt_t *dt) { return dt ? hh_call_release(&dt->call) : HH_ERR_INVAL; }
+
+void hh_dt_set_call_event(hh_dt_t *dt, hh_call_event_fn fn, void *ctx)
+{
+    if (!dt) return;
+    dt->call_event = fn;
+    dt->call_event_ctx = ctx;
+}
+
+const hh_call_t *hh_dt_call(const hh_dt_t *dt) { return dt ? &dt->call : NULL; }
 
 int hh_dt_fd(const hh_dt_t *dt)
 {
@@ -469,8 +644,10 @@ int64_t hh_dt_next_timeout_ms(const hh_dt_t *dt)
 {
     if (!dt) return -1;
     hh_time_ms_t now = hh_now(dt->clock);
-    int64_t best = -1;
-    for (int i = 0; i < HH_DT_MAX_PEERS; i++) {
+    int64_t best = hh_call_next_timeout_ms(&dt->call);
+    for (int c = 0; c < HH_DT_CLASS_COUNT; c++)
+        if (dt->pend_n[c]) return 0;  /* queued messages leave at the next process call */
+    for (int i = 0; i < HH_DT_STREAMS; i++) {
         for (unsigned j = 0; dt->tx[i].used && j < HH_DT_QUEUE_LEN; j++) {
             const hh_dt_non_t *n = &dt->tx[i].non[j];
             if (!n->used) continue;
@@ -485,8 +662,10 @@ void hh_dt_process(hh_dt_t *dt)
 {
     if (!dt || !dt->ctx) return;
     coap_io_process(dt->ctx, COAP_IO_NO_WAIT);
+    hh_call_poll(&dt->call);
+    pump(dt);
     hh_time_ms_t now = hh_now(dt->clock);
-    for (int i = 0; i < HH_DT_MAX_PEERS; i++) {
+    for (int i = 0; i < HH_DT_STREAMS; i++) {
         hh_dt_tx_peer_t *p = &dt->tx[i];
         for (unsigned j = 0; p->used && j < HH_DT_QUEUE_LEN; j++) {
             hh_dt_non_t *n = &p->non[j];
@@ -502,7 +681,9 @@ void hh_dt_process(hh_dt_t *dt)
 bool hh_dt_busy(const hh_dt_t *dt)
 {
     if (!dt) return false;
-    for (int i = 0; i < HH_DT_MAX_PEERS; i++)
+    for (int c = 0; c < HH_DT_CLASS_COUNT; c++)
+        if (dt->pend_n[c]) return true;
+    for (int i = 0; i < HH_DT_STREAMS; i++)
         if (dt->tx[i].used && dt->tx[i].outstanding) return true;
     return false;
 }
@@ -519,12 +700,14 @@ void hh_dt_log_stats(const hh_dt_t *dt)
             " tx_too_large=%" PRIu64 " tx_queue_full=%" PRIu64 " tx_no_route=%" PRIu64
             " rx_data=%" PRIu64 " rx_delivered=%" PRIu64 " rx_duplicates=%" PRIu64
             " rx_gaps=%" PRIu64 " rx_resync=%" PRIu64 " rx_bad_format=%" PRIu64
-            " rx_unknown_sender=%" PRIu64 " rx_table_full=%" PRIu64,
+            " rx_unknown_sender=%" PRIu64 " rx_table_full=%" PRIu64
+            " tx_pending_full=%" PRIu64,
             c->tx_data, c->tx_acked, c->tx_given_up, c->tx_rst, c->tx_refused,
             c->tx_unreachable, c->tx_errors, c->tx_too_large, c->tx_queue_full,
             c->tx_no_route, c->rx_data, c->rx_delivered, c->rx_duplicates, c->rx_gaps,
-            c->rx_resync, c->rx_bad_format, c->rx_unknown_sender, c->rx_table_full);
-    for (int i = 0; i < HH_DT_MAX_PEERS; i++) {
+            c->rx_resync, c->rx_bad_format, c->rx_unknown_sender, c->rx_table_full,
+            c->tx_pending_full);
+    for (int i = 0; i < HH_DT_STREAMS; i++) {
         const hh_dt_rx_peer_t *r = &dt->rx[i];
         if (!r->used) continue;
         char ip[INET_ADDRSTRLEN];

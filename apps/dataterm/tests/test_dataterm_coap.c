@@ -254,8 +254,9 @@ static void test_sender_restart_is_not_a_gap(void)
     send_text("second run");
     HH_ASSERT(run_until(&g_a, &g_b, NULL, &g_tx.done, 2));
     HH_ASSERT_EQ_INT(g_rx.delivered, 2);
+    /* The new run is a new stream (new source port), counted from its own first ID. */
     HH_ASSERT_EQ_INT(hh_dt_counters(&g_b)->rx_gaps, 0);
-    HH_ASSERT_EQ_INT(hh_dt_counters(&g_b)->rx_resync, 1);
+    HH_ASSERT_EQ_INT(hh_dt_counters(&g_b)->rx_resync, 0);
     teardown(NULL);
 }
 
