@@ -12,8 +12,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DLT_USER2 149u
-
 typedef struct {
     sn_config_t cfg;
     unsigned    gen_s, drain_s;
@@ -101,31 +99,6 @@ static bool parse(int argc, char **argv, opts_t *o)
     return true;
 }
 
-/* Writes the pcap file header for link type 149. */
-static void pcap_header(FILE *f)
-{
-    uint32_t h[6] = { 0xA1B2C3D4u, 0x00040002u, 0, 0, 65535u, DLT_USER2 };
-    uint16_t ver[2] = { 2, 4 };
-    fwrite(&h[0], 4, 1, f);
-    fwrite(ver, 2, 2, f);
-    fwrite(&h[2], 4, 4, f);   /* thiszone, sigfigs, snaplen, network */
-}
-
-/* Writes one PDU to the capture file. */
-static void pcap_hook(void *ctx, uint32_t t_ms, const uint8_t *pdu, size_t len)
-{
-    FILE *f = ctx;
-    uint32_t r[4] = { t_ms / 1000u, (t_ms % 1000u) * 1000u, (uint32_t)len, (uint32_t)len };
-    fwrite(r, 4, 4, f);
-    fwrite(pdu, 1, len, f);
-}
-
-/* Prints a percentage line. */
-static void pct(FILE *o, const char *name, uint64_t num, uint64_t den)
-{
-    fprintf(o, "%s=%.2f%%\n", name, den ? 100.0 * (double)num / (double)den : 0.0);
-}
-
 /* Prints the throughput, loss and delay lines of one flow. */
 static void print_flow(FILE *o, const char *name, const sn_flow_result_t *r, uint32_t gen_ms)
 {
@@ -171,20 +144,7 @@ static void print_summary(FILE *o, const opts_t *op, slot_net_t *net, const sn_r
     fprintf(o, "collision_events=%llu channel_events=%llu corrupt_events=%llu route_changes=%llu\n",
             (unsigned long long)r->collision_events, (unsigned long long)r->channel_events,
             (unsigned long long)r->corrupt_events, (unsigned long long)r->route_changes);
-    fprintf(o, "== slot accounting (whole run, warm-up included) ==\n");
-    fprintf(o, "capacity_bytes_total=%llu pdu_bytes=%llu shared_overhead_bytes=%llu control_bytes=%llu "
-               "routing_bytes=%llu user_bytes=%llu\n",
-            (unsigned long long)s->capacity_bytes, (unsigned long long)s->pdu_bytes,
-            (unsigned long long)s->overhead_bytes, (unsigned long long)s->control_bytes,
-            (unsigned long long)s->routing_bytes, (unsigned long long)s->user_bytes);
-    pct(o, "routing_payload_share_of_capacity", s->routing_bytes, s->capacity_bytes);
-    pct(o, "routing_transmitted_share_of_pdu_bytes", s->routing_bytes, s->pdu_bytes);
-    pct(o, "control_payload_share_of_capacity", s->control_bytes, s->capacity_bytes);
-    pct(o, "shared_overhead_share_of_capacity", s->overhead_bytes, s->capacity_bytes);
-    pct(o, "unused_capacity", s->capacity_bytes - s->pdu_bytes, s->capacity_bytes);
-    fprintf(o, "own_slots_with_routing=%llu of %llu\n", (unsigned long long)s->slots_with_routing,
-            (unsigned long long)s->pdus_tx);
-    pct(o, "routing_slot_occupancy", s->slots_with_routing, s->pdus_tx);
+    sn_print_accounting(o, r);
     if (r->n_flows > 1) for (unsigned i = 0; i < r->n_flows; i++) {
         char nm[16];
         snprintf(nm, sizeof nm, "flow%u", i);
@@ -205,8 +165,8 @@ int main(int argc, char **argv)
     if (op.log_path && !(op.cfg.log = fopen(op.log_path, "w"))) { perror(op.log_path); return 1; }
     if (op.pcap_path) {
         if (!(pcap = fopen(op.pcap_path, "wb"))) { perror(op.pcap_path); return 1; }
-        pcap_header(pcap);
-        op.cfg.pdu_hook = pcap_hook;
+        sn_pcap_header(pcap);
+        op.cfg.pdu_hook = sn_pcap_hook;
         op.cfg.hook_ctx = pcap;
     }
     net = sn_create(&op.cfg);

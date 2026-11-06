@@ -66,10 +66,25 @@ add_executable(test_slot_net scenario/test_slot_net.c)
 target_link_libraries(test_slot_net PRIVATE hhslotsim)
 add_test(NAME test_slot_net COMMAND test_slot_net)
 
+# Frame conversion of hh-slot-bridge, kept apart so it is tested without root.
+add_library(hhbridgeframes STATIC ${CMAKE_SOURCE_DIR}/tools/sim/slot_bridge_frames.c)
+target_include_directories(hhbridgeframes PUBLIC ${CMAKE_SOURCE_DIR}/tools/sim)
+target_link_libraries(hhbridgeframes PUBLIC hhsdr_mac)
+
+add_executable(test_bridge_frames unit/test_bridge_frames.c)
+target_link_libraries(test_bridge_frames PRIVATE hhbridgeframes)
+add_test(NAME test_bridge_frames COMMAND test_bridge_frames)
+
 # hh-slot-sim: command line runs of the slot-timed network. Development tooling only.
 add_executable(hh-slot-sim ${CMAKE_SOURCE_DIR}/tools/sim/hh_slot_sim.c)
 target_link_libraries(hh-slot-sim PRIVATE hhslotsim)
 set_target_properties(hh-slot-sim PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+# hh-slot-bridge: real-time bridge from Linux TAP interfaces to the slot-timed network.
+# Development tooling only. Needs root to run.
+add_executable(hh-slot-bridge ${CMAKE_SOURCE_DIR}/tools/sim/hh_slot_bridge.c)
+target_link_libraries(hh-slot-bridge PRIVATE hhslotsim hhbridgeframes)
+set_target_properties(hh-slot-bridge PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 add_executable(test_slot unit/test_slot.c)
 target_link_libraries(test_slot PRIVATE hhsdr_mac)

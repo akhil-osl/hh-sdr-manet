@@ -131,7 +131,10 @@ static bool on_mac_rx(void *ctx, const hh_mac_indication_t *ind)
 
     if (ind->type != HH_MAC_IND_FRAME) return true;
     f = ind->frame;
-    if (f->kind != HH_FRAME_DATA || f->len < SN_APP_HDR || f->payload[0] != APP_MAGIC) return true;
+    if (f->kind != HH_FRAME_DATA || f->len < SN_APP_HDR || f->payload[0] != APP_MAGIC) {
+        if (n->cfg.rx_hook) n->cfg.rx_hook(n->cfg.rx_ctx, nd->id, f);
+        return true;
+    }
     id = get32(f->payload + 4);
     fin = f->payload[8] | (f->payload[9] << 8);
     if (id >= n->n_pkts) return true;
@@ -458,6 +461,31 @@ static void apply_events(slot_net_t *n)
     }
 }
 
+/* Sends a frame from a node through its MAC. */
+hh_mac_result_t sn_send(slot_net_t *n, unsigned node, hh_frame_kind_t kind, hh_mac_class_t cls,
+                        hh_node_id_t dst, const uint8_t *payload, uint16_t len)
+{
+    if (!n || node < 1 || node > n->cfg.nodes) return HH_MAC_INVALID_ARGUMENT;
+    return hh_mac_send(&n->nodes[node - 1].mac, kind, cls, dst, 0, payload, len);
+}
+
+/* Sets the virtual time to t_ms after the start of the run. */
+void sn_set_time(slot_net_t *n, uint32_t t_ms) { n->now = EPOCH_MS + t_ms; }
+
+/* Applies due events, runs the slots that are due on every node, then resolves the air. */
+void sn_step(slot_net_t *n)
+{
+    apply_events(n);
+    for (unsigned i = 0; i < n->cfg.nodes; i++) hh_slot_poll(&n->nodes[i].sl);
+    resolve(n);
+}
+
+/* Returns the slot counters of a node, or NULL for an invalid node number. */
+const hh_slot_stats_t *sn_slot_stats(const slot_net_t *n, unsigned node)
+{
+    return n && node >= 1 && node <= n->cfg.nodes ? &n->nodes[node - 1].sl.st : NULL;
+}
+
 /* Runs traffic for gen_ms, then drains for drain_ms, one slot at a time. */
 void sn_run(slot_net_t *n, uint32_t gen_ms, uint32_t drain_ms)
 {
@@ -471,8 +499,7 @@ void sn_run(slot_net_t *n, uint32_t gen_ms, uint32_t drain_ms)
         apply_events(n);
         generate(n);
         routing_messages(n);
-        for (unsigned i = 0; i < n->cfg.nodes; i++) hh_slot_poll(&n->nodes[i].sl);
-        resolve(n);
+        sn_step(n);
     }
     for (uint32_t i = 0; i < n->n_pkts; i++)
         if (n->pkts[i].state == PK_INFLIGHT) n->pkts[i].state = PK_DEADLINE;
@@ -555,4 +582,48 @@ void sn_result(const slot_net_t *n, sn_result_t *out)
         uint64_t *dst = (uint64_t *)&out->slot;
         for (size_t k = 0; k < sizeof out->slot / sizeof(uint64_t); k++) dst[k] += src[k];
     }
+}
+
+/* Writes the pcap file header for link type 149. */
+void sn_pcap_header(FILE *f)
+{
+    uint32_t magic = 0xA1B2C3D4u, rest[4] = { 0, 0, 65535u, 149u };   /* zone, sigfigs, snaplen, network */
+    uint16_t ver[2] = { 2, 4 };
+    fwrite(&magic, 4, 1, f);
+    fwrite(ver, 2, 2, f);
+    fwrite(rest, 4, 4, f);
+}
+
+/* Writes one PDU to the capture file. */
+void sn_pcap_hook(void *file, uint32_t t_ms, const uint8_t *pdu, size_t len)
+{
+    uint32_t r[4] = { t_ms / 1000u, (t_ms % 1000u) * 1000u, (uint32_t)len, (uint32_t)len };
+    fwrite(r, 4, 4, file);
+    fwrite(pdu, 1, len, file);
+}
+
+/* Prints one percentage line. */
+static void pct(FILE *o, const char *name, uint64_t num, uint64_t den)
+{
+    fprintf(o, "%s=%.2f%%\n", name, den ? 100.0 * (double)num / (double)den : 0.0);
+}
+
+/* Prints the slot accounting lines. */
+void sn_print_accounting(FILE *o, const sn_result_t *r)
+{
+    const hh_slot_stats_t *s = &r->slot;
+    fprintf(o, "== slot accounting (whole run, warm-up included) ==\n");
+    fprintf(o, "capacity_bytes_total=%llu pdu_bytes=%llu shared_overhead_bytes=%llu control_bytes=%llu "
+               "routing_bytes=%llu user_bytes=%llu\n",
+            (unsigned long long)s->capacity_bytes, (unsigned long long)s->pdu_bytes,
+            (unsigned long long)s->overhead_bytes, (unsigned long long)s->control_bytes,
+            (unsigned long long)s->routing_bytes, (unsigned long long)s->user_bytes);
+    pct(o, "routing_payload_share_of_capacity", s->routing_bytes, s->capacity_bytes);
+    pct(o, "routing_transmitted_share_of_pdu_bytes", s->routing_bytes, s->pdu_bytes);
+    pct(o, "control_payload_share_of_capacity", s->control_bytes, s->capacity_bytes);
+    pct(o, "shared_overhead_share_of_capacity", s->overhead_bytes, s->capacity_bytes);
+    pct(o, "unused_capacity", s->capacity_bytes - s->pdu_bytes, s->capacity_bytes);
+    fprintf(o, "own_slots_with_routing=%llu of %llu\n", (unsigned long long)s->slots_with_routing,
+            (unsigned long long)s->pdus_tx);
+    pct(o, "routing_slot_occupancy", s->slots_with_routing, s->pdus_tx);
 }

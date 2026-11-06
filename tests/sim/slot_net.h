@@ -39,6 +39,10 @@ typedef struct {
     /* Called for every PDU sent, with the run time in ms. NULL = none. */
     void   (*pdu_hook)(void *ctx, uint32_t t_ms, const uint8_t *pdu, size_t len);
     void    *hook_ctx;
+    /* Called for a frame delivered to a node's network layer that is not one of
+     * the built-in test packets. node is 1-based. NULL = discard. */
+    void   (*rx_hook)(void *ctx, unsigned node, const hh_mac_rx_frame_t *frame);
+    void    *rx_ctx;
 } sn_config_t;
 
 typedef struct {
@@ -96,10 +100,28 @@ void sn_compute_routes(slot_net_t *net);   /* logs every next hop that changed *
 bool sn_add_flow(slot_net_t *net, const sn_flow_t *flow);
 bool sn_schedule(slot_net_t *net, uint32_t at_ms, sn_event_kind_t kind, unsigned a, unsigned b);
 
+/* Hands a frame to a node's MAC, as the network layer above it would. */
+hh_mac_result_t sn_send(slot_net_t *net, unsigned node, hh_frame_kind_t kind, hh_mac_class_t cls,
+                        hh_node_id_t dst, const uint8_t *payload, uint16_t len);
+
+/* Real-time driving: set the time since the start of the run, then run the slots
+ * that are due. sn_run() does both itself with a virtual clock. */
+void sn_set_time(slot_net_t *net, uint32_t t_ms);
+void sn_step(slot_net_t *net);
+const hh_slot_stats_t *sn_slot_stats(const slot_net_t *net, unsigned node);
+
 /* Generate traffic for gen_ms, stop it, then drain for drain_ms. */
 void sn_run(slot_net_t *net, uint32_t gen_ms, uint32_t drain_ms);
 void sn_result(const slot_net_t *net, sn_result_t *out);
 
 hh_mac_t *sn_mac(slot_net_t *net, unsigned node);
+
+/* Capture of every PDU as pcap, link type 149 (DLT_USER2), no outer header.
+ * Use sn_pcap_hook as pdu_hook with hook_ctx set to the FILE after sn_pcap_header(). */
+void sn_pcap_header(FILE *f);
+void sn_pcap_hook(void *file, uint32_t t_ms, const uint8_t *pdu, size_t len);
+
+/* Prints the slot accounting lines: shares of capacity, routing share, overhead, unused. */
+void sn_print_accounting(FILE *out, const sn_result_t *r);
 
 #endif /* HH_SLOT_NET_H */
