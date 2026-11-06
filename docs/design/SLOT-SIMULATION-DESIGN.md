@@ -4,7 +4,7 @@
 |---|---|
 | Version | 0.1 |
 | Date | 2026-11-06 |
-| Status | Draft. Scheduler, codec and stage 1 harness written; tool, dissector and stage 2 not yet |
+| Status | Draft. Stage 1 done (scheduler, codec, harness, tool, dissector). Stage 2 with real OLSRd2 not yet |
 | Owner | Network owner |
 | Inputs | `docs/SLOT-ENGINE-SPEC.md` v0.5, MAC frame specification v2, `docs/MAC-NETWORK-INTERFACE.md` v1.1, `docs/MAC-03_Contention_Access_and_Network_Entry.md` |
 
@@ -48,7 +48,9 @@ Out of scope:
 | MAC frame specification v2 | `VERIFIED DESIGN`, held outside the repository until copied in | Frame spec v2 file |
 | Slot scheduler (`src/mac/slot.c`) and PDU v2 codec (`src/mac/pdu.c`), with unit tests | `IMPLEMENTED`, host only | `test_slot`, `test_pdu` |
 | Slot-timed medium, multi-node harness (`tests/sim/slot_net.c`), traffic generator, loss categories, delay percentiles, slot and route-change log lines, with stand-in routing | `IMPLEMENTED`, test infrastructure | `test_slot_net` |
-| Command line run tool, evidence folder, PDU v2 dissector | Not present | To build |
+| Command line run tool `hh-slot-sim` with log, capture and summary | `IMPLEMENTED`, tooling | `tools/sim/hh_slot_sim.c` |
+| PDU v2 Lua dissector and its check script | `IMPLEMENTED`, tooling | `tools/atp/wireshark/hh_pdu_v2.lua`, `check-pdu-dissector.sh` |
+| Real OLSRd2 traffic through the slots (stage 2) | Not present | To build |
 
 ## 4. Architecture
 
@@ -283,7 +285,7 @@ Structured `key=value` lines:
 
 ## 11. Dissector
 
-`PROPOSED`. A new Lua dissector for PDU v2, separate from the existing beacon and routing-update dissector. It decodes the fields in section 7 and the test vectors A to E, and reports a status field the way the current dissector does (`ok`, `malformed`, `unsupported_version`).
+`IMPLEMENTED`. A new Lua dissector for PDU v2 (`tools/atp/wireshark/hh_pdu_v2.lua`), separate from the existing beacon and routing-update dissector. It decodes the fields in section 7 and the test vectors A to E, and reports a status field the way the current dissector does (`ok`, `malformed`, `unsupported_version`).
 
 A check script compares the dissector against the encoder on every `ctest` run, the way `tools/atp/wireshark/check-dissector.sh` does now, so drift fails the build.
 
@@ -293,7 +295,7 @@ The simulation writes a capture file of every PDU. The link type for it is `UNKN
 - The private-use link types (DLT_USER0 to DLT_USER15, values 147 to 162) are the safe choice for a custom format. The existing tooling already uses two of them.
 - A new link type value must not be invented. The registry rule is to ask the tcpdump-workers list for one.
 
-The proposed choice is a private-use link type for the capture, as the current tooling does.
+Decision made in the tooling: captures use DLT_USER2 (149), one PDU per record with no outer header. The existing dissector uses 147 and 148.
 
 ## 12. What carries to the radio, and what does not
 
