@@ -22,6 +22,12 @@ if(HH_BUILD_TESTS)
             $<TARGET_FILE:hh_wire_pcapgen> ${CMAKE_CURRENT_BINARY_DIR}/dissector)
   set_tests_properties(check_dissector PROPERTIES SKIP_RETURN_CODE 77)
 
+  # PDU v2 dissector against the spec examples and a capture from hh-slot-sim.
+  add_test(NAME check_pdu_dissector
+    COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/wireshark/check-pdu-dissector.sh
+            $<TARGET_FILE:hh-slot-sim> ${CMAKE_CURRENT_BINARY_DIR}/pdu-dissector)
+  set_tests_properties(check_pdu_dissector PROPERTIES SKIP_RETURN_CODE 77)
+
   # atp-radioctl.sh against the real radiod and radioctl binaries: the public
   # CLI path the architecture requires test automation to use. Needs jq.
   add_test(NAME check_atp_radioctl

@@ -162,6 +162,7 @@ static bool on_tx(void *ctx, const hh_slot_pos_t *pos, const uint8_t *pdu, size_
     if (hh_pdu_decode(pdu, len, &p) == HH_OK)
         for (unsigned i = 0; i < p.n_msg; i++)
             if (p.msg[i].proto == HH_PDU_PROTO_ROUTING) routing += hh_pdu_msg_size(&p.msg[i]);
+    if (n->cfg.pdu_hook) n->cfg.pdu_hook(n->cfg.hook_ctx, t_rel(n), pdu, len);
     LOGF(n, "t=%u ev=slot_tx node=%u sf=%u frame=%u slot=%u bytes=%zu msgs=%u routing=%zu capacity=%u\n",
          t_rel(n), (unsigned)nd->id, pos->superframe, pos->frame, pos->slot, len, p.n_msg, routing,
          n->cfg.capacity);

@@ -36,6 +36,9 @@ typedef struct {
     uint32_t tc_interval_ms;     /* 0 = off */
     uint16_t tc_bytes;
     FILE    *log;                /* key=value lines, NULL = none */
+    /* Called for every PDU sent, with the run time in ms. NULL = none. */
+    void   (*pdu_hook)(void *ctx, uint32_t t_ms, const uint8_t *pdu, size_t len);
+    void    *hook_ctx;
 } sn_config_t;
 
 typedef struct {
