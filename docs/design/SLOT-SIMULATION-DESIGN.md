@@ -4,7 +4,7 @@
 |---|---|
 | Version | 0.1 |
 | Date | 2026-11-06 |
-| Status | Draft. Stage 1 done (scheduler, codec, harness, tool, dissector). Stage 2 with real OLSRd2 not yet |
+| Status | Draft. Stage 1 done. Stage 2 (real OLSRd2 over the slots, TAP bridge) built; line run done, link-cut and container runs pending |
 | Owner | Network owner |
 | Inputs | `docs/SLOT-ENGINE-SPEC.md` v0.5, MAC frame specification v2, `docs/MAC-NETWORK-INTERFACE.md` v1.1, `docs/MAC-03_Contention_Access_and_Network_Entry.md` |
 
@@ -50,7 +50,7 @@ Out of scope:
 | Slot-timed medium, multi-node harness (`tests/sim/slot_net.c`), traffic generator, loss categories, delay percentiles, slot and route-change log lines, with stand-in routing | `IMPLEMENTED`, test infrastructure | `test_slot_net` |
 | Command line run tool `hh-slot-sim` with log, capture and summary | `IMPLEMENTED`, tooling | `tools/sim/hh_slot_sim.c` |
 | PDU v2 Lua dissector and its check script | `IMPLEMENTED`, tooling | `tools/atp/wireshark/hh_pdu_v2.lua`, `check-pdu-dissector.sh` |
-| Real OLSRd2 traffic through the slots (stage 2) | Not present | To build |
+| Real OLSRd2 over the slots: `hh-slot-bridge` (TAP per namespace, real time) and `slot-mesh.sh` | `IMPLEMENTED`, tooling. Line run done; link-cut and container runs pending | `tools/sim/hh_slot_bridge.c`, `tools/olsrd2-mesh-emulation/slot-mesh.sh` |
 
 ## 4. Architecture
 

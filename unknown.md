@@ -967,6 +967,35 @@ with every value above a named constant or marked `TODO`.
 
 ---
 
+## U-28 — Slot PDU hand-off between MAC software and the logic
+
+**Status:** BLOCKING (for running the slot scheduler on hardware)
+
+**What is missing:** The binding of the slot scheduler's transmit and receive
+seam to the logic. On the host, `src/mac/slot.c` hands each PDU v2 to a
+transmit function and takes received PDUs through `hh_slot_receive()`. Not
+defined for the board:
+
+1. How a PDU is named for its slot in the logic's transmit buffer, and the
+   lead time before the slot (`docs/SLOT-ENGINE-SPEC.md` OI-12, OI-14).
+2. Receive buffer depth and how long software may take to read it (OI-17).
+3. The slot capacity in bytes per PDU: the host code uses a placeholder (128 or
+   256 bytes) because the burst rate and coding are not chosen (U-22, OI-7).
+4. How the logic reports late or missed hand-over to software.
+
+`hh_radio_ops_t` carries whole frames, not PDUs, so it is not this seam.
+
+**Why it is needed:** Without it the scheduler cannot be tied to the FPGA slot
+engine, and throughput figures from the host simulation cannot be turned into
+real figures.
+
+**Where it must come from:** Logic owner and network owner.
+
+**What can proceed:** the host simulation (`tests/sim/slot_net`, `hh-slot-sim`,
+`hh-slot-bridge`) with the capacity as a printed parameter.
+
+---
+
 ## Summary
 
 | ID | Topic | Status | Primary source |
@@ -998,6 +1027,7 @@ with every value above a named constant or marked `TODO`.
 | U-25 | Radio callback, buffer-lifetime and close rules | OPEN | Architect + radio adapter owners |
 | U-26 | Evaluation board test command and reply contract | BLOCKING | Test and hardware engineers |
 | U-27 | Data terminal call setup and priority classes | OPEN | Network owner + QA |
+| U-28 | Slot PDU hand-off between MAC software and the logic | BLOCKING | Logic + network owners |
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol
@@ -1008,6 +1038,15 @@ one OpenCPI application through the ACI. It takes the application and every
 property from configuration and names nothing itself, and is tested on the
 development host against real OpenCPI 2.4.7 applications. Board operation
 waits on U-17 and U-19.
+
+**Added 2026-11-06 (simulation fixture, not a project contract):** `tools/sim/hh_slot_bridge.c`
+runs real OLSRd2 over the slot-timed host simulation with these choices, made
+only to exercise the stack: TAP framing; link address `02-00-00-00-hh-ll` as in
+MAC frame specification v2 section 4.5, so the destination address names the next
+hop; IPv4 `10.99.0.<id>/24`; static neighbour entries instead of ARP; TAP MTU
+equal to the largest packet one PDU carries (fragmentation excluded); OLSRv2
+packets (UDP port 269 or IP protocol 138) sent as routing control and all else
+as data. U-24 items 1 to 6 remain undecided for the product.
 
 **Added 2026-10-08:** the OLSRv2 architecture (U-09 decided). The
 network-interface adapter `hh_netif` (`src/netif/`) carries payloads between
