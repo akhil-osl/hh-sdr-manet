@@ -33,6 +33,7 @@ static const uint8_t cmd_d[] = { 0x01, 0xE7, 0x91, 0x3C, 0x5A, 0x01, 0x01, 0x03,
 static const uint8_t cmd_e[] = { 0x02, 0xE7, 0x91, 0x3C, 0x5A, 0xBE, 0xA4, 0x7F, 0x01, 0x03, 0x00, 0x40,
                                  0x00, 0x4E, 0x01 };
 
+/* Resets a PDU to a bare 20-slot header with the given sequence, source and time quality. */
 static void base(hh_pdu_t *p, uint8_t seq, uint16_t src, uint8_t tq)
 {
     memset(p, 0, sizeof *p);
@@ -43,6 +44,7 @@ static void base(hh_pdu_t *p, uint8_t seq, uint16_t src, uint8_t tq)
     p->slot_bytes = 3;
 }
 
+/* Builds vector A: radio 1 sends the test text HELLO to radio 2. */
 static void build_a(hh_pdu_t *p)
 {
     base(p, 0x21, 1, 0x10);
@@ -52,6 +54,7 @@ static void build_a(hh_pdu_t *p)
                                 .link_seq = 7, .data = hello, .len = 5 };
 }
 
+/* Builds vector B: radio 2 sends a control block with one Block ACK. */
 static void build_b(hh_pdu_t *p)
 {
     base(p, 0x40, 2, 0x18);
@@ -60,6 +63,7 @@ static void build_b(hh_pdu_t *p)
     p->back[0] = (hh_pdu_back_t){ .neighbor = 1, .start = 232, .bitmap = 0x80000000u };
 }
 
+/* Builds vector C: radio 1 sends its beacon body. */
 static void build_c(hh_pdu_t *p)
 {
     base(p, 0x22, 1, 0x10);
@@ -75,6 +79,7 @@ static void build_c(hh_pdu_t *p)
     p->beacon.heard[1] = 0x02;
 }
 
+/* Builds vector D: a joining radio sends an entry request. */
 static void build_d(hh_pdu_t *p)
 {
     base(p, 0x01, 3, 0x14);
@@ -84,6 +89,7 @@ static void build_d(hh_pdu_t *p)
                                 .data = cmd_d, .len = sizeof cmd_d };
 }
 
+/* Builds vector E: radio 1 grants slot 14 to radio 3. */
 static void build_e(hh_pdu_t *p)
 {
     base(p, 0x23, 1, 0x10);
@@ -93,6 +99,7 @@ static void build_e(hh_pdu_t *p)
                                 .data = cmd_e, .len = sizeof cmd_e };
 }
 
+/* Encodes a built PDU and compares it byte for byte with the spec vector. */
 static void check_encode(void (*build)(hh_pdu_t *), const uint8_t *want, size_t want_len)
 {
     hh_pdu_t p;
@@ -105,11 +112,13 @@ static void check_encode(void (*build)(hh_pdu_t *), const uint8_t *want, size_t 
     HH_ASSERT_EQ_INT(hh_pdu_size(&p), want_len);
 }
 
+/* CRC-32 of "123456789" equals the standard check value. */
 static void test_crc_check_value(void)
 {
     HH_ASSERT_EQ_INT(hh_crc32((const uint8_t *)"123456789", 9), 0xCBF43926u);
 }
 
+/* Encoding vectors A to E gives the spec bytes. */
 static void test_encode_vectors(void)
 {
     check_encode(build_a, vec_a, sizeof vec_a);
@@ -119,6 +128,7 @@ static void test_encode_vectors(void)
     check_encode(build_e, vec_e, sizeof vec_e);
 }
 
+/* Decoding vector A gives the expected fields and message. */
 static void test_decode_a(void)
 {
     hh_pdu_t p;
@@ -138,6 +148,7 @@ static void test_decode_a(void)
     HH_ASSERT(memcmp(p.msg[0].data, "HELLO", 5) == 0);
 }
 
+/* Decoding vectors B and C gives the Block ACK and the beacon body. */
 static void test_decode_b_c(void)
 {
     hh_pdu_t p;
@@ -158,6 +169,7 @@ static void test_decode_b_c(void)
     HH_ASSERT_EQ_INT(p.beacon.heard[1], 0x02);
 }
 
+/* Decoding vectors D and E gives the MAC command messages. */
 static void test_decode_d_e(void)
 {
     hh_pdu_t p;
@@ -174,6 +186,7 @@ static void test_decode_d_e(void)
     HH_ASSERT(memcmp(p.msg[0].data, cmd_e, sizeof cmd_e) == 0);
 }
 
+/* A PDU with lists, break-in, a queue report and a fragment survives encode and decode. */
 static void test_round_trip_fragment_and_lists(void)
 {
     hh_pdu_t p, q;
@@ -210,6 +223,7 @@ static void test_round_trip_fragment_and_lists(void)
     HH_ASSERT(memcmp(q.msg[0].data, data, sizeof data) == 0);
 }
 
+/* The PDU overhead for 20 slots matches the sizes in the spec. */
 static void test_overhead_matches_spec(void)
 {
     hh_pdu_t p;
@@ -220,6 +234,7 @@ static void test_overhead_matches_spec(void)
     HH_ASSERT_EQ_INT(hh_pdu_size(&p), 22);
 }
 
+/* Bad CRC, short input, security bit, bad length, small buffer and bad class are refused. */
 static void test_rejects(void)
 {
     hh_pdu_t p;

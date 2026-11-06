@@ -10,6 +10,7 @@
 #define GROUP_AIR_LAST   0xFFFDu
 #define TIME_UNKNOWN     0xFCu    /* own GNSS source, error field 63: unknown */
 
+/* Fills cfg with the default 20-slot frame and a placeholder slot capacity. */
 void hh_slot_config_default(hh_slot_config_t *cfg, hh_node_id_t node_id, uint16_t net_id)
 {
     memset(cfg, 0, sizeof *cfg);
@@ -21,8 +22,10 @@ void hh_slot_config_default(hh_slot_config_t *cfg, hh_node_id_t node_id, uint16_
     cfg->node_id = node_id;
 }
 
+/* Returns the slot bitmap length L in bytes for the configured frame. */
 static uint16_t bitmap_bytes(const hh_slot_config_t *c) { return (uint16_t)((c->slots_per_frame + 7u) / 8u); }
 
+/* Validates the configuration, resets the scheduler and limits the MAC payload to what one PDU carries. */
 hh_status_t hh_slot_init(hh_slot_t *s, const hh_slot_config_t *cfg, const hh_clock_t *clock,
                          hh_mac_t *mac, hh_slot_tx_fn tx, void *tx_ctx)
 {
@@ -58,6 +61,7 @@ hh_status_t hh_slot_init(hh_slot_t *s, const hh_slot_config_t *cfg, const hh_clo
     return HH_OK;
 }
 
+/* Converts a 16-bit on-air address to a 32-bit node id. ok is false for an invalid address. */
 static hh_node_id_t air_to_node(uint16_t a, bool *ok)
 {
     *ok = true;
@@ -68,6 +72,7 @@ static hh_node_id_t air_to_node(uint16_t a, bool *ok)
     return 0;
 }
 
+/* Converts a 32-bit node id to a 16-bit on-air address. ok is false if it has no on-air form. */
 static uint16_t node_to_air(hh_node_id_t n, bool *ok)
 {
     *ok = true;
@@ -79,6 +84,7 @@ static uint16_t node_to_air(hh_node_id_t n, bool *ok)
     return 0;
 }
 
+/* Returns the PDU protocol ID for a frame kind. */
 static uint8_t proto_for(hh_frame_kind_t k)
 {
     switch (k) {
@@ -88,6 +94,7 @@ static uint8_t proto_for(hh_frame_kind_t k)
     }
 }
 
+/* Maps a PDU protocol ID to a frame kind. False for MAC commands and reserved IDs. */
 static bool kind_for(uint8_t proto, hh_frame_kind_t *k)
 {
     switch (proto) {
@@ -101,6 +108,7 @@ static bool kind_for(uint8_t proto, hh_frame_kind_t *k)
     }
 }
 
+/* Returns true if any MAC transmit queue still holds frames. */
 static bool queued_frames(const hh_mac_t *mac)
 {
     hh_mac_status_t st;
@@ -110,6 +118,7 @@ static bool queued_frames(const hh_mac_t *mac)
     return false;
 }
 
+/* Builds, encodes and sends the PDU for one own slot, then updates the counters. */
 static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
 {
     hh_pdu_t *p = &s->pdu;
@@ -172,6 +181,7 @@ static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
             s->cfg.capacity);
 }
 
+/* Handles one slot: raises the superframe event, then sends if it is an own slot. */
 static void run_slot(hh_slot_t *s, uint64_t abs, bool late)
 {
     hh_slot_pos_t pos;
@@ -195,6 +205,7 @@ static void run_slot(hh_slot_t *s, uint64_t abs, bool late)
     send_own(s, &pos);
 }
 
+/* Runs every slot that ended since the last call, using the injected clock. */
 void hh_slot_poll(hh_slot_t *s)
 {
     hh_time_ms_t now;
@@ -214,6 +225,7 @@ void hh_slot_poll(hh_slot_t *s)
     }
 }
 
+/* Decodes a received PDU and passes its messages to the MAC. */
 void hh_slot_receive(hh_slot_t *s, const hh_slot_pos_t *pos, const uint8_t *pdu, size_t len)
 {
     hh_pdu_t *p;
@@ -257,6 +269,7 @@ void hh_slot_receive(hh_slot_t *s, const hh_slot_pos_t *pos, const uint8_t *pdu,
     }
 }
 
+/* Returns class 0 message bytes as thousandths of own-slot capacity. */
 uint32_t hh_slot_control_share_permille(const hh_slot_stats_t *st)
 {
     if (!st || !st->capacity_bytes) return 0;

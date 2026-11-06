@@ -2,36 +2,41 @@
 #include "hhsdr/mac/pdu.h"
 #include <string.h>
 
-#define HDR_LEN      9u   /* Frame Control, sequence, Net ID, destination, source */
-#define CTL_FIXED    6u   /* control block without the bitmap and lists */
-#define BACK_LEN     7u
-#define LINK_LEN     4u
-#define QREPORT_LEN  5u
-#define BEACON_FIXED 13u
-#define CRC_LEN      4u
-#define SUB_LEN      5u
-#define FRAG_LEN     5u
+/* Field sizes in bytes, from MAC frame specification v2 part 4. */
+#define HDR_LEN      9u   /* header: Frame Control 2, sequence 1, Net ID 2, destination 2, source 2 */
+#define CTL_FIXED    6u   /* control block without bitmap and lists: time quality, flags, invoker 2, counts, L */
+#define BACK_LEN     7u   /* one Block ACK entry: neighbour 2, start sequence 1, bitmap 4 */
+#define LINK_LEN     4u   /* one link report entry: neighbour 2, error rate 1, SNR 1 */
+#define QREPORT_LEN  5u   /* queue report: messages queued in classes 0 to 4, 1 byte each */
+#define BEACON_FIXED 13u  /* beacon body without the L-byte slots-heard bitmap */
+#define CRC_LEN      4u   /* trailing CRC-32 */
+#define SUB_LEN      5u   /* message sub-header: protocol ID 1, destination 2, word 2 */
+#define FRAG_LEN     5u   /* fragment header: datagram size 2, tag 2, offset 1 */
 
 #define FC_SECURITY  0x0008u
 #define FC_MORE_DATA 0x0010u
 #define FC_ELEMENTS  0x0200u
 
+/* Computes the IEEE 802.3 CRC-32 of a byte range. */
 uint32_t hh_crc32(const uint8_t *data, size_t len)
 {
     uint32_t crc = 0xFFFFFFFFu;
+    uint32_t standard_polynomial=0xEDB88320u; /*standard reversed polynomial representation used to calculare CRC-32*/
     for (size_t i = 0; i < len; i++) {
         crc ^= data[i];
         for (int b = 0; b < 8; b++)
-            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+            crc = (crc >> 1) ^ (standard_polynomial & (0u - (crc & 1u)));
     }
     return ~crc;
 }
 
+/* Returns the bytes one message takes on air: sub-header, link sequence, fragment header and data. */
 size_t hh_pdu_msg_size(const hh_pdu_msg_t *m)
 {
     return SUB_LEN + (m->ack_req ? 1u : 0u) + (m->frag ? FRAG_LEN : 0u) + m->len;
 }
 
+/* Checks that the PDU counts, classes and lengths can be encoded. */
 static bool valid(const hh_pdu_t *p)
 {
     if (p->slot_bytes > HH_PDU_BITMAP_MAX || p->n_back > HH_PDU_BACK_MAX ||
@@ -45,6 +50,7 @@ static bool valid(const hh_pdu_t *p)
     return true;
 }
 
+/* Returns the PDU bytes that are not messages: header, control block, lists and CRC. */
 size_t hh_pdu_overhead(const hh_pdu_t *p)
 {
     size_t n = HDR_LEN + CTL_FIXED + p->slot_bytes + BACK_LEN * (size_t)p->n_back +
@@ -54,6 +60,7 @@ size_t hh_pdu_overhead(const hh_pdu_t *p)
     return n;
 }
 
+/* Returns the total encoded size of the PDU, or 0 if it cannot be encoded. */
 size_t hh_pdu_size(const hh_pdu_t *p)
 {
     size_t n;
@@ -68,11 +75,16 @@ typedef struct {
     size_t   n;
 } wr_t;
 
+/* Writes one byte at the cursor. */
 static void w8(wr_t *w, uint8_t v) { w->b[w->n++] = v; }
+/* Writes a 16-bit value, low byte first. */
 static void w16(wr_t *w, uint16_t v) { w8(w, (uint8_t)v); w8(w, (uint8_t)(v >> 8)); }
+/* Writes a 32-bit value, low byte first. */
 static void w32(wr_t *w, uint32_t v) { w16(w, (uint16_t)v); w16(w, (uint16_t)(v >> 16)); }
+/* Copies len raw bytes to the cursor. */
 static void wn(wr_t *w, const uint8_t *s, size_t len) { if (len) memcpy(w->b + w->n, s, len); w->n += len; }
 
+/* Encodes the PDU into buf in the frame specification v2 layout and appends the CRC-32. */
 hh_status_t hh_pdu_encode(const hh_pdu_t *p, uint8_t *buf, size_t cap, size_t *out_len)
 {
     wr_t w = { buf, 0 };
@@ -144,17 +156,23 @@ typedef struct {
     bool           bad;
 } rd_t;
 
+/* Returns true if k more bytes can be read before the end; otherwise marks the reader as failed. */
 static bool need(rd_t *r, size_t k)
 {
     if (r->bad || r->end - r->n < k) { r->bad = true; return false; }
     return true;
 }
 
+/* Reads one byte at the cursor; 0 once the reader has failed. */
 static uint8_t r8(rd_t *r) { return need(r, 1) ? r->b[r->n++] : 0u; }
+/* Reads a 16-bit value, low byte first. */
 static uint16_t r16(rd_t *r) { uint16_t lo = r8(r); return (uint16_t)(lo | ((uint16_t)r8(r) << 8)); }
+/* Reads a 32-bit value, low byte first. */
 static uint32_t r32(rd_t *r) { uint32_t lo = r16(r); return lo | ((uint32_t)r16(r) << 16); }
+/* Copies k bytes from the cursor into d. */
 static void rn(rd_t *r, uint8_t *d, size_t k) { if (need(r, k)) { memcpy(d, r->b + r->n, k); r->n += k; } }
 
+/* Checks the CRC and decodes a received PDU. Message data points into buf. */
 hh_status_t hh_pdu_decode(const uint8_t *buf, size_t len, hh_pdu_t *p)
 {
     rd_t r;

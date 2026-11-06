@@ -103,6 +103,7 @@ for i = 0, 255 do
     crc_table[i] = c
 end
 
+-- Returns the CRC-32 (IEEE 802.3) of a byte string.
 local function crc32(str)
     local crc = 0xFFFFFFFF
     for i = 1, #str do
@@ -111,11 +112,13 @@ local function crc32(str)
     return xor32(crc, 0xFFFFFFFF)
 end
 
+-- Adds the status field to the tree and to the info column.
 local function set_status(tree, pinfo, st)
     tree:add(f.status, st)
     pinfo.cols.info:append(" [" .. st .. "]")
 end
 
+-- Decodes one PDU: header, control block, messages, then checks the CRC.
 function pdu.dissector(tvb, pinfo, root)
     local len = tvb:len()
     local tree = root:add(pdu, tvb(), "HH-SDR MAC PDU v2")
@@ -130,6 +133,7 @@ function pdu.dissector(tvb, pinfo, root)
     local end_ = len - 4
     local pos = 0
     local malformed = false
+    -- Returns true if n more bytes fit before the CRC; otherwise marks the PDU malformed.
     local function have(n) if pos + n > end_ then malformed = true; return false end return true end
 
     local fc = tvb(0, 2):le_uint()

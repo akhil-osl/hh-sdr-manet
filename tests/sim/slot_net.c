@@ -64,8 +64,10 @@ struct slot_net {
 
 #define LOGF(net, ...) do { if ((net)->cfg.log) fprintf((net)->cfg.log, __VA_ARGS__); } while (0)
 
+/* Clock callback: returns the network virtual time. */
 static hh_time_ms_t clock_now(void *ctx) { return ((slot_net_t *)ctx)->now; }
 
+/* Returns the next pseudo-random number from the seeded generator. */
 static uint32_t rnd(slot_net_t *n)
 {
     uint32_t x = n->rng;
@@ -74,13 +76,17 @@ static uint32_t rnd(slot_net_t *n)
     return n->rng;
 }
 
+/* Returns the virtual time since the start of the run, in ms. */
 static uint32_t t_rel(const slot_net_t *n) { return (uint32_t)(n->now - EPOCH_MS); }
 
 /* ---- application packets ---- */
 
+/* Writes a 32-bit value, low byte first, into an application packet. */
 static void put32(uint8_t *p, uint32_t v) { for (int i = 0; i < 4; i++) p[i] = (uint8_t)(v >> (8 * i)); }
+/* Reads a 32-bit value, low byte first, from an application packet. */
 static uint32_t get32(const uint8_t *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24); }
 
+/* Sets the final state of an in-flight packet once. Later events do not change it. */
 static void mark(slot_net_t *n, uint32_t id, pk_state_t st)
 {
     if (id < n->n_pkts && n->pkts[id].state == PK_INFLIGHT) {
@@ -102,6 +108,7 @@ static void lose_for(slot_net_t *n, const node_t *tx, unsigned rx_id, pk_state_t
     }
 }
 
+/* Hands an application packet to the MAC and records it as lost if the MAC refuses it. */
 static void send_app(node_t *nd, uint32_t id, const uint8_t *payload, uint16_t len, unsigned next)
 {
     slot_net_t *n = nd->net;
@@ -112,6 +119,7 @@ static void send_app(node_t *nd, uint32_t id, const uint8_t *payload, uint16_t l
          hh_mac_result_str(r));
 }
 
+/* MAC receive callback: counts a packet as delivered at its destination, or forwards it to the next hop. */
 static bool on_mac_rx(void *ctx, const hh_mac_indication_t *ind)
 {
     node_t *nd = ctx;
@@ -145,6 +153,7 @@ static bool on_mac_rx(void *ctx, const hh_mac_indication_t *ind)
 
 /* ---- air ---- */
 
+/* Scheduler transmit callback: keeps the PDU for this slot, logs it and calls the capture hook. */
 static bool on_tx(void *ctx, const hh_slot_pos_t *pos, const uint8_t *pdu, size_t len)
 {
     node_t *nd = ctx;
@@ -169,6 +178,7 @@ static bool on_tx(void *ctx, const hh_slot_pos_t *pos, const uint8_t *pdu, size_
     return true;
 }
 
+/* Ends a slot: delivers each PDU to the nodes that hear it, applying collision, loss and corruption. */
 static void resolve(slot_net_t *n)
 {
     for (unsigned r = 0; r < n->cfg.nodes; r++) {
@@ -227,6 +237,7 @@ static void resolve(slot_net_t *n)
 
 /* ---- routes ---- */
 
+/* Recomputes shortest-path next hops over the links that are up and logs each change. */
 void sn_compute_routes(slot_net_t *n)
 {
     for (unsigned d = 0; d < n->cfg.nodes; d++) {
@@ -256,6 +267,7 @@ void sn_compute_routes(slot_net_t *n)
 
 /* ---- setup ---- */
 
+/* Fills the configuration with defaults for the given number of nodes. */
 void sn_config_default(sn_config_t *c, uint16_t nodes)
 {
     memset(c, 0, sizeof *c);
@@ -272,6 +284,7 @@ void sn_config_default(sn_config_t *c, uint16_t nodes)
     c->tc_bytes = 40;              /* TODO: placeholder size */
 }
 
+/* Creates the network with its nodes, MACs and schedulers. Returns NULL if the configuration is invalid. */
 slot_net_t *sn_create(const sn_config_t *cfg)
 {
     slot_net_t *n;
@@ -317,6 +330,7 @@ slot_net_t *sn_create(const sn_config_t *cfg)
     return n;
 }
 
+/* Frees the network. */
 void sn_destroy(slot_net_t *n)
 {
     if (!n) return;
@@ -325,11 +339,13 @@ void sn_destroy(slot_net_t *n)
     free(n);
 }
 
+/* Returns the MAC of a node, or NULL for an invalid node number. */
 hh_mac_t *sn_mac(slot_net_t *n, unsigned node)
 {
     return n && node >= 1 && node <= n->cfg.nodes ? &n->nodes[node - 1].mac : NULL;
 }
 
+/* Sets whether two nodes can hear each other, in both directions. */
 void sn_link(slot_net_t *n, unsigned a, unsigned b, bool up)
 {
     if (a < 1 || b < 1 || a > n->cfg.nodes || b > n->cfg.nodes || a == b) return;
@@ -337,20 +353,24 @@ void sn_link(slot_net_t *n, unsigned a, unsigned b, bool up)
     LOGF(n, "t=%u ev=link a=%u b=%u up=%d\n", t_rel(n), a, b, up ? 1 : 0);
 }
 
+/* Links the nodes in a line: 1-2, 2-3 and so on. */
 void sn_topology_line(slot_net_t *n) { for (unsigned i = 1; i < n->cfg.nodes; i++) sn_link(n, i, i + 1, true); }
 
+/* Links the nodes in a line and closes it into a ring. */
 void sn_topology_ring(slot_net_t *n)
 {
     sn_topology_line(n);
     if (n->cfg.nodes > 2) sn_link(n, n->cfg.nodes, 1, true);
 }
 
+/* Links every pair of nodes. */
 void sn_topology_mesh(slot_net_t *n)
 {
     for (unsigned i = 1; i <= n->cfg.nodes; i++)
         for (unsigned j = i + 1; j <= n->cfg.nodes; j++) sn_link(n, i, j, true);
 }
 
+/* Gives a node a different own slot. */
 void sn_set_slot(slot_net_t *n, unsigned node, unsigned slot)
 {
     node_t *nd;
@@ -360,6 +380,7 @@ void sn_set_slot(slot_net_t *n, unsigned node, unsigned slot)
     nd->sl.cfg.own_slots = 1ull << slot;
 }
 
+/* Adds a traffic flow. Returns false if it is invalid or the table is full. */
 bool sn_add_flow(slot_net_t *n, const sn_flow_t *f)
 {
     if (!f || n->n_flows == SN_MAX_FLOWS || f->src < 1 || f->dst < 1 || f->src > n->cfg.nodes ||
@@ -371,6 +392,7 @@ bool sn_add_flow(slot_net_t *n, const sn_flow_t *f)
     return true;
 }
 
+/* Schedules a link change or a route recompute at a time after the start of the run. */
 bool sn_schedule(slot_net_t *n, uint32_t at_ms, sn_event_kind_t kind, unsigned a, unsigned b)
 {
     if (n->n_events == MAX_EVENTS) return false;
@@ -380,6 +402,7 @@ bool sn_schedule(slot_net_t *n, uint32_t at_ms, sn_event_kind_t kind, unsigned a
 
 /* ---- run ---- */
 
+/* Creates and sends the application packets of every flow that is due. */
 static void generate(slot_net_t *n)
 {
     uint32_t t = t_rel(n);
@@ -403,6 +426,7 @@ static void generate(slot_net_t *n)
     }
 }
 
+/* Sends the stand-in HELLO and TC messages that are due. */
 static void routing_messages(slot_net_t *n)
 {
     uint32_t t = t_rel(n);
@@ -422,6 +446,7 @@ static void routing_messages(slot_net_t *n)
     }
 }
 
+/* Applies the scheduled events that are due. */
 static void apply_events(slot_net_t *n)
 {
     for (unsigned i = 0; i < n->n_events; i++) {
@@ -433,6 +458,7 @@ static void apply_events(slot_net_t *n)
     }
 }
 
+/* Runs traffic for gen_ms, then drains for drain_ms, one slot at a time. */
 void sn_run(slot_net_t *n, uint32_t gen_ms, uint32_t drain_ms)
 {
     uint32_t total = gen_ms + drain_ms;
@@ -454,12 +480,14 @@ void sn_run(slot_net_t *n, uint32_t gen_ms, uint32_t drain_ms)
 
 /* ---- results ---- */
 
+/* Orders two 32-bit values for qsort. */
 static int cmp_u32(const void *a, const void *b)
 {
     uint32_t x = *(const uint32_t *)a, y = *(const uint32_t *)b;
     return (x > y) - (x < y);
 }
 
+/* Sorts the values and returns minimum, median, 95th percentile and maximum. */
 static void percentiles(uint32_t *v, uint32_t n, uint32_t out[4])
 {
     if (!n) { memset(out, 0, 4 * sizeof out[0]); return; }
@@ -470,6 +498,7 @@ static void percentiles(uint32_t *v, uint32_t n, uint32_t out[4])
     out[3] = v[n - 1];
 }
 
+/* Counts packets by final state and computes delays, for one flow or all flows. */
 static void summarize(const slot_net_t *n, int flow, sn_flow_result_t *r)
 {
     uint32_t *mac = malloc((n->n_pkts + 1u) * sizeof *mac);
@@ -505,6 +534,7 @@ static void summarize(const slot_net_t *n, int flow, sn_flow_result_t *r)
     free(app);
 }
 
+/* Fills out with the results of the last run. */
 void sn_result(const slot_net_t *n, sn_result_t *out)
 {
     memset(out, 0, sizeof *out);

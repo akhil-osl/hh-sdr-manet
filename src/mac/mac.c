@@ -400,11 +400,13 @@ static void drop_expired(hh_mac_t *mac, hh_time_ms_t t)
     }
 }
 
+/* Takes the next queued frame for an own slot, whatever its size. */
 bool hh_mac_next_pdu(hh_mac_t *mac, hh_mac_tx_frame_t *out)
 {
     return hh_mac_next_frame_fit(mac, UINT16_MAX, out);
 }
 
+/* Takes the next queued frame for an own slot if it is at most max_len bytes; otherwise leaves it queued. */
 bool hh_mac_next_frame_fit(hh_mac_t *mac, uint16_t max_len, hh_mac_tx_frame_t *out)
 {
     int user = -1;
@@ -469,6 +471,7 @@ static hh_mac_neighbor_t *neighbor_find(hh_mac_t *mac, hh_node_id_t id, bool *ad
     return free_slot;
 }
 
+/* Records that a good PDU was heard from src, even if it carried no messages. */
 void hh_mac_on_heard(hh_mac_t *mac, hh_node_id_t src, uint32_t superframe)
 {
     hh_mac_neighbor_t *n;

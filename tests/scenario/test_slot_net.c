@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Creates a network with the default configuration, optionally changed by tweak. */
 static slot_net_t *make(unsigned nodes, void (*tweak)(sn_config_t *))
 {
     sn_config_t c;
@@ -15,18 +16,21 @@ static slot_net_t *make(unsigned nodes, void (*tweak)(sn_config_t *))
     return sn_create(&c);
 }
 
+/* Checks that delivered plus every loss category equals packets sent. */
 static bool identity(const sn_flow_result_t *r)
 {
     return r->delivered + r->queue_drop + r->sched_reject + r->collision + r->channel +
            r->corruption + r->deadline == r->sent;
 }
 
+/* Adds one traffic flow to the network. */
 static void add_flow(slot_net_t *n, unsigned src, unsigned dst, unsigned size, unsigned every, unsigned start)
 {
     sn_flow_t f = { (uint8_t)src, (uint8_t)dst, (uint16_t)size, every, start };
     sn_add_flow(n, &f);
 }
 
+/* Invalid network configurations are refused. */
 static void test_create_validation(void)
 {
     sn_config_t c;
@@ -39,6 +43,7 @@ static void test_create_validation(void)
     HH_ASSERT(sn_create(&c) == NULL);
 }
 
+/* Traffic crosses three hops with one owner per slot: no collisions, nothing outside own slots. */
 static void test_multihop_exclusive_ownership(void)
 {
     sn_result_t r;
@@ -61,8 +66,10 @@ static void test_multihop_exclusive_ownership(void)
     sn_destroy(n);
 }
 
+/* Configuration change: 30 percent link loss. */
 static void loss_tweak(sn_config_t *c) { c->loss_permille = 300; c->seed = 7; }
 
+/* Link loss is counted as channel loss and the totals add up. */
 static void test_channel_loss_is_counted(void)
 {
     sn_result_t r;
@@ -81,8 +88,10 @@ static void test_channel_loss_is_counted(void)
     sn_destroy(n);
 }
 
+/* Configuration change: half of the PDUs arrive corrupted. */
 static void corrupt_tweak(sn_config_t *c) { c->corrupt_permille = 500; c->seed = 3; }
 
+/* Corrupted PDUs are caught by the CRC check and counted. */
 static void test_corruption_is_counted(void)
 {
     sn_result_t r;
@@ -99,8 +108,10 @@ static void test_corruption_is_counted(void)
     sn_destroy(n);
 }
 
+/* Configuration change: a capacity that fits only one message per PDU. */
 static void tight_tweak(sn_config_t *c) { c->capacity = 70; }
 
+/* A routing message takes a slot from data traffic and delays it. */
 static void test_routing_traffic_uses_slot_capacity(void)
 {
     sn_result_t r;
@@ -120,6 +131,7 @@ static void test_routing_traffic_uses_slot_capacity(void)
     sn_destroy(n);
 }
 
+/* A shared slot collides only at a receiver that hears both senders. */
 static void test_shared_slot_collides_only_where_heard(void)
 {
     sn_result_t r;
@@ -145,6 +157,7 @@ static void test_shared_slot_collides_only_where_heard(void)
     sn_destroy(n);
 }
 
+/* Packets lost to a collision are counted as collision loss. */
 static void test_collision_loss_is_classified(void)
 {
     sn_result_t r;
@@ -161,6 +174,7 @@ static void test_collision_loss_is_classified(void)
     sn_destroy(n);
 }
 
+/* After a link is cut, packets are lost until the reroute, then delivered by the other path. */
 static void test_reroute_after_link_cut(void)
 {
     sn_result_t r;
@@ -192,8 +206,10 @@ static void test_reroute_after_link_cut(void)
     free(buf);
 }
 
+/* Configuration change: capacity 100. */
 static void small_tweak(sn_config_t *c) { c->capacity = 100; }
 
+/* A packet larger than one PDU is refused and counted as a scheduler rejection. */
 static void test_oversize_is_a_scheduler_rejection(void)
 {
     sn_result_t r;
@@ -209,8 +225,10 @@ static void test_oversize_is_a_scheduler_rejection(void)
     sn_destroy(n);
 }
 
+/* Configuration change: 32 slots per frame. */
 static void big_tweak(sn_config_t *c) { c->slots_per_frame = 32; }
 
+/* A 32-node network works with 32 slots per frame. */
 static void test_net_size_is_configurable(void)
 {
     sn_result_t r;

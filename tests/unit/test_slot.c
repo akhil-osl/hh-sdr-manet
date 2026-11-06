@@ -18,6 +18,7 @@ static hh_mac_t  mac_a, mac_b;
 static hh_slot_t slot_a, slot_b;
 
 static hh_time_ms_t t_now;
+/* Virtual clock callback. */
 static hh_time_ms_t vnow(void *ctx) { (void)ctx; return t_now; }
 static const hh_clock_t vclock = { vnow, NULL };
 
@@ -31,6 +32,7 @@ static sent_t sent[256];
 static int    n_sent;
 static bool   forward_to_b;   /* deliver A's PDUs to B's receive path */
 
+/* Transmit function of node A: records the PDU and optionally delivers it to node B. */
 static bool a_tx(void *ctx, const hh_slot_pos_t *pos, const uint8_t *pdu, size_t len)
 {
     (void)ctx;
@@ -44,6 +46,7 @@ static bool a_tx(void *ctx, const hh_slot_pos_t *pos, const uint8_t *pdu, size_t
     return true;
 }
 
+/* Transmit function of node B: discards the PDU. */
 static bool b_tx(void *ctx, const hh_slot_pos_t *pos, const uint8_t *pdu, size_t len)
 {
     (void)ctx; (void)pos; (void)pdu; (void)len;
@@ -53,6 +56,7 @@ static bool b_tx(void *ctx, const hh_slot_pos_t *pos, const uint8_t *pdu, size_t
 static hh_mac_rx_frame_t got[32];
 static int n_got;
 
+/* Network layer receive callback of node B: records delivered frames. */
 static bool b_receiver(void *ctx, const hh_mac_indication_t *ind)
 {
     (void)ctx;
@@ -60,6 +64,7 @@ static bool b_receiver(void *ctx, const hh_mac_indication_t *ind)
     return true;
 }
 
+/* Initialises a MAC and brings it to the steady state. */
 static void open_mac(hh_mac_t *mac, hh_node_id_t id, hh_mac_receive_fn rx)
 {
     hh_mac_config_t cfg;
@@ -71,6 +76,7 @@ static void open_mac(hh_mac_t *mac, hh_node_id_t id, hh_mac_receive_fn rx)
     hh_mac_set_state(mac, HH_MAC_STEADY);
 }
 
+/* Sets up one node: a MAC plus a scheduler with the given own slots and capacity. */
 static hh_status_t setup_node(hh_slot_t *s, hh_mac_t *mac, hh_node_id_t id, uint16_t net,
                               uint64_t own, uint16_t capacity, hh_slot_tx_fn tx,
                               hh_mac_receive_fn rx)
@@ -84,6 +90,7 @@ static hh_status_t setup_node(hh_slot_t *s, hh_mac_t *mac, hh_node_id_t id, uint
     return hh_slot_init(s, &c, &vclock, mac, tx, NULL);
 }
 
+/* Resets the virtual clock and the capture buffers before a test. */
 static void reset(void)
 {
     hh_log_set_level(HH_LOG_ERROR);
@@ -93,6 +100,7 @@ static void reset(void)
     forward_to_b = false;
 }
 
+/* Polls the scheduler once per ms for ms milliseconds. */
 static void run_ms(hh_slot_t *s, unsigned ms)
 {
     for (unsigned i = 0; i < ms; i++) {
@@ -101,6 +109,7 @@ static void run_ms(hh_slot_t *s, unsigned ms)
     }
 }
 
+/* Sends a packet of len bytes through the MAC. */
 static hh_mac_result_t send_n(hh_mac_t *mac, hh_frame_kind_t k, hh_mac_class_t c, hh_node_id_t dst,
                               uint16_t len)
 {
@@ -109,6 +118,7 @@ static hh_mac_result_t send_n(hh_mac_t *mac, hh_frame_kind_t k, hh_mac_class_t c
     return hh_mac_send(mac, k, c, dst, 0, buf, len);
 }
 
+/* Invalid configurations are refused. */
 static void test_init_validation(void)
 {
     hh_slot_config_t c;
@@ -135,6 +145,7 @@ static void test_init_validation(void)
     HH_ASSERT_ERR(hh_slot_init(&slot_a, &c, &vclock, &mac_a, a_tx, NULL), HH_ERR_INVAL);
 }
 
+/* PDUs leave only in own slots, one per slot, even when empty. */
 static void test_sends_only_in_own_slots(void)
 {
     hh_pdu_t p;
@@ -161,6 +172,7 @@ static void test_sends_only_in_own_slots(void)
     HH_ASSERT_EQ_INT(slot_a.st.slots_seen, 60);
 }
 
+/* Slot, frame and superframe numbers are correct across boundaries. */
 static void test_frame_and_superframe_numbers(void)
 {
     reset();
@@ -179,6 +191,7 @@ static void test_frame_and_superframe_numbers(void)
     HH_ASSERT_EQ_INT(sent[50].pos.abs_slot, 2000);
 }
 
+/* A frame with different slot count, frame count and slot length works. */
 static void test_adjustable_frame(void)
 {
     hh_slot_config_t c;
@@ -204,6 +217,7 @@ static void test_adjustable_frame(void)
     }
 }
 
+/* Messages are packed up to the capacity, control first, and the rest wait. */
 static void test_packing_and_order(void)
 {
     hh_pdu_t p;
@@ -230,6 +244,7 @@ static void test_packing_and_order(void)
     HH_ASSERT_EQ_INT(p.n_msg, 0);
 }
 
+/* The MAC maximum payload follows the slot capacity. */
 static void test_max_payload_follows_capacity(void)
 {
     hh_mac_status_t st;
@@ -243,6 +258,7 @@ static void test_max_payload_follows_capacity(void)
     HH_ASSERT_EQ_INT(slot_a.st.messages_tx, 1);   /* the largest allowed frame does fit */
 }
 
+/* Routing and data share one capacity and are counted separately. */
 static void test_control_counts_against_capacity(void)
 {
     reset();
@@ -267,6 +283,7 @@ static void test_control_counts_against_capacity(void)
     HH_ASSERT_EQ_INT(slot_a.st.messages_tx, 3);   /* one 45-byte message fits beside 22 bytes of overhead, not two */
 }
 
+/* A beacon counts as control traffic but not as routing. */
 static void test_beacon_is_control_not_routing(void)
 {
     reset();
@@ -279,6 +296,7 @@ static void test_beacon_is_control_not_routing(void)
     HH_ASSERT_EQ_INT(slot_a.st.slots_with_routing, 0);
 }
 
+/* An own slot that passed before the poll is counted as missed and not sent. */
 static void test_late_poll_misses_own_slot(void)
 {
     reset();
@@ -291,6 +309,7 @@ static void test_late_poll_misses_own_slot(void)
     HH_ASSERT_EQ_INT(slot_a.st.own_slots_missed, 2);
 }
 
+/* Nothing happens before the start of the first superframe. */
 static void test_clock_before_epoch(void)
 {
     reset();
@@ -301,6 +320,7 @@ static void test_clock_before_epoch(void)
     HH_ASSERT_EQ_INT(slot_a.st.slots_seen, 0);
 }
 
+/* Received PDUs reach the MAC, and a control-only PDU counts as hearing the neighbour. */
 static void test_receive_path(void)
 {
     hh_mac_link_report_t rep;
@@ -329,6 +349,7 @@ static void test_receive_path(void)
     HH_ASSERT_EQ_INT(slot_b.st.rx_pdus, 2);
 }
 
+/* Wrong net and corrupted PDUs are dropped and counted. */
 static void test_receive_drops(void)
 {
     hh_slot_pos_t pos = { 0, 0, 0, 0 };

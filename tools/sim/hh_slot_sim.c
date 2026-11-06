@@ -24,6 +24,7 @@ typedef struct {
     const char *log_path, *pcap_path, *summary_path;
 } opts_t;
 
+/* Prints the command line options. */
 static void usage(void)
 {
     fputs("usage: hh-slot-sim [options]\n"
@@ -50,11 +51,13 @@ static void usage(void)
           "  --summary FILE       write the summary here as well\n", stderr);
 }
 
+/* Reads two comma-separated numbers. */
 static bool pair(const char *s, unsigned *a, unsigned *b)
 {
     return sscanf(s, "%u,%u", a, b) == 2;
 }
 
+/* Reads the command line into the options. Returns false on an error. */
 static bool parse(int argc, char **argv, opts_t *o)
 {
     unsigned a, b, c, d;
@@ -98,6 +101,7 @@ static bool parse(int argc, char **argv, opts_t *o)
     return true;
 }
 
+/* Writes the pcap file header for link type 149. */
 static void pcap_header(FILE *f)
 {
     uint32_t h[6] = { 0xA1B2C3D4u, 0x00040002u, 0, 0, 65535u, DLT_USER2 };
@@ -107,6 +111,7 @@ static void pcap_header(FILE *f)
     fwrite(&h[2], 4, 4, f);   /* thiszone, sigfigs, snaplen, network */
 }
 
+/* Writes one PDU to the capture file. */
 static void pcap_hook(void *ctx, uint32_t t_ms, const uint8_t *pdu, size_t len)
 {
     FILE *f = ctx;
@@ -115,11 +120,13 @@ static void pcap_hook(void *ctx, uint32_t t_ms, const uint8_t *pdu, size_t len)
     fwrite(pdu, 1, len, f);
 }
 
+/* Prints a percentage line. */
 static void pct(FILE *o, const char *name, uint64_t num, uint64_t den)
 {
     fprintf(o, "%s=%.2f%%\n", name, den ? 100.0 * (double)num / (double)den : 0.0);
 }
 
+/* Prints the throughput, loss and delay lines of one flow. */
 static void print_flow(FILE *o, const char *name, const sn_flow_result_t *r, uint32_t gen_ms)
 {
     fprintf(o, "%s sent=%u delivered=%u delivered_bytes=%llu throughput_Bps=%.1f hops_max=%u\n", name,
@@ -133,6 +140,7 @@ static void print_flow(FILE *o, const char *name, const sn_flow_result_t *r, uin
             r->app_delay_ms[1], r->app_delay_ms[2], r->app_delay_ms[3]);
 }
 
+/* Prints the run parameters, traffic results, slot counts and slot accounting. */
 static void print_summary(FILE *o, const opts_t *op, slot_net_t *net, const sn_result_t *r)
 {
     const hh_slot_stats_t *s = &r->slot;
@@ -184,6 +192,7 @@ static void print_summary(FILE *o, const opts_t *op, slot_net_t *net, const sn_r
     }
 }
 
+/* Parses the options, runs the simulation and prints the summary. */
 int main(int argc, char **argv)
 {
     opts_t op;
