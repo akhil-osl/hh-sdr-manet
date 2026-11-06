@@ -402,6 +402,11 @@ static void drop_expired(hh_mac_t *mac, hh_time_ms_t t)
 
 bool hh_mac_next_pdu(hh_mac_t *mac, hh_mac_tx_frame_t *out)
 {
+    return hh_mac_next_frame_fit(mac, UINT16_MAX, out);
+}
+
+bool hh_mac_next_frame_fit(hh_mac_t *mac, uint16_t max_len, hh_mac_tx_frame_t *out)
+{
     int user = -1;
     int pick = -1;
     bool share_due;
@@ -427,6 +432,8 @@ bool hh_mac_next_pdu(hh_mac_t *mac, hh_mac_tx_frame_t *out)
     else if (user >= 0)
         pick = user;
     if (pick < 0) return false;
+    /* The chosen frame keeps its place when it does not fit. */
+    if (mac->tx_pool[ring_peek(&mac->txq[pick])].f.len > max_len) return false;
 
     i = ring_pop(&mac->txq[pick]);
     *out = mac->tx_pool[i].f;
@@ -462,12 +469,25 @@ static hh_mac_neighbor_t *neighbor_find(hh_mac_t *mac, hh_node_id_t id, bool *ad
     return free_slot;
 }
 
-void hh_mac_on_rx(hh_mac_t *mac, const hh_mac_rx_pdu_t *pdu)
+void hh_mac_on_heard(hh_mac_t *mac, hh_node_id_t src, uint32_t superframe)
 {
     hh_mac_neighbor_t *n;
+    bool added;
+
+    if (!mac || !mac->opened) return;
+    n = neighbor_find(mac, src, &added);
+    if (n) {
+        n->rx_count++;
+        n->last_heard_superframe = superframe;
+        /* TODO: also raise it when a silent neighbour is heard again (OI-3). */
+        if (added) raise_event(mac, HH_MAC_EV_NEIGHBOUR_HEARD, src, 0, NULL);
+    }
+}
+
+void hh_mac_on_rx(hh_mac_t *mac, const hh_mac_rx_pdu_t *pdu)
+{
     hh_mac_ring_t *h;
     hh_mac_rx_entry_t *e;
-    bool added;
     uint16_t i;
 
     if (!mac || !pdu || !mac->opened) return;
@@ -475,13 +495,7 @@ void hh_mac_on_rx(hh_mac_t *mac, const hh_mac_rx_pdu_t *pdu)
         (unsigned)pdu->cls >= HH_MAC_CLASS_COUNT) return;
 
     /* Every CRC-good PDU updates the neighbour record, before the address filter. */
-    n = neighbor_find(mac, pdu->src, &added);
-    if (n) {
-        n->rx_count++;
-        n->last_heard_superframe = pdu->superframe;
-        /* TODO: also raise it when a silent neighbour is heard again (OI-3). */
-        if (added) raise_event(mac, HH_MAC_EV_NEIGHBOUR_HEARD, pdu->src, 0, NULL);
-    }
+    hh_mac_on_heard(mac, pdu->src, pdu->superframe);
 
     if (pdu->dst != mac->cfg.node_id && pdu->dst != HH_MAC_BROADCAST && !is_group(pdu->dst)) {
         mac->st.rx_not_addressed++;

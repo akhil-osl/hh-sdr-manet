@@ -54,6 +54,22 @@ add_executable(test_mac unit/test_mac.c)
 target_link_libraries(test_mac PRIVATE hhsdr_mac)
 add_test(NAME test_mac COMMAND test_mac)
 
+add_executable(test_pdu unit/test_pdu.c)
+target_link_libraries(test_pdu PRIVATE hhsdr_mac)
+add_test(NAME test_pdu COMMAND test_pdu)
+
+# Slot-timed multi-node test network. Test infrastructure, never linked into production.
+add_library(hhslotsim STATIC sim/slot_net.c)
+target_link_libraries(hhslotsim PUBLIC hhsdr_mac)
+
+add_executable(test_slot_net scenario/test_slot_net.c)
+target_link_libraries(test_slot_net PRIVATE hhslotsim)
+add_test(NAME test_slot_net COMMAND test_slot_net)
+
+add_executable(test_slot unit/test_slot.c)
+target_link_libraries(test_slot PRIVATE hhsdr_mac)
+add_test(NAME test_slot COMMAND test_slot)
+
 # Protocol codec test. Lives with the codec under protocol/, and links
 # hhsdr_protocol rather than reaching into the daemon.
 add_executable(test_rc_protocol ${CMAKE_SOURCE_DIR}/protocol/tests/test_rc_protocol.c)
