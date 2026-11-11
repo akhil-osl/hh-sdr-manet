@@ -4,7 +4,8 @@ POSIX sh scripts for the two radio routing test. Each runs on one node and
 writes its evidence to `TEST_OUT`.
 
 Status: written on the host. NOT YET TRIED on the target image. Expected
-results per step are not written yet.
+results per step are in EXPECTED-RESULTS.md; several are derived or not
+traced to the simulation, and the file says which.
 
 ## Settings
 
