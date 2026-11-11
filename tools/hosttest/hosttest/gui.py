@@ -9,6 +9,7 @@ from tkinter import font as tkfont
 
 from .config import ConfigError
 from .controller import CONNECTED, Busy, Controller
+from .netplan_gui import NetPlanWindow
 
 PAD = 8
 POLL_MS = 100
@@ -64,6 +65,7 @@ class App:
         bar = tk.Menu(self.root)
         file_menu = tk.Menu(bar, tearoff=False)
         file_menu.add_command(label="Load config...", command=self.choose_config)
+        file_menu.add_command(label="Network plan...", command=self.open_netplan)
         file_menu.add_separator()
         file_menu.add_command(label="Quit", command=self.on_close)
         run_menu = tk.Menu(bar, tearoff=False)
@@ -241,6 +243,14 @@ class App:
             return
         action(*args)
         self._refresh()
+
+    def open_netplan(self) -> NetPlanWindow:
+        """Open the network plan window; reuse it if already open."""
+        win = getattr(self, "netplan_window", None)
+        if win is None or not win.winfo_exists():
+            win = self.netplan_window = NetPlanWindow(self.root)
+        win.lift()
+        return win
 
     def on_close(self) -> None:
         self._closing = True

@@ -967,6 +967,49 @@ with every value above a named constant or marked `TODO`.
 
 ---
 
+## U-29 — Network plan fields: address widths, Net ID, command radio rule
+
+**Status:** OPEN (limits in one table in `tools/hosttest/hosttest/netplan.py`)
+
+**What is missing:** The network plan page checks values that the sources do
+not agree on or do not define:
+
+- Address widths: the task update of 19 Oct 2026 (MAC frame spec v2) gives node
+  addresses 0x0001 to 0xEFFF and group addresses 0xF000 to 0xFFFD (16 bit).
+  `docs/MAC-NETWORK-INTERFACE.md` and `docs/MAC-SERVICE.md` show 32-bit node ids
+  with groups at 0xF0000000 to 0xFFFFFFFE. The page follows the 16-bit values.
+- Net ID: no width or range is defined. The page checks only a non-negative
+  integer, one per net per RF head. The MAC docs describe a net identity as the
+  founding superframe plus the founder's node id, which has a different shape.
+- Command radio rule (break-in rule 13): the rule says command radios take the
+  lowest addresses but gives no count or boundary. The page checks only that
+  every command radio address is below every member address.
+- EUI-64: checked for 8 bytes only. How it feeds the security nonce (frame spec
+  4.5 and 4.9) is not in the repository.
+- Consumers: dataterm accepts only a node id and peers on its command line. Net
+  ID, group table and EUI-64 have no input anywhere, so the page saves them in
+  the plan file only.
+- Dataterm flags: the optional per-node IP in the plan exists only to build the
+  `-P` peer flags and is not part of any specified plan.
+
+**Why it is needed:** An operator tool that accepts or rejects addresses must
+use the real limits, or it either blocks valid plans or passes invalid ones.
+
+**Where it must come from:** Network owner (address widths, rule 13 boundary,
+Net ID) and security owner (EUI-64 and nonce use).
+
+**Required resolution:**
+
+- Confirm the address widths and update whichever source is stale.
+- Define the Net ID width and its relation to the beacon net identity.
+- State the rule 13 boundary.
+- Define how a plan reaches radiod, MAC and dataterm.
+
+**What can proceed:** the plan page and its checks, with every limit in the
+`LIMITS` table. The status page waits for a radiod status command and format.
+
+---
+
 ## Summary
 
 | ID | Topic | Status | Primary source |
@@ -998,6 +1041,7 @@ with every value above a named constant or marked `TODO`.
 | U-25 | Radio callback, buffer-lifetime and close rules | OPEN | Architect + radio adapter owners |
 | U-26 | Evaluation board test command and reply contract | BLOCKING | Test and hardware engineers |
 | U-27 | Data terminal call setup and priority classes | OPEN | Network owner + QA |
+| U-29 | Network plan fields: address widths, Net ID, command radio rule | OPEN | Network owner + security owner |
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol
