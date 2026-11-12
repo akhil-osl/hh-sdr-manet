@@ -1,7 +1,8 @@
 """Results layer: one JSON line per command, with board identity and time.
 
-Schema hh-atp-evidence/2 extends hh-atp-evidence/1 (tools/atp) with the board
-identity at the top level and the command text and reply text.
+Schema hh-atp-evidence/3 extends hh-atp-evidence/1 (tools/atp) with the board
+identity at the top level, the command text and reply text, and the serial
+number of the unit under test.
 """
 from __future__ import annotations
 
@@ -11,10 +12,10 @@ import os
 from datetime import datetime
 from typing import Callable
 
-SCHEMA = "hh-atp-evidence/2"
+SCHEMA = "hh-atp-evidence/3"
 UNKNOWN = "UNKNOWN"
 CSV_COLUMNS = ["started_utc", "finished_utc", "board_name", "board_id",
-               "firmware", "host", "check", "result", "reason", "tx", "rx"]
+               "firmware", "unit_serial", "host", "check", "result", "reason", "tx", "rx"]
 
 
 def utc_text(moment: datetime) -> str:
@@ -33,6 +34,10 @@ class ResultsWriter:
         self._now = now
         self.board_id = UNKNOWN
         self.firmware = UNKNOWN
+        self.unit_serial = UNKNOWN
+
+    def set_unit_serial(self, serial: str) -> None:
+        self.unit_serial = serial
 
     def set_identity(self, board_id: str, firmware: str) -> None:
         self.board_id = board_id
@@ -54,6 +59,7 @@ class ResultsWriter:
             "board_name": self._board_name,
             "board_id": self.board_id,
             "firmware": self.firmware,
+            "unit_serial": self.unit_serial,
             "tx": tx,
             "rx": rx,
             "params": params or {},

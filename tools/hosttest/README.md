@@ -87,9 +87,9 @@ A new test is a new entry in `tests`. No code change is needed.
 
 ## Log record
 
-One JSON object per line, schema `hh-atp-evidence/2`. It extends
-`hh-atp-evidence/1` (see `tools/atp/README.md`) with the board identity and the
-command text.
+One JSON object per line, schema `hh-atp-evidence/3`. It extends
+`hh-atp-evidence/1` (see `tools/atp/README.md`) with the board identity, the
+command text and the unit serial number.
 
 | Field | Meaning |
 |---|---|
@@ -97,8 +97,41 @@ command text.
 | `result`, `reason` | `pass` or `fail`, and why it failed |
 | `started_utc`, `finished_utc` | UTC time with milliseconds |
 | `host`, `board_name`, `board_id`, `firmware` | Where it ran and which board. `UNKNOWN` until the identity query succeeds |
+| `unit_serial` | Serial of the unit under test, from `--serial`. `UNKNOWN` when not given |
 | `tx`, `rx` | Command line sent and reply line received, `null` when none |
-| `params`, `metrics` | Test parameters; elapsed time and discarded lines |
+| `params`, `metrics` | Test parameters; elapsed time and discarded lines. Sequence steps add the fields listed under Test sequence |
+
+## Test sequence
+
+A sequence file lists measurement steps. Run it with a serial number:
+
+```bash
+python3 -m hosttest.cli --config config/hosttest.json \
+    --sequence config/sequence.example.json --serial SN-001
+```
+
+`--serial` is required with `--sequence`, so no sequence log lacks the unit.
+The board address and identity come from `--config`; the steps come only from
+the sequence file. Limits are never in code.
+
+| Step field | Meaning |
+|---|---|
+| `id`, `command`, `args`, `expect`, `timeout_s` | As for config tests |
+| `field` | Reply field that holds the measured number |
+| `unit` | Unit of the measured value |
+| `limit.min`, `limit.max` | Inclusive limits; at least one is required |
+| `limit_source` | Clause the limit comes from. Required, not empty |
+| `uncertainty` | Uncertainty from the budget, same unit. Required, not negative |
+| `on_fail` | `stop` (default) or `continue` after this step fails |
+
+The step record keeps `measured`, `unit`, `limit`, `limit_source`,
+`uncertainty` and `on_fail` next to the timestamp and verdict. A reply that is
+not a finite number fails the step. A stopped run does not log later steps.
+Pass or fail compares the measured value to the limit as given; the
+uncertainty is logged, not applied.
+
+Only radio steps exist. Bench instrument steps wait for an instrument control
+contract (U-30), and the example limits are placeholders.
 
 ## Tests
 
