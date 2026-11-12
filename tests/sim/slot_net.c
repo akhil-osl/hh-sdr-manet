@@ -41,6 +41,7 @@ typedef struct {
     size_t        pdu_len;
     uint8_t       pdu[HH_PDU_MAX_LEN];
     uint32_t      next_hello, next_tc;
+    hh_entry_t    entry;
 } node_t;
 
 struct slot_net {
@@ -170,7 +171,8 @@ static bool on_tx(void *ctx, const hh_slot_pos_t *pos, const uint8_t *pdu, size_
     nd->pos = *pos;
     nd->txd = true;
     n->pdus++;
-    if (pos->slot != nd->slot) n->tx_outside++;
+    if (!((nd->sl.cfg.own_slots >> pos->slot) & 1u) && !((nd->sl.cfg.entry_slots >> pos->slot) & 1u))
+        n->tx_outside++;
     if (hh_pdu_decode(pdu, len, &p) == HH_OK)
         for (unsigned i = 0; i < p.n_msg; i++)
             if (p.msg[i].proto == HH_PDU_PROTO_ROUTING) routing += hh_pdu_msg_size(&p.msg[i]);
@@ -291,8 +293,11 @@ void sn_config_default(sn_config_t *c, uint16_t nodes)
 slot_net_t *sn_create(const sn_config_t *cfg)
 {
     slot_net_t *n;
-    if (!cfg || cfg->nodes < 2 || cfg->nodes > SN_MAX_NODES || cfg->nodes > cfg->slots_per_frame ||
-        cfg->slots_per_frame > HH_SLOT_FRAME_MAX)
+    unsigned entry_count = 0;
+    for (uint64_t m = cfg ? cfg->entry_slots : 0; m; m &= m - 1u) entry_count++;
+    if (!cfg || cfg->nodes < 2 || cfg->nodes > SN_MAX_NODES || cfg->nodes + entry_count > cfg->slots_per_frame ||
+        cfg->slots_per_frame > HH_SLOT_FRAME_MAX || cfg->joiners >= cfg->nodes ||
+        (cfg->joiners && !cfg->entry_slots))
         return NULL;
     n = calloc(1, sizeof *n);
     if (!n) return NULL;
@@ -310,6 +315,7 @@ slot_net_t *sn_create(const sn_config_t *cfg)
         node_t *nd = &n->nodes[i];
         hh_mac_config_t mc;
         hh_slot_config_t sc;
+        bool joiner;
         nd->net = n;
         nd->id = i + 1u;
         nd->slot = i;
@@ -318,15 +324,24 @@ slot_net_t *sn_create(const sn_config_t *cfg)
         mc.receive_ctx = nd;
         mc.report_period_sf = 0;
         if (hh_mac_init(&nd->mac, &mc) != HH_MAC_OK || hh_mac_open(&nd->mac) != HH_MAC_OK) { sn_destroy(n); return NULL; }
-        hh_mac_set_state(&nd->mac, HH_MAC_STEADY);
+        joiner = i >= cfg->nodes - cfg->joiners;
+        hh_mac_set_state(&nd->mac, joiner ? HH_MAC_WAIT_TIME : HH_MAC_STEADY);
         hh_slot_config_default(&sc, nd->id, cfg->net_id);
         sc.slots_per_frame = cfg->slots_per_frame;
         sc.frames_per_superframe = cfg->frames_per_superframe;
         sc.slot_ms = cfg->slot_ms;
         sc.capacity = cfg->capacity;
-        sc.own_slots = 1ull << i;
+        sc.own_slots = joiner ? 0 : 1ull << i;
+        sc.entry_slots = cfg->entry_slots;
         sc.epoch_ms = EPOCH_MS;
         if (hh_slot_init(&nd->sl, &sc, &n->clock, &nd->mac, on_tx, nd) != HH_OK) { sn_destroy(n); return NULL; }
+        if (cfg->entry_slots) {
+            hh_entry_params_t ep;
+            hh_entry_params_default(&ep);
+            if (cfg->entry_params) ep = *cfg->entry_params;
+            if (hh_entry_init(&nd->entry, &ep, &sc, cfg->seed) != HH_OK ||
+                hh_slot_attach_entry(&nd->sl, &nd->entry) != HH_OK) { sn_destroy(n); return NULL; }
+        }
         nd->next_hello = (uint32_t)((uint64_t)i * cfg->hello_interval_ms / cfg->nodes);
         nd->next_tc = (uint32_t)((uint64_t)i * cfg->tc_interval_ms / cfg->nodes);
     }
@@ -340,6 +355,33 @@ void sn_destroy(slot_net_t *n)
     free(n->nodes);
     free(n->pkts);
     free(n);
+}
+
+/* Starts network entry on a node that owns no slot. */
+hh_status_t sn_join(slot_net_t *n, unsigned node)
+{
+    if (!n || node < 1 || node > n->cfg.nodes) return HH_ERR_INVAL;
+    return hh_slot_join(&n->nodes[node - 1].sl);
+}
+
+/* Starts the leave on a member. */
+hh_status_t sn_leave(slot_net_t *n, unsigned node)
+{
+    if (!n || node < 1 || node > n->cfg.nodes) return HH_ERR_INVAL;
+    return hh_slot_leave(&n->nodes[node - 1].sl);
+}
+
+/* Returns the entry logic of a node, or NULL for an invalid node number or entry off. */
+const hh_entry_t *sn_entry(const slot_net_t *n, unsigned node)
+{
+    if (!n || !n->cfg.entry_slots || node < 1 || node > n->cfg.nodes) return NULL;
+    return &n->nodes[node - 1].entry;
+}
+
+/* Returns the slots a node owns now, as a mask. */
+uint64_t sn_own_slots(const slot_net_t *n, unsigned node)
+{
+    return n && node >= 1 && node <= n->cfg.nodes ? n->nodes[node - 1].sl.cfg.own_slots : 0;
 }
 
 /* Returns the MAC of a node, or NULL for an invalid node number. */

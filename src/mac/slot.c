@@ -1,5 +1,6 @@
 /* Slot scheduler. See include/hhsdr/mac/slot.h. */
 #include "hhsdr/mac/slot.h"
+#include "hhsdr/mac/entry.h"
 #include "hhsdr/core/log.h"
 #include <string.h>
 
@@ -39,8 +40,9 @@ hh_status_t hh_slot_init(hh_slot_t *s, const hh_slot_config_t *cfg, const hh_clo
         cfg->node_id == 0 || cfg->node_id > 0xEFFFu || cfg->net_id == 0xFFFFu)
         return HH_ERR_INVAL;
     if (cfg->slots_per_frame < HH_SLOT_FRAME_MAX &&
-        (cfg->own_slots >> cfg->slots_per_frame) != 0)
+        ((cfg->own_slots | cfg->entry_slots) >> cfg->slots_per_frame) != 0)
         return HH_ERR_INVAL;
+    if (cfg->own_slots & cfg->entry_slots) return HH_ERR_INVAL;
 
     memset(&probe, 0, sizeof probe);
     probe.slot_bytes = (uint8_t)bitmap_bytes(cfg);
@@ -118,11 +120,126 @@ static bool queued_frames(const hh_mac_t *mac)
     return false;
 }
 
+/* Returns the number of set bits. */
+static unsigned count_bits(uint64_t m)
+{
+    unsigned n = 0;
+    for (; m; m &= m - 1u) n++;
+    return n;
+}
+
+/* Applies what the entry logic asked for: new own slots, a failure, and the matching MAC state. */
+static void apply_entry(hh_slot_t *s, const hh_entry_act_t *act)
+{
+    hh_entry_state_t st = hh_entry_state(s->entry);
+
+    if (act->own_changed) {
+        s->cfg.own_slots = act->own_slots;
+        hh_mac_set_own_slots(s->mac, (uint16_t)count_bits(act->own_slots));
+    }
+    if (act->failed) hh_mac_on_entry_failed(s->mac, act->fail_reason);
+    if ((int)st == s->entry_state) return;
+    s->entry_state = (int)st;
+    switch (st) {
+    case HH_ENTRY_LISTEN:
+    case HH_ENTRY_HOLDOFF:
+    case HH_ENTRY_REFUSED:   hh_mac_set_state(s->mac, HH_MAC_LISTEN); break;
+    case HH_ENTRY_BACKOFF:
+    case HH_ENTRY_WAIT_GRANT:
+    case HH_ENTRY_GRANTED:   hh_mac_set_state(s->mac, HH_MAC_ENTRY); break;
+    case HH_ENTRY_MEMBER:    hh_mac_set_state(s->mac, HH_MAC_STEADY); break;
+    case HH_ENTRY_OFF:       hh_mac_set_state(s->mac, HH_MAC_WAIT_TIME); break;
+    }
+}
+
+/* Fills pos for an absolute slot number. */
+static void pos_for(const hh_slot_t *s, uint64_t abs, hh_slot_pos_t *pos)
+{
+    uint64_t per_frame = s->cfg.slots_per_frame;
+    uint64_t per_super = per_frame * s->cfg.frames_per_superframe;
+
+    pos->abs_slot = abs;
+    pos->superframe = (uint32_t)(abs / per_super);
+    pos->frame = (uint16_t)((abs % per_super) / per_frame);
+    pos->slot = (uint16_t)(abs % per_frame);
+}
+
+/* Fills pos for the slot the clock is in now. False before the epoch. */
+static bool pos_now(const hh_slot_t *s, hh_slot_pos_t *pos)
+{
+    hh_time_ms_t now = hh_now(s->clock);
+    if (now < s->cfg.epoch_ms) return false;
+    pos_for(s, (now - s->cfg.epoch_ms) / s->cfg.slot_ms, pos);
+    return true;
+}
+
+/* Connects the entry logic to the scheduler. */
+hh_status_t hh_slot_attach_entry(hh_slot_t *s, hh_entry_t *e)
+{
+    if (!s || !e) return HH_ERR_INVAL;
+    s->entry = e;
+    s->entry_state = (int)hh_entry_state(e);
+    return HH_OK;
+}
+
+/* Starts network entry at the current slot. */
+hh_status_t hh_slot_join(hh_slot_t *s)
+{
+    hh_slot_pos_t pos;
+    hh_entry_act_t act = { 0 };
+    hh_status_t rc;
+
+    if (!s || !s->entry || !pos_now(s, &pos)) return HH_ERR_STATE;
+    rc = hh_entry_join(s->entry, &pos);
+    if (rc == HH_OK) apply_entry(s, &act);
+    return rc;
+}
+
+/* Starts the leave at the current slot. */
+hh_status_t hh_slot_leave(hh_slot_t *s)
+{
+    hh_slot_pos_t pos;
+
+    if (!s || !s->entry || !pos_now(s, &pos)) return HH_ERR_STATE;
+    return hh_entry_leave(s->entry, &pos);
+}
+
+/* Sends the entry request in a shared entry slot, when the back-off says it is time. */
+static void send_request(hh_slot_t *s, const hh_slot_pos_t *pos)
+{
+    hh_entry_cmd_t c;
+    hh_entry_act_t act = { 0 };
+    hh_pdu_t *p = &s->pdu;
+    uint8_t body[HH_ENTRY_CMD_MAX];
+    size_t blen = 0, len = 0;
+
+    if (!hh_entry_on_opportunity(s->entry, pos, &c)) return;
+    apply_entry(s, &act);
+    if (hh_entry_cmd_encode(&c, body, sizeof body, &blen) != HH_OK) { s->st.tx_failed++; return; }
+
+    memset(p, 0, sizeof *p);
+    p->seq = s->seq++;
+    p->net_id = s->cfg.net_id;
+    p->src = (uint16_t)s->cfg.node_id;
+    p->time_quality = TIME_UNKNOWN;
+    p->n_msg = 1;   /* a joining radio owns no slot: the bitmap is empty */
+    p->msg[0] = (hh_pdu_msg_t){ .proto = HH_PDU_PROTO_COMMAND, .dst = HH_PDU_ADDR_BROADCAST, .cls = 0,
+                                .data = body, .len = (uint16_t)blen };
+    if (hh_pdu_encode(p, s->buf, sizeof s->buf, &len) != HH_OK || !s->tx(s->tx_ctx, pos, s->buf, len)) {
+        s->st.tx_failed++;
+        return;
+    }
+    s->st.entry_pdus_tx++;
+    HH_LOGT(COMP, "entry_request", "node=%u sf=%u slot=%u bytes=%zu", (unsigned)s->cfg.node_id, pos->superframe,
+            pos->slot, len);
+}
+
 /* Builds, encodes and sends the PDU for one own slot, then updates the counters. */
 static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
 {
     hh_pdu_t *p = &s->pdu;
     size_t base, used = 0, len = 0, ctl = 0, user = 0, routing = 0;
+    unsigned n_cmd = 0;
 
     memset(p, 0, sizeof *p);
     p->seq = s->seq++;
@@ -133,6 +250,24 @@ static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
     for (unsigned n = 0; n < s->cfg.slots_per_frame; n++)
         if ((s->cfg.own_slots >> n) & 1u) p->claims[n / 8u] |= (uint8_t)(1u << (n % 8u));
     base = hh_pdu_overhead(p);
+
+    /* Answers to entry requests and the leave go first, as control messages. */
+    while (s->entry && p->n_msg < HH_PDU_MSG_MAX && n_cmd < HH_SLOT_CMD_MAX) {
+        hh_pdu_msg_t *m = &p->msg[p->n_msg];
+        size_t room = s->cfg.capacity - base - used, clen = 0;
+        uint16_t dst = 0;
+
+        if (room <= SUB_LEN) break;
+        if (!hh_entry_next_command(s->entry, pos, (uint16_t)(room - SUB_LEN), s->cmd[n_cmd], &clen, &dst)) break;
+        memset(m, 0, sizeof *m);
+        m->proto = HH_PDU_PROTO_COMMAND;
+        m->dst = dst;
+        m->data = s->cmd[n_cmd++];
+        m->len = (uint16_t)clen;
+        used += hh_pdu_msg_size(m);
+        ctl += hh_pdu_msg_size(m);
+        p->n_msg++;
+    }
 
     while (p->n_msg < HH_PDU_MSG_MAX) {
         hh_mac_tx_frame_t *f = &s->frames[p->n_msg];
@@ -166,6 +301,7 @@ static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
         return;
     }
     s->st.pdus_tx++;
+    if (s->entry) hh_entry_on_own_tx(s->entry, pos);
     if (!p->n_msg) s->st.pdus_empty++;
     s->st.messages_tx += p->n_msg;
     s->st.capacity_bytes += s->cfg.capacity;
@@ -185,16 +321,19 @@ static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
 static void run_slot(hh_slot_t *s, uint64_t abs, bool late)
 {
     hh_slot_pos_t pos;
-    uint64_t per_frame = s->cfg.slots_per_frame;
-    uint64_t per_super = per_frame * s->cfg.frames_per_superframe;
 
-    pos.abs_slot = abs;
-    pos.superframe = (uint32_t)(abs / per_super);
-    pos.frame = (uint16_t)((abs % per_super) / per_frame);
-    pos.slot = (uint16_t)(abs % per_frame);
-
+    pos_for(s, abs, &pos);
     s->st.slots_seen++;
     if (pos.frame == 0 && pos.slot == 0) hh_mac_on_superframe(s->mac, pos.superframe);
+    if (s->entry) {
+        hh_entry_act_t act;
+        hh_entry_tick(s->entry, &pos, &act);
+        apply_entry(s, &act);
+    }
+    if ((s->cfg.entry_slots >> pos.slot) & 1u) {
+        if (s->entry && !late) send_request(s, &pos);
+        return;
+    }
     if (!((s->cfg.own_slots >> pos.slot) & 1u)) return;
 
     s->st.own_slots++;
@@ -246,12 +385,23 @@ void hh_slot_receive(hh_slot_t *s, const hh_slot_pos_t *pos, const uint8_t *pdu,
     }
     s->st.rx_pdus++;
     hh_mac_on_heard(s->mac, src, pos->superframe);
+    if (s->entry) hh_entry_on_pdu(s->entry, pos, p->src, hh_entry_mask_from_bytes(p->claims, p->slot_bytes));
 
     for (unsigned i = 0; i < p->n_msg; i++) {
         const hh_pdu_msg_t *m = &p->msg[i];
         hh_mac_rx_pdu_t up;
         hh_frame_kind_t kind;
-        hh_node_id_t dst = air_to_node(m->dst, &ok);
+        hh_node_id_t dst;
+
+        /* MAC commands are read whatever their destination. */
+        if (m->proto == HH_PDU_PROTO_COMMAND && s->entry) {
+            hh_entry_act_t act;
+            hh_entry_on_command(s->entry, pos, p->src, m->dst, m->data, m->len, &act);
+            apply_entry(s, &act);
+            s->st.rx_commands++;
+            continue;
+        }
+        dst = air_to_node(m->dst, &ok);
 
         if (!ok || m->cls >= HH_MAC_CLASS_COUNT || !kind_for(m->proto, &kind) || m->len > HH_MAC_PAYLOAD_MAX) {
             s->st.rx_messages_skipped++;

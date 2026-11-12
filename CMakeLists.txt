@@ -108,6 +108,7 @@ add_library(hhsdr_mac STATIC
   src/mac/mac.c
   src/mac/pdu.c
   src/mac/slot.c
+  src/mac/entry.c
 )
 target_link_libraries(hhsdr_mac PUBLIC hhsdr_core_base)
 

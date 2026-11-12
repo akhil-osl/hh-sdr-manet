@@ -8,9 +8,12 @@
  * to the air: a simulated medium today, the logic's PDU buffer on hardware
  * (TODO: how a PDU is named for its slot there, not defined yet).
  *
+ * Shared entry slots work through an attached hh_entry_t (entry.h): a joining
+ * radio sends its request there, a member answers in its own slot.
+ *
  * Not modelled: guard time, hop timing, handover one frame ahead, beacon body,
- * Block ACK, link reports, fragmentation, security, entry and pre-emption
- * slots. Single-threaded, no allocation.
+ * Block ACK, link reports, fragmentation, security and pre-emption slots.
+ * Single-threaded, no allocation.
  */
 #ifndef HHSDR_MAC_SLOT_H
 #define HHSDR_MAC_SLOT_H
@@ -20,6 +23,10 @@
 #include "hhsdr/mac/pdu.h"
 
 #define HH_SLOT_FRAME_MAX 64u   /* slots per frame, one bit each in own_slots */
+#define HH_SLOT_CMD_MAX   4u    /* MAC commands in one own-slot PDU */
+#define HH_SLOT_CMD_LEN   24u
+
+typedef struct hh_entry hh_entry_t;
 
 typedef struct {
     uint16_t     slots_per_frame;        /* 1 to 64; default 20 */
@@ -29,6 +36,7 @@ typedef struct {
     uint16_t     net_id;
     hh_node_id_t node_id;                /* on-air address, 1 to 0xEFFF */
     uint64_t     own_slots;              /* bit n = own slot n of every frame */
+    uint64_t     entry_slots;            /* bit n = shared entry slot n; apart from own_slots */
     hh_time_ms_t epoch_ms;               /* start of slot 0 of superframe 0 */
 } hh_slot_config_t;
 
@@ -64,6 +72,8 @@ typedef struct {
     uint64_t rx_unsupported;     /* security or elements */
     uint64_t rx_wrong_net;
     uint64_t rx_messages_skipped;/* unknown protocol, class or address */
+    uint64_t entry_pdus_tx;      /* entry requests sent in shared entry slots */
+    uint64_t rx_commands;        /* MAC commands passed to the entry logic */
 } hh_slot_stats_t;
 
 typedef struct {
@@ -76,6 +86,9 @@ typedef struct {
     uint64_t          next_slot;
     uint8_t           seq;
     uint8_t           buf[HH_PDU_MAX_LEN];
+    uint8_t           cmd[HH_SLOT_CMD_MAX][HH_SLOT_CMD_LEN];
+    hh_entry_t       *entry;
+    int               entry_state;
     hh_pdu_t          pdu;
     hh_mac_tx_frame_t frames[HH_PDU_MSG_MAX];
     hh_slot_stats_t   st;
@@ -88,6 +101,13 @@ void hh_slot_config_default(hh_slot_config_t *cfg, hh_node_id_t node_id, uint16_
  * PDU can carry, so larger frames are refused at hh_mac_send. */
 hh_status_t hh_slot_init(hh_slot_t *s, const hh_slot_config_t *cfg, const hh_clock_t *clock,
                          hh_mac_t *mac, hh_slot_tx_fn tx, void *tx_ctx);
+
+/* Connects the entry logic. A radio that owns no slot then joins with hh_slot_join. */
+hh_status_t hh_slot_attach_entry(hh_slot_t *s, hh_entry_t *e);
+
+/* Starts network entry now, or the leave. HH_ERR_STATE if the entry logic refuses. */
+hh_status_t hh_slot_join(hh_slot_t *s);
+hh_status_t hh_slot_leave(hh_slot_t *s);
 
 /* Runs every slot that ended since the last call. Transmits in the current
  * slot only; an own slot that already ended is counted as missed. */

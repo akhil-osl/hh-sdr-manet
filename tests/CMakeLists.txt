@@ -54,6 +54,10 @@ add_executable(test_mac unit/test_mac.c)
 target_link_libraries(test_mac PRIVATE hhsdr_mac)
 add_test(NAME test_mac COMMAND test_mac)
 
+add_executable(test_entry unit/test_entry.c)
+target_link_libraries(test_entry PRIVATE hhsdr_mac)
+add_test(NAME test_entry COMMAND test_entry)
+
 add_executable(test_pdu unit/test_pdu.c)
 target_link_libraries(test_pdu PRIVATE hhsdr_mac)
 add_test(NAME test_pdu COMMAND test_pdu)
@@ -65,6 +69,11 @@ target_link_libraries(hhslotsim PUBLIC hhsdr_mac)
 add_executable(test_slot_net scenario/test_slot_net.c)
 target_link_libraries(test_slot_net PRIVATE hhslotsim)
 add_test(NAME test_slot_net COMMAND test_slot_net)
+
+add_executable(test_entry_net scenario/test_entry_net.c)
+target_link_libraries(test_entry_net PRIVATE hhslotsim)
+target_include_directories(test_entry_net PRIVATE sim)
+add_test(NAME test_entry_net COMMAND test_entry_net)
 
 # Frame conversion of hh-slot-bridge, kept apart so it is tested without root.
 add_library(hhbridgeframes STATIC ${CMAKE_SOURCE_DIR}/tools/sim/slot_bridge_frames.c)

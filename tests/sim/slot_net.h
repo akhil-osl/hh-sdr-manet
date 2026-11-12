@@ -14,6 +14,7 @@
 #ifndef HH_SLOT_NET_H
 #define HH_SLOT_NET_H
 
+#include "hhsdr/mac/entry.h"
 #include "hhsdr/mac/slot.h"
 #include <stdio.h>
 
@@ -35,6 +36,11 @@ typedef struct {
     uint16_t hello_bytes;
     uint32_t tc_interval_ms;     /* 0 = off */
     uint16_t tc_bytes;
+    /* Network entry. entry_slots 0 = off. Otherwise the last `joiners` nodes start
+     * without a slot and join with sn_join(); the others own slot (id - 1). */
+    uint64_t entry_slots;
+    unsigned joiners;
+    const hh_entry_params_t *entry_params;   /* NULL = defaults */
     FILE    *log;                /* key=value lines, NULL = none */
     /* Called for every PDU sent, with the run time in ms. NULL = none. */
     void   (*pdu_hook)(void *ctx, uint32_t t_ms, const uint8_t *pdu, size_t len);
@@ -115,6 +121,12 @@ void sn_run(slot_net_t *net, uint32_t gen_ms, uint32_t drain_ms);
 void sn_result(const slot_net_t *net, sn_result_t *out);
 
 hh_mac_t *sn_mac(slot_net_t *net, unsigned node);
+
+/* Network entry (only with entry_slots set). Node numbers are 1-based. */
+hh_status_t sn_join(slot_net_t *net, unsigned node);
+hh_status_t sn_leave(slot_net_t *net, unsigned node);
+const hh_entry_t *sn_entry(const slot_net_t *net, unsigned node);
+uint64_t sn_own_slots(const slot_net_t *net, unsigned node);
 
 /* Capture of every PDU as pcap, link type 149 (DLT_USER2), no outer header.
  * Use sn_pcap_hook as pdu_hook with hook_ctx set to the FILE after sn_pcap_header(). */

@@ -782,6 +782,20 @@ and what happens on a slot conflict.
 **What can proceed:** The state machine, with ENTRY defined by its exit
 conditions only.
 
+**Proceeding on proposed values (2026-11-12):** The entry state machine and
+the MAC commands 0x01 to 0x04 (`src/mac/entry.c`) run in the host simulation
+with the design note's values: request and grant from any member, one shared
+entry slot per frame, back-off window 2^4 to 2^6 entry opportunities, time-out
+of 3 frames, 5 requests per cycle, 3 cycles, 2 superframes of listening. These
+are PROPOSED, not decided by the network owner. No document sets the hold-off
+time, the lead from grant to apply-at, the time after which an unused grant
+lapses, or the number of leave repeats. These four have placeholder values.
+Still open: a quarantine period for released slots, a MAC failure code for a
+bad request, the entropy source for the back-off draws and request IDs,
+reporting of the arrival offset by the logic, authentication of requests and
+grants, and the binding to the logic (U-28). Evidence:
+`evidence/f03-ak2/2026-11-12`.
+
 ---
 
 ## U-24 — Linux network-interface binding for the OLSRv2 path
