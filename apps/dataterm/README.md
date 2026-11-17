@@ -247,4 +247,6 @@ Call setup is signalling only, with no media. One call at a time. It is a state 
 
 A callee that is not idle answers a new request with reject (busy). A request not answered within the timeout is released by the caller, and a ring not answered within 30 s is rejected by the callee, so no state is left behind. The payload is four bytes in a CoAP POST to `/call`, Content-Format 42, marked PROPOSED in `call.h`.
 
+An optional room check (`hh_call_set_admit`) lets the owner of the module refuse a call when the network has no room for another voice flow. A caller is then refused with `HH_ERR_AGAIN` before anything is sent, and a callee answers busy without ringing. A call already up is never dropped. The module does not know how the network decides; the tests use the slot scheduler's voice admission query (`hh_slot_voice_admit`), see `src/mac/README.md`. No check is set by default.
+
 In `chat` mode: `/call`, `/accept`, `/reject`, `/hangup` for the call with the chat destination, and `/voice TEXT` or `/video TEXT` to send in a class.

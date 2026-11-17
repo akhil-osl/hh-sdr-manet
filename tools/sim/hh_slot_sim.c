@@ -179,7 +179,7 @@ int main(int argc, char **argv)
     else if (!strcmp(op.topology, "mesh")) sn_topology_mesh(net);
     else { fprintf(stderr, "unknown topology %s\n", op.topology); return 2; }
 
-    flow = (sn_flow_t){ (uint8_t)op.flow_src, (uint8_t)op.flow_dst, (uint16_t)op.size, op.interval_ms, op.start_ms };
+    flow = (sn_flow_t){ (uint8_t)op.flow_src, (uint8_t)op.flow_dst, (uint16_t)op.size, op.interval_ms, op.start_ms, 0 };
     if (!sn_add_flow(net, &flow)) { fputs("invalid flow\n", stderr); return 2; }
     if (op.cut_a >= 0) {
         sn_schedule(net, op.cut_at_ms, SN_EV_LINK_DOWN, (unsigned)op.cut_a, (unsigned)op.cut_b);

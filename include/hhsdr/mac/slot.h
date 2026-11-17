@@ -19,6 +19,7 @@
 #define HHSDR_MAC_SLOT_H
 
 #include "hhsdr/core/clock.h"
+#include "hhsdr/mac/alloc.h"
 #include "hhsdr/mac/mac.h"
 #include "hhsdr/mac/pdu.h"
 
@@ -74,6 +75,14 @@ typedef struct {
     uint64_t rx_messages_skipped;/* unknown protocol, class or address */
     uint64_t entry_pdus_tx;      /* entry requests sent in shared entry slots */
     uint64_t rx_commands;        /* MAC commands passed to the entry logic */
+    uint64_t reports_tx;         /* own-slot PDUs sent with a queue report */
+    uint64_t reports_rx;         /* queue reports heard from other nodes */
+    uint64_t demand_dropped;     /* reports not stored, demand table full */
+    uint64_t alloc_runs;         /* slot maps computed, once per superframe */
+    uint64_t alloc_errors;       /* maps not computed (more members than slots) */
+    uint64_t alloc_changes;      /* maps that changed this node's own slots */
+    uint64_t alloc_no_slot;      /* maps that gave this node no slot, so its slots were kept */
+    uint64_t alloc_clashes;      /* own slots given up to a lower node id that claimed them */
 } hh_slot_stats_t;
 
 typedef struct {
@@ -89,6 +98,16 @@ typedef struct {
     uint8_t           cmd[HH_SLOT_CMD_MAX][HH_SLOT_CMD_LEN];
     hh_entry_t       *entry;
     int               entry_state;
+    /* Offered load per class: messages sent in the frame in progress and in the one before it. */
+    uint64_t          load_frame;
+    uint16_t          sent_cur[HH_ALLOC_CLASSES];
+    uint16_t          sent_prev[HH_ALLOC_CLASSES];
+    hh_alloc_table_t  demand;   /* latest queue report of each node, this one included */
+    bool              alloc_on;
+    bool              alloc_pending;        /* a map is computed and applies at the next superframe */
+    hh_alloc_params_t alloc_params;
+    hh_alloc_map_t    alloc_next;
+    uint64_t          alloc_applied_slot;   /* first slot of the current map */
     hh_pdu_t          pdu;
     hh_mac_tx_frame_t frames[HH_PDU_MSG_MAX];
     hh_slot_stats_t   st;
@@ -101,6 +120,20 @@ void hh_slot_config_default(hh_slot_config_t *cfg, hh_node_id_t node_id, uint16_
  * PDU can carry, so larger frames are refused at hh_mac_send. */
 hh_status_t hh_slot_init(hh_slot_t *s, const hh_slot_config_t *cfg, const hh_clock_t *clock,
                          hh_mac_t *mac, hh_slot_tx_fn tx, void *tx_ctx);
+
+/* Turns on demand-driven slot allocation: at each superframe the node computes
+ * the slot map from the queue reports (alloc.h) and applies it one superframe
+ * later, taking its own row. A lower node id that claims one of this node's
+ * slots keeps it until the next map. The slots in cfg.entry_slots stay out of
+ * the map. With an entry logic attached, only a member that is not leaving
+ * takes part, and the slots of unconfirmed grants stay out of the map. */
+hh_status_t hh_slot_enable_alloc(hh_slot_t *s, const hh_alloc_params_t *p);
+
+/* Asks whether a new voice flow of msgs messages per frame fits the voice
+ * reserve. Read-only. *admit is true if it does. HH_ERR_STATE if allocation is
+ * off or the clock is before the epoch. Call setup refuses the call when the
+ * answer is no (see hh_alloc_voice_admit for the limit of the answer). */
+hh_status_t hh_slot_voice_admit(const hh_slot_t *s, unsigned msgs, bool *admit);
 
 /* Connects the entry logic. A radio that owns no slot then joins with hh_slot_join. */
 hh_status_t hh_slot_attach_entry(hh_slot_t *s, hh_entry_t *e);

@@ -1086,6 +1086,118 @@ the calibration and uncertainty budget.
 **What can proceed:** sequence loading, limit checking, stop or continue on
 failure and the log with unit serial number, all tested against the fake board.
 
+## U-31 — MAC demand report in the control block
+
+**Status:** OPEN
+
+**Scope:** the queue report of the PDU v2 control block (`include/hhsdr/mac/pdu.h`),
+which every node uses to tell the others how much it has queued.
+
+**What is missing:**
+
+- Whether the queue report is mandatory in every PDU. Today it is an optional
+  5-byte field (flag 0x20, one byte per class 0 to 4).
+- Its unit and class set: messages per frame, bytes, or slots wanted.
+- A voice flow count or flow age, so the allocator can tell calls from messages
+  and serve the oldest call first.
+- Where a MAC format version sits in the frame (slot engine specification OI-19).
+
+**Current implementation assumptions** (placeholders, not requirements):
+
+- Every own-slot PDU carries the report, which costs 5 bytes of the 128-byte slot.
+- Each byte is the offered load of the class: the larger of the messages sent in
+  the last frame and the messages sent so far in this frame plus those still
+  queued, capped at 255.
+- The report counts messages, so one voice call of several messages a frame
+  cannot be told from several calls.
+
+**Why it is needed:** Without a fixed report every node cannot compute the same
+slot map, and a lost or stale report makes the scheduler allocate on old data.
+
+**Where it must come from:** The frame specification owner and the network owner.
+
+**Required resolution:**
+
+- Decide mandatory or optional, the unit, and whether a flow count is added.
+- Fix the field in the frame specification so logic and software agree.
+
+**What can proceed:** the allocator, its tests and the simulation, on the
+assumptions above.
+
+## U-32 — Dynamic slot allocation policy
+
+**Status:** OPEN
+
+**Scope:** `src/mac/alloc.c` and the slot scheduler. Every node computes the same
+slot map from the same reports, with no master.
+
+**What is missing:**
+
+- Slots per frame and the number reserved for voice (U-21).
+- Class weights between video and data, the per-node cap, the floor, and the
+  idle slots kept for joining radios.
+- The staleness and gone limits for a report, the report cutoff and the lead
+  before a map applies.
+- How the constants reach every node, so all nodes use the same ones.
+- The class of call signalling and of the video-like marks CS4, CS3 and AF3x in
+  the DSCP table. CS5 currently lands in data (U-27).
+- Smoothing of demand and a rule keeping slot positions stable between maps.
+
+**Current implementation assumptions** (placeholders, not requirements):
+
+- Voice reserve 4 slots, video to data weight 2 to 1, cap 8 of 20 slots, one
+  idle slot for a joiner, a report stale after 5 frames and a node gone after
+  250 frames, one message per slot per frame. All are marked TODO in the code.
+- Three allocation classes (voice, video, data). Control and emergency stay
+  outside the sharing.
+- The map is computed at each superframe boundary and applied one superframe
+  later. A lower node id keeps a slot that two nodes claim. Entry grants stay,
+  and the slots of a grant not yet confirmed are kept out of the map.
+- The DSCP table maps EF to voice, AF41 to AF43 to video and the rest to data.
+
+**Why it is needed:** The values decide how the frame is shared. They are
+tuning, but the same values must be at every node.
+
+**Where it must come from:** The network owner and the logic owner.
+
+**Required resolution:** Decide the values, the way they reach every node, and
+the rule for a clashing claim.
+
+**What can proceed:** the host simulation and its tests with the placeholder
+values. Hardware timing and the hand-off to the logic wait on U-21, U-22 and U-28.
+
+## U-33 — Voice flow admission
+
+**Status:** OPEN
+
+**Scope:** refusing a new voice call when the voice reserve is used up, so existing
+calls are not degraded.
+
+**What is missing:**
+
+- How a voice flow is declared, since the MAC has no flow concept.
+- Who refuses a call, and the tie-break when two calls start at the same moment.
+- How a flow is released, and whether the callee checks room again when the
+  user accepts.
+
+**Current implementation assumptions** (placeholders, not requirements):
+
+- `hh_slot_voice_admit` is a read-only query on the demand table. The call
+  module of the data terminal asks it when a request is placed and when one
+  arrives, and refuses with a busy reply.
+- Two nodes asking at the same moment can both get yes, because the table shows
+  a call only once its traffic is reported.
+
+**Why it is needed:** Without a flow count or age in the report (U-31) the
+admission can be wrong in that case.
+
+**Where it must come from:** The network owner.
+
+**Required resolution:** Decide how a flow is declared, who refuses and the
+tie-break.
+
+**What can proceed:** the query, the call module hook and the tests.
+
 ---
 
 ## Summary
@@ -1122,6 +1234,9 @@ failure and the log with unit serial number, all tested against the fake board.
 | U-28 | Slot PDU hand-off between MAC software and the logic | BLOCKING | Logic + network owners |
 | U-29 | Network plan fields: address widths, Net ID, command radio rule | OPEN | Network owner + security owner |
 | U-30 | Bench instrument control contract for test sequences | OPEN | Test and hardware engineers + budget owner |
+| U-31 | MAC demand report in the control block | OPEN | Frame specification owner + network owner |
+| U-32 | Dynamic slot allocation policy | OPEN | Network owner + logic owner |
+| U-33 | Voice flow admission | OPEN | Network owner |
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol
