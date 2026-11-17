@@ -58,6 +58,14 @@ add_executable(test_entry unit/test_entry.c)
 target_link_libraries(test_entry PRIVATE hhsdr_mac)
 add_test(NAME test_entry COMMAND test_entry)
 
+add_executable(test_alloc unit/test_alloc.c)
+target_link_libraries(test_alloc PRIVATE hhsdr_mac)
+add_test(NAME test_alloc COMMAND test_alloc)
+
+add_executable(test_dscp unit/test_dscp.c)
+target_link_libraries(test_dscp PRIVATE hhsdr_mac)
+add_test(NAME test_dscp COMMAND test_dscp)
+
 add_executable(test_pdu unit/test_pdu.c)
 target_link_libraries(test_pdu PRIVATE hhsdr_mac)
 add_test(NAME test_pdu COMMAND test_pdu)
@@ -69,6 +77,13 @@ target_link_libraries(hhslotsim PUBLIC hhsdr_mac)
 add_executable(test_slot_net scenario/test_slot_net.c)
 target_link_libraries(test_slot_net PRIVATE hhslotsim)
 add_test(NAME test_slot_net COMMAND test_slot_net)
+
+# Call setup refusal on the slot-timed network; needs the data terminal library (libcoap).
+if(TARGET hhsdr_dataterm)
+  add_executable(test_call_admit_net scenario/test_call_admit_net.c)
+  target_link_libraries(test_call_admit_net PRIVATE hhslotsim hhsdr_dataterm)
+  add_test(NAME test_call_admit_net COMMAND test_call_admit_net)
+endif()
 
 add_executable(test_entry_net scenario/test_entry_net.c)
 target_link_libraries(test_entry_net PRIVATE hhslotsim)

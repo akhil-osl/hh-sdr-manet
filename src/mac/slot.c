@@ -46,6 +46,7 @@ hh_status_t hh_slot_init(hh_slot_t *s, const hh_slot_config_t *cfg, const hh_clo
 
     memset(&probe, 0, sizeof probe);
     probe.slot_bytes = (uint8_t)bitmap_bytes(cfg);
+    probe.has_qreport = true;   /* every own-slot PDU carries the queue report */
     floor_len = hh_pdu_overhead(&probe) + SUB_LEN;
     if (cfg->capacity <= floor_len || cfg->capacity > HH_PDU_MAX_LEN) return HH_ERR_INVAL;
 
@@ -110,14 +111,19 @@ static bool kind_for(uint8_t proto, hh_frame_kind_t *k)
     }
 }
 
-/* Returns true if any MAC transmit queue still holds frames. */
-static bool queued_frames(const hh_mac_t *mac)
+/* Writes the frames still queued per class, 255 at most each (the report byte), and returns true if any are queued. */
+static bool queue_left(const hh_mac_t *mac, uint8_t out[HH_ALLOC_CLASSES])
 {
     hh_mac_status_t st;
+    bool any = false;
+
+    memset(out, 0, HH_ALLOC_CLASSES);
     if (hh_mac_status(mac, &st) != HH_MAC_OK) return false;
-    for (int k = 0; k < HH_MAC_CLASS_COUNT; k++)
-        if (st.queue_depth[k]) return true;
-    return false;
+    for (int k = 0; k < HH_MAC_CLASS_COUNT; k++) {
+        out[k] = st.queue_depth[k] > 255u ? 255u : (uint8_t)st.queue_depth[k];
+        if (st.queue_depth[k]) any = true;
+    }
+    return any;
 }
 
 /* Returns the number of set bits. */
@@ -234,13 +240,38 @@ static void send_request(hh_slot_t *s, const hh_slot_pos_t *pos)
             pos->slot, len);
 }
 
+/* Moves the sent-message counters on to the frame of this own slot. A frame with no own slot leaves the earlier count at zero. */
+static void roll_frame(hh_slot_t *s, const hh_slot_pos_t *pos)
+{
+    uint64_t frame = pos->abs_slot / s->cfg.slots_per_frame;
+
+    if (frame == s->load_frame) return;
+    if (frame == s->load_frame + 1u) memcpy(s->sent_prev, s->sent_cur, sizeof s->sent_prev);
+    else memset(s->sent_prev, 0, sizeof s->sent_prev);
+    memset(s->sent_cur, 0, sizeof s->sent_cur);
+    s->load_frame = frame;
+}
+
+/* Fills the queue report with the offered load per class: the larger of what was sent in the last frame
+ * and what was sent so far in this frame plus what is still queued, 255 at most. */
+static void offered_load(const hh_slot_t *s, const uint8_t left[HH_ALLOC_CLASSES], uint8_t out[HH_ALLOC_CLASSES])
+{
+    for (unsigned k = 0; k < HH_ALLOC_CLASSES; k++) {
+        uint32_t now = (uint32_t)s->sent_cur[k] + left[k];
+        uint32_t v = s->sent_prev[k] > now ? s->sent_prev[k] : now;
+        out[k] = v > 255u ? 255u : (uint8_t)v;
+    }
+}
+
 /* Builds, encodes and sends the PDU for one own slot, then updates the counters. */
 static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
 {
     hh_pdu_t *p = &s->pdu;
     size_t base, used = 0, len = 0, ctl = 0, user = 0, routing = 0;
     unsigned n_cmd = 0;
+    uint8_t left[HH_ALLOC_CLASSES];
 
+    roll_frame(s, pos);
     memset(p, 0, sizeof *p);
     p->seq = s->seq++;
     p->net_id = s->cfg.net_id;
@@ -249,6 +280,7 @@ static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
     p->slot_bytes = (uint8_t)bitmap_bytes(&s->cfg);
     for (unsigned n = 0; n < s->cfg.slots_per_frame; n++)
         if ((s->cfg.own_slots >> n) & 1u) p->claims[n / 8u] |= (uint8_t)(1u << (n % 8u));
+    p->has_qreport = true;   /* values are filled after packing, the size is fixed now */
     base = hh_pdu_overhead(p);
 
     /* Answers to entry requests and the leave go first, as control messages. */
@@ -288,9 +320,11 @@ static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
         if (f->cls == HH_MAC_CLASS_CONTROL) ctl += hh_pdu_msg_size(m);
         else user += hh_pdu_msg_size(m);
         if (f->kind == HH_FRAME_ROUTING) routing += hh_pdu_msg_size(m);
+        if (s->sent_cur[f->cls] < UINT16_MAX) s->sent_cur[f->cls]++;
         p->n_msg++;
     }
-    p->more_data = queued_frames(s->mac);
+    p->more_data = queue_left(s->mac, left);
+    offered_load(s, left, p->qreport);   /* demand: what the node offers per frame, whichever slot reports it */
 
     if (hh_pdu_encode(p, s->buf, sizeof s->buf, &len) != HH_OK) {
         s->st.tx_failed++;
@@ -301,6 +335,9 @@ static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
         return;
     }
     s->st.pdus_tx++;
+    s->st.reports_tx++;
+    /* The own report is kept like any other, so every node allocates from what was sent on air. */
+    if (hh_alloc_note(&s->demand, (uint16_t)s->cfg.node_id, p->qreport, pos->abs_slot) != HH_OK) s->st.demand_dropped++;
     if (s->entry) hh_entry_on_own_tx(s->entry, pos);
     if (!p->n_msg) s->st.pdus_empty++;
     s->st.messages_tx += p->n_msg;
@@ -312,9 +349,87 @@ static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
     if (ctl) s->st.slots_with_control++;
     if (routing) s->st.slots_with_routing++;
     s->st.user_bytes += user;
-    HH_LOGT(COMP, "own_slot", "node=%u sf=%u frame=%u slot=%u msgs=%u bytes=%zu ctl=%zu user=%zu cap=%u",
-            (unsigned)s->cfg.node_id, pos->superframe, pos->frame, pos->slot, p->n_msg, len, ctl, user,
-            s->cfg.capacity);
+    HH_LOGT(COMP, "own_slot", "node=%u sf=%u frame=%u slot=%u msgs=%u bytes=%zu ctl=%zu user=%zu cap=%u "
+            "queued=%u/%u/%u/%u/%u", (unsigned)s->cfg.node_id, pos->superframe, pos->frame, pos->slot, p->n_msg,
+            len, ctl, user, s->cfg.capacity, p->qreport[0], p->qreport[1], p->qreport[2], p->qreport[3],
+            p->qreport[4]);
+}
+
+/* Turns on slot allocation for this node. */
+hh_status_t hh_slot_enable_alloc(hh_slot_t *s, const hh_alloc_params_t *p)
+{
+    if (!s || !p || hh_alloc_params_check(p) != HH_OK) return HH_ERR_INVAL;
+    s->alloc_params = *p;
+    s->alloc_params.slots_per_frame = s->cfg.slots_per_frame;
+    s->alloc_params.fixed_slots |= s->cfg.entry_slots;
+    s->alloc_on = true;
+    s->alloc_pending = false;
+    return HH_OK;
+}
+
+/* Answers whether a new voice flow fits the reserve, from the table and the current slot. */
+hh_status_t hh_slot_voice_admit(const hh_slot_t *s, unsigned msgs, bool *admit)
+{
+    hh_slot_pos_t pos;
+
+    if (!s || !admit || msgs == 0) return HH_ERR_INVAL;
+    if (!s->alloc_on || !pos_now(s, &pos)) return HH_ERR_STATE;
+    *admit = hh_alloc_voice_admit(&s->alloc_params, &s->demand, pos.abs_slot, (uint16_t)s->cfg.node_id, msgs);
+    return HH_OK;
+}
+
+/* Sets the own slot set from the allocator or a clash, and tells the MAC and the entry logic. */
+static void set_own(hh_slot_t *s, uint64_t mask)
+{
+    s->cfg.own_slots = mask;
+    hh_mac_set_own_slots(s->mac, (uint16_t)count_bits(mask));
+    if (s->entry) hh_entry_set_own(s->entry, mask);
+}
+
+/* True when the allocator may change this node's slots: no entry logic, or a member that is not leaving. */
+static bool alloc_may_move(const hh_slot_t *s)
+{
+    return !s->entry || (hh_entry_state(s->entry) == HH_ENTRY_MEMBER && !s->entry->leaving);
+}
+
+/* Applies the map computed one superframe ago: this node takes its own row. A map without a slot for it is not applied. */
+static void apply_map(hh_slot_t *s, const hh_slot_pos_t *pos)
+{
+    uint64_t mask = 0;
+
+    s->alloc_pending = false;
+    for (unsigned n = 0; n < s->cfg.slots_per_frame; n++)
+        if (s->alloc_next.owner[n] == s->cfg.node_id) mask |= 1ull << n;
+    if (!mask) {
+        s->st.alloc_no_slot++;   /* a silent node could never report again, so it keeps what it has */
+        return;
+    }
+    s->alloc_applied_slot = pos->abs_slot;
+    if (mask == s->cfg.own_slots) return;
+    set_own(s, mask);
+    s->st.alloc_changes++;
+    HH_LOGD(COMP, "alloc_applied", "node=%u sf=%u slots=%u mask=0x%llx", (unsigned)s->cfg.node_id, pos->superframe,
+            count_bits(mask), (unsigned long long)mask);
+}
+
+/* At a superframe boundary: applies the map computed one superframe ago, then computes the next one from the table. */
+static void alloc_boundary(hh_slot_t *s, const hh_slot_pos_t *pos)
+{
+    hh_alloc_params_t prm = s->alloc_params;
+
+    if (!alloc_may_move(s)) {   /* a joining or leaving radio stays out of the allocation */
+        s->alloc_pending = false;
+        return;
+    }
+    if (s->alloc_pending) apply_map(s, pos);
+    s->st.alloc_runs++;
+    if (s->entry) prm.fixed_slots |= hh_entry_provisional(s->entry);   /* grants not yet confirmed are not given away */
+    if (hh_alloc_compute(&prm, &s->demand, pos->abs_slot, pos->superframe, &s->alloc_next) == HH_OK) {
+        s->alloc_pending = true;
+    } else {
+        s->alloc_pending = false;
+        s->st.alloc_errors++;
+    }
 }
 
 /* Handles one slot: raises the superframe event, then sends if it is an own slot. */
@@ -324,7 +439,10 @@ static void run_slot(hh_slot_t *s, uint64_t abs, bool late)
 
     pos_for(s, abs, &pos);
     s->st.slots_seen++;
-    if (pos.frame == 0 && pos.slot == 0) hh_mac_on_superframe(s->mac, pos.superframe);
+    if (pos.frame == 0 && pos.slot == 0) {
+        hh_mac_on_superframe(s->mac, pos.superframe);
+        if (s->alloc_on) alloc_boundary(s, &pos);
+    }
     if (s->entry) {
         hh_entry_act_t act;
         hh_entry_tick(s->entry, &pos, &act);
@@ -385,6 +503,20 @@ void hh_slot_receive(hh_slot_t *s, const hh_slot_pos_t *pos, const uint8_t *pdu,
     }
     s->st.rx_pdus++;
     hh_mac_on_heard(s->mac, src, pos->superframe);
+    if (p->has_qreport) {
+        s->st.reports_rx++;
+        if (hh_alloc_note(&s->demand, p->src, p->qreport, pos->abs_slot) != HH_OK) s->st.demand_dropped++;
+    }
+    /* A lower node id claiming a slot of this node keeps it. Claims sent before the current map began are old news. */
+    if (s->alloc_on && alloc_may_move(s) && pos->abs_slot >= s->alloc_applied_slot && p->src < s->cfg.node_id) {
+        uint64_t clash = hh_entry_mask_from_bytes(p->claims, p->slot_bytes) & s->cfg.own_slots;
+        if (clash) {
+            set_own(s, s->cfg.own_slots & ~clash);
+            s->st.alloc_clashes++;
+            HH_LOGD(COMP, "alloc_clash", "node=%u from=%u mask=0x%llx", (unsigned)s->cfg.node_id, (unsigned)p->src,
+                    (unsigned long long)clash);
+        }
+    }
     if (s->entry) hh_entry_on_pdu(s->entry, pos, p->src, hh_entry_mask_from_bytes(p->claims, p->slot_bytes));
 
     for (unsigned i = 0; i < p->n_msg; i++) {

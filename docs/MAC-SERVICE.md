@@ -427,7 +427,7 @@ Each of these is a `TODO` in the code and an open item in the specification.
 |---|---|
 | Neighbour silent, PER, CRC fail count per neighbour (OI-3) | Not raised; valid bits clear |
 | Per-hop retransmission for data (DP-1, OI-2) | Not built |
-| Several frames per slot (OI-2) | One frame per own slot |
+| Several frames per slot (OI-2) | The MAC hands out one frame at a time; the slot scheduler packs as many as fit one PDU |
 | Averaging method (DP-6) | Averaged values not valid |
 | Which destination ids are invalid (DP-11) | None refused |
 | Queued frames when leaving `STEADY` or `HOLDOVER`, while inhibited, or on a reset (DP-3) | Kept |
