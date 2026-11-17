@@ -31,7 +31,8 @@ radioctl / any client
 | | |
 |---|---|
 | ✅ **Working** | daemon lifecycle, UNIX socket server, 10 command verbs, 7-state machine, config file, fault registry, mock backend, **OpenCPI backend** (owns an OpenCPI application through the ACI; tested on the host) |
-| ❌ **Not implemented** | board bring-up steps, channel→frequency mapping, frames through radiod, TLV protocol, async events |
+| ✅ **Working (host model)** | frame ring: SPSC ring of fixed-size slots, usable as the RX and TX ring (see Frame rings) |
+| ❌ **Not implemented** | board bring-up steps, channel→frequency mapping, DMA / mmap / PL attach for the rings, TLV protocol, async events |
 
 **radiod can own an OpenCPI application.** With `backend = ocpi` it creates,
 initialises, configures and starts the application named by `ocpi_app` on
@@ -373,10 +374,56 @@ than pretending to work.
 
 ---
 
+## Frame rings
+
+`src/ring.c` and `include/hhsdr/radiod/ring.h` hold the buffer ring from the
+PS-PL data path design ([`../docs/RADIOD-PSPL-DATAPATH.md`](../docs/RADIOD-PSPL-DATAPATH.md),
+PROPOSED). radiod is the owner of two rings: an RX ring (PL produces, MAC
+consumes) and a TX ring (MAC produces, PL consumes). Frames never pass through
+the control socket or through radiod's process.
+
+What exists today is the software model of one ring, `hh_ring_t`:
+
+| Item | Behavior |
+|---|---|
+| Shape | Fixed-size slots, single producer, single consumer, FIFO |
+| Indices | Free running, wrapped by modulo, so the slot count must be a power of two |
+| Ordering | Each index has one writer; the other side reads it with C11 acquire/release atomics. No locks, no threads |
+| Storage | Supplied by the caller (`mem` and `lens` arrays), so radiod can later place it in reserved DMA memory |
+| Full ring | `hh_ring_push` returns `HH_ERR_NOMEM`, counts the drop, and never overwrites a queued frame |
+| Empty ring | `hh_ring_pop` returns `HH_ERR_AGAIN` |
+| Size checks | A frame longer than the slot is `HH_ERR_INVAL` on push; a too-small output buffer is `HH_ERR_INVAL` on pop and the frame stays queued |
+
+```c
+static uint8_t mem[8 * 512];
+static uint32_t lens[8];
+hh_ring_t rx;
+
+hh_ring_init(&rx, mem, lens, 512, 8);   /* 8 slots of 512 bytes */
+hh_ring_push(&rx, frame, frame_len);    /* producer side */
+hh_ring_pop(&rx, out, sizeof out, &n);  /* consumer side */
+```
+
+Not defined yet: the PL-visible descriptor bytes, ring sizes, slot size,
+per-frame metadata (CRC result, RSSI, slot number), the ownership handoff to
+the MAC process, and the interrupt path. These are open (OI-1, OI-3, OI-4 in
+the design document); nothing here claims a PL format.
+
+---
+
 ## Tests
 
 ```bash
-ctest --test-dir build -R 'radiod|mock_backend' --output-on-failure
+ctest --test-dir build -R 'radiod|mock_backend|^test_ring$' --output-on-failure
+```
+
+Or use the helper, which configures, builds and runs the radiod tests and
+prints a short summary (`--asan` for the sanitizer tree, `--keep-going` to
+run past a failure):
+
+```bash
+radiod/tests/run-tests.sh
+radiod/tests/run-tests.sh --asan
 ```
 
 | Test | Covers |
@@ -385,6 +432,7 @@ ctest --test-dir build -R 'radiod|mock_backend' --output-on-failure
 | `test_radiod_config` | defaults, parsing, validation, line-accurate errors |
 | `test_radiod_faults` | registry in isolation **and** as radiod drives it |
 | `test_mock_backend` | the `hh_radio_ops_t` contract |
+| `test_ring` | frame ring: bad geometry, FIFO order across wraps, full-ring drop keeps queued frames, slot and buffer size checks |
 | `test_radiod_daemon` | **end-to-end**: forks the real binary, drives it over a real socket |
 | `test_ocpi_backend` | OpenCPI backend against real OpenCPI applications: start, data flowing, stop, restart, configured property applied, bad property / missing app fail cleanly, self-finishing app detected (`HH_WITH_OPENCPI` only) |
 | `test_radiod_ocpi_daemon` | **end-to-end** with `backend = ocpi`: the real binary owns a real OpenCPI application; a failed start leaves radiod `faulted` (`HH_WITH_OPENCPI` only) |
