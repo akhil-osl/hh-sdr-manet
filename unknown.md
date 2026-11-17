@@ -1081,11 +1081,8 @@ Net ID) and security owner (EUI-64 and nonce use).
 | U-25 | Radio callback, buffer-lifetime and close rules | OPEN | Architect + radio adapter owners |
 | U-26 | Evaluation board test command and reply contract | BLOCKING | Test and hardware engineers |
 | U-27 | Data terminal call setup and priority classes | OPEN | Network owner + QA |
-<<<<<<< HEAD
 | U-28 | Slot PDU hand-off between MAC software and the logic | BLOCKING | Logic + network owners |
-=======
 | U-29 | Network plan fields: address widths, Net ID, command radio rule | OPEN | Network owner + security owner |
->>>>>>> feature/f03-ak4-netmgmt-config
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol
