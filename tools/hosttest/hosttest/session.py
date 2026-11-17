@@ -14,7 +14,7 @@ from .codec import LineCodec
 from .command import CommandClient
 from .config import Config, load_config
 from .results import ResultsWriter
-from .runner import TestRunner
+from .sequence import SequenceRunner
 from .transport import TcpTransport
 
 
@@ -25,7 +25,7 @@ def utc_now() -> datetime:
 @dataclass
 class Session:
     config: Config
-    runner: TestRunner
+    runner: SequenceRunner
     log_path: str
     _transport: TcpTransport
     _writer: ResultsWriter
@@ -37,7 +37,8 @@ class Session:
 
 def build_session(config_path: str,
                   on_result: Callable[[dict], None] | None = None,
-                  now: Callable[[], datetime] = utc_now) -> Session:
+                  now: Callable[[], datetime] = utc_now,
+                  unit_serial: str | None = None) -> Session:
     """Raises ConfigError. No file is created until the first record."""
     config = load_config(config_path)
     board = config.board
@@ -45,6 +46,8 @@ def build_session(config_path: str,
     log_path = os.path.join(config.log_dir, f"{board.name}-{stamp}.jsonl")
     transport = TcpTransport(board.host, board.port, board.connect_timeout_s)
     writer = ResultsWriter(log_path, socket.gethostname(), board.name, now)
-    runner = TestRunner(config, transport, CommandClient(transport, LineCodec()),
+    if unit_serial is not None:
+        writer.set_unit_serial(unit_serial)
+    runner = SequenceRunner(config, transport, CommandClient(transport, LineCodec()),
                         writer, now, on_result)
     return Session(config, runner, log_path, transport, writer)

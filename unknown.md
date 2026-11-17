@@ -1050,6 +1050,44 @@ Net ID) and security owner (EUI-64 and nonce use).
 
 ---
 
+## U-30 — Bench instrument control contract for test sequences
+
+**Status:** OPEN
+
+**Scope:** the sequence runner in `tools/hosttest/`. A sequence step can today
+only command the test board over the radio link (U-26). Steps that read a bench
+instrument (signal generator, analyzer, power meter) are not implemented.
+
+**What is missing:**
+
+- Which instruments are allocated, with model and address
+- The control interface (for example SCPI over TCP or VISA) and the commands
+- The calibration and uncertainty budget that gives each limit, its source
+  clause and its uncertainty
+
+**Current implementation assumptions** (placeholders, not requirements):
+
+- `config/sequence.example.json` carries a placeholder limit, source clause and
+  uncertainty. They are not from any budget.
+- No instrument step type exists. A sequence file cannot name an instrument.
+
+**Why it is needed:** Without it a sequence cannot measure RF quantities, and a
+logged pass cannot be traced to a calibrated limit.
+
+**Where it must come from:** The test and hardware engineers, and the owner of
+the calibration and uncertainty budget.
+
+**Required resolution:**
+
+- Name the instruments and their control interface, then add an instrument step
+  type that returns `HH_ERR_UNSUPPORTED`-style failures for a missing driver.
+- Replace the example limits with values from the budget.
+
+**What can proceed:** sequence loading, limit checking, stop or continue on
+failure and the log with unit serial number, all tested against the fake board.
+
+---
+
 ## Summary
 
 | ID | Topic | Status | Primary source |
@@ -1083,6 +1121,7 @@ Net ID) and security owner (EUI-64 and nonce use).
 | U-27 | Data terminal call setup and priority classes | OPEN | Network owner + QA |
 | U-28 | Slot PDU hand-off between MAC software and the logic | BLOCKING | Logic + network owners |
 | U-29 | Network plan fields: address widths, Net ID, command radio rule | OPEN | Network owner + security owner |
+| U-30 | Bench instrument control contract for test sequences | OPEN | Test and hardware engineers + budget owner |
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol
