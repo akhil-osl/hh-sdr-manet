@@ -57,6 +57,13 @@ command and reply text. All board I/O runs on a worker thread, so the window
 stays responsive if the board stops answering. `gui.py` and `controller.py`
 never import the transport, codec or command layer (checked by a test).
 
+File > Network plan... opens the network plan window: tabs for nodes, groups, RF
+heads and nets. Every edit is checked at once. Rows with a problem turn red, each
+problem is listed, and Save plan stays disabled until the plan is valid. The
+window also shows the `dataterm -n ... -P ...` flags for one node. Net ID, groups
+and EUI-64 are saved in the plan file only, because dataterm has no input for
+them yet (U-29). The checks are in `hosttest/netplan.py` and run without a display.
+
 To try the CLI or GUI without a board, run the fake board and point the config
 at `127.0.0.1` and the same port:
 
