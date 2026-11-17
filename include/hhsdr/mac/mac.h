@@ -355,7 +355,12 @@ void hh_mac_flush(hh_mac_t *mac);
 /* MAC logic side. One call fills one own slot with one frame.
  * TODO: several frames per slot needs the sub-frame header (OI-2). */
 bool hh_mac_next_pdu(hh_mac_t *mac, hh_mac_tx_frame_t *out);
+/* Same selection, but returns false and keeps the frame queued when the next
+ * frame is longer than max_len. Lets a PDU builder pack several frames. */
+bool hh_mac_next_frame_fit(hh_mac_t *mac, uint16_t max_len, hh_mac_tx_frame_t *out);
 void hh_mac_on_rx(hh_mac_t *mac, const hh_mac_rx_pdu_t *pdu);
+/* A good PDU was heard from src, whether or not it carried messages. */
+void hh_mac_on_heard(hh_mac_t *mac, hh_node_id_t src, uint32_t superframe);
 void hh_mac_on_crc_fail(hh_mac_t *mac);
 void hh_mac_on_tx_underrun(hh_mac_t *mac);
 void hh_mac_on_tx_inhibited_slot(hh_mac_t *mac);

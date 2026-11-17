@@ -782,6 +782,20 @@ and what happens on a slot conflict.
 **What can proceed:** The state machine, with ENTRY defined by its exit
 conditions only.
 
+**Proceeding on proposed values (2026-11-12):** The entry state machine and
+the MAC commands 0x01 to 0x04 (`src/mac/entry.c`) run in the host simulation
+with the design note's values: request and grant from any member, one shared
+entry slot per frame, back-off window 2^4 to 2^6 entry opportunities, time-out
+of 3 frames, 5 requests per cycle, 3 cycles, 2 superframes of listening. These
+are PROPOSED, not decided by the network owner. No document sets the hold-off
+time, the lead from grant to apply-at, the time after which an unused grant
+lapses, or the number of leave repeats. These four have placeholder values.
+Still open: a quarantine period for released slots, a MAC failure code for a
+bad request, the entropy source for the back-off draws and request IDs,
+reporting of the arrival offset by the logic, authentication of requests and
+grants, and the binding to the logic (U-28). Evidence:
+`evidence/f03-ak2/2026-11-12`.
+
 ---
 
 ## U-24 — Linux network-interface binding for the OLSRv2 path
@@ -967,6 +981,35 @@ with every value above a named constant or marked `TODO`.
 
 ---
 
+## U-28 — Slot PDU hand-off between MAC software and the logic
+
+**Status:** BLOCKING (for running the slot scheduler on hardware)
+
+**What is missing:** The binding of the slot scheduler's transmit and receive
+seam to the logic. On the host, `src/mac/slot.c` hands each PDU v2 to a
+transmit function and takes received PDUs through `hh_slot_receive()`. Not
+defined for the board:
+
+1. How a PDU is named for its slot in the logic's transmit buffer, and the
+   lead time before the slot (`docs/SLOT-ENGINE-SPEC.md` OI-12, OI-14).
+2. Receive buffer depth and how long software may take to read it (OI-17).
+3. The slot capacity in bytes per PDU: the host code uses a placeholder (128 or
+   256 bytes) because the burst rate and coding are not chosen (U-22, OI-7).
+4. How the logic reports late or missed hand-over to software.
+
+`hh_radio_ops_t` carries whole frames, not PDUs, so it is not this seam.
+
+**Why it is needed:** Without it the scheduler cannot be tied to the FPGA slot
+engine, and throughput figures from the host simulation cannot be turned into
+real figures.
+
+**Where it must come from:** Logic owner and network owner.
+
+**What can proceed:** the host simulation (`tests/sim/slot_net`, `hh-slot-sim`,
+`hh-slot-bridge`) with the capacity as a printed parameter.
+
+---
+
 ## Summary
 
 | ID | Topic | Status | Primary source |
@@ -998,6 +1041,7 @@ with every value above a named constant or marked `TODO`.
 | U-25 | Radio callback, buffer-lifetime and close rules | OPEN | Architect + radio adapter owners |
 | U-26 | Evaluation board test command and reply contract | BLOCKING | Test and hardware engineers |
 | U-27 | Data terminal call setup and priority classes | OPEN | Network owner + QA |
+| U-28 | Slot PDU hand-off between MAC software and the logic | BLOCKING | Logic + network owners |
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol
@@ -1008,6 +1052,15 @@ one OpenCPI application through the ACI. It takes the application and every
 property from configuration and names nothing itself, and is tested on the
 development host against real OpenCPI 2.4.7 applications. Board operation
 waits on U-17 and U-19.
+
+**Added 2026-11-06 (simulation fixture, not a project contract):** `tools/sim/hh_slot_bridge.c`
+runs real OLSRd2 over the slot-timed host simulation with these choices, made
+only to exercise the stack: TAP framing; link address `02-00-00-00-hh-ll` as in
+MAC frame specification v2 section 4.5, so the destination address names the next
+hop; IPv4 `10.99.0.<id>/24`; static neighbour entries instead of ARP; TAP MTU
+equal to the largest packet one PDU carries (fragmentation excluded); OLSRv2
+packets (UDP port 269 or IP protocol 138) sent as routing control and all else
+as data. U-24 items 1 to 6 remain undecided for the product.
 
 **Added 2026-10-08:** the OLSRv2 architecture (U-09 decided). The
 network-interface adapter `hh_netif` (`src/netif/`) carries payloads between
