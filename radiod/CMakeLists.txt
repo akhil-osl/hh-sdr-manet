@@ -19,6 +19,7 @@ add_library(hhsdr_radiod STATIC
   src/radiod.c
   src/config.c
   src/events.c
+  src/ring.c
   src/backends/mock_backend.c
   # Always built, even without OpenCPI, so a daemon lacking the backend can
   # still parse its keys and refuse `backend = ocpi` by name.
@@ -96,6 +97,11 @@ if(HH_BUILD_TESTS)
   target_link_libraries(test_mock_backend PRIVATE hhsdr_radiod)
   target_include_directories(test_mock_backend PRIVATE ${CMAKE_SOURCE_DIR}/tests)
   add_test(NAME test_mock_backend COMMAND test_mock_backend)
+
+  add_executable(test_ring tests/test_ring.c)
+  target_link_libraries(test_ring PRIVATE hhsdr_radiod)
+  target_include_directories(test_ring PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+  add_test(NAME test_ring COMMAND test_ring)
 
   add_executable(test_radiod_config tests/test_radiod_config.c)
   target_link_libraries(test_radiod_config PRIVATE hhsdr_radiod)
