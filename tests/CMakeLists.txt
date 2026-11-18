@@ -35,6 +35,70 @@ hh_add_test(test_node        unit/test_node.c)
 hh_add_test(test_status_events unit/test_status_events.c)
 hh_add_test(test_interface_compliance unit/test_interface_compliance.c)
 
+# Not hh_add_test: these must link without hhsdr_core, so the linker
+# catches any dependency on the legacy stack.
+add_library(hhemu STATIC sim/mock_radio.c sim/emu_medium.c)
+target_link_libraries(hhemu PUBLIC hhsdr_core_base)
+
+foreach(t test_netif:unit/test_netif.c
+          test_netif_emulation:integration/test_netif_emulation.c)
+  string(REPLACE ":" ";" parts ${t})
+  list(GET parts 0 name)
+  list(GET parts 1 src)
+  add_executable(${name} ${src})
+  target_link_libraries(${name} PRIVATE hhsdr_netif hhemu)
+  add_test(NAME ${name} COMMAND ${name})
+endforeach()
+
+add_executable(test_mac unit/test_mac.c)
+target_link_libraries(test_mac PRIVATE hhsdr_mac)
+add_test(NAME test_mac COMMAND test_mac)
+
+add_executable(test_entry unit/test_entry.c)
+target_link_libraries(test_entry PRIVATE hhsdr_mac)
+add_test(NAME test_entry COMMAND test_entry)
+
+add_executable(test_pdu unit/test_pdu.c)
+target_link_libraries(test_pdu PRIVATE hhsdr_mac)
+add_test(NAME test_pdu COMMAND test_pdu)
+
+# Slot-timed multi-node test network. Test infrastructure, never linked into production.
+add_library(hhslotsim STATIC sim/slot_net.c)
+target_link_libraries(hhslotsim PUBLIC hhsdr_mac)
+
+add_executable(test_slot_net scenario/test_slot_net.c)
+target_link_libraries(test_slot_net PRIVATE hhslotsim)
+add_test(NAME test_slot_net COMMAND test_slot_net)
+
+add_executable(test_entry_net scenario/test_entry_net.c)
+target_link_libraries(test_entry_net PRIVATE hhslotsim)
+target_include_directories(test_entry_net PRIVATE sim)
+add_test(NAME test_entry_net COMMAND test_entry_net)
+
+# Frame conversion of hh-slot-bridge, kept apart so it is tested without root.
+add_library(hhbridgeframes STATIC ${CMAKE_SOURCE_DIR}/tools/sim/slot_bridge_frames.c)
+target_include_directories(hhbridgeframes PUBLIC ${CMAKE_SOURCE_DIR}/tools/sim)
+target_link_libraries(hhbridgeframes PUBLIC hhsdr_mac)
+
+add_executable(test_bridge_frames unit/test_bridge_frames.c)
+target_link_libraries(test_bridge_frames PRIVATE hhbridgeframes)
+add_test(NAME test_bridge_frames COMMAND test_bridge_frames)
+
+# hh-slot-sim: command line runs of the slot-timed network. Development tooling only.
+add_executable(hh-slot-sim ${CMAKE_SOURCE_DIR}/tools/sim/hh_slot_sim.c)
+target_link_libraries(hh-slot-sim PRIVATE hhslotsim)
+set_target_properties(hh-slot-sim PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+# hh-slot-bridge: real-time bridge from Linux TAP interfaces to the slot-timed network.
+# Development tooling only. Needs root to run.
+add_executable(hh-slot-bridge ${CMAKE_SOURCE_DIR}/tools/sim/hh_slot_bridge.c)
+target_link_libraries(hh-slot-bridge PRIVATE hhslotsim hhbridgeframes)
+set_target_properties(hh-slot-bridge PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+add_executable(test_slot unit/test_slot.c)
+target_link_libraries(test_slot PRIVATE hhsdr_mac)
+add_test(NAME test_slot COMMAND test_slot)
+
 # Protocol codec test. Lives with the codec under protocol/, and links
 # hhsdr_protocol rather than reaching into the daemon.
 add_executable(test_rc_protocol ${CMAKE_SOURCE_DIR}/protocol/tests/test_rc_protocol.c)

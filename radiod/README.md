@@ -20,7 +20,8 @@ radioctl / any client
     └───────────────┬───────────────────────┘
                     │  hh_radio_ops_t  (8-function vtable, in-process)
                     ▼
-        backends/ — mock_backend.c (works) · hw_adapter.c (honest stub)
+        backends/ — mock_backend.c (works) · ocpi_backend.cpp (works, optional)
+                    · hw_adapter.c (honest stub)
 ```
 
 ---
@@ -47,6 +48,20 @@ agent publishes its registry and radiod routes against it.
 
 What is genuinely unfinished: **none of it has run on hardware.** The agent
 builds for `xilinx19_2_aarch32` but has not driven a PL.
+| ✅ **Working** | daemon lifecycle, UNIX socket server, 10 command verbs, 7-state machine, config file, fault registry, mock backend, **OpenCPI backend** (owns an OpenCPI application through the ACI; tested on the host) |
+| ✅ **Working (host model)** | frame ring: SPSC ring of fixed-size slots, usable as the RX and TX ring (see Frame rings) |
+| ❌ **Not implemented** | board bring-up steps, channel→frequency mapping, DMA / mmap / PL attach for the rings, TLV protocol, async events |
+
+**radiod can own an OpenCPI application.** With `backend = ocpi` it creates,
+initialises, configures and starts the application named by `ocpi_app` on
+`start`, and stops and releases it on `stop` — the single-owner role of the
+architecture's Note 1. It is tested against real OpenCPI 2.4.7 applications
+on the development host. It has **not** yet run on the radio board, and the
+board's bring-up steps (`ad9361_init`, the separate radio-setup application)
+are not part of it: whether radiod owns them is open ([`../unknown.md`](../unknown.md), U-19).
+
+radiod still depends **only** on the `hh_radio_ops_t` vtable; `radiod.c` did
+not change to add the OpenCPI backend.
 
 ---
 
@@ -99,6 +114,7 @@ Stop it with `SIGINT`/`SIGTERM`, or `radioctl shutdown`. Either way
 ### Configuration
 
 Eight keys ([`config/radiod.example.conf`](../config/radiod.example.conf)),
+Keys ([`config/radiod.example.conf`](../config/radiod.example.conf)),
 deliberately separate from the MANET node's `hh_config_t`:
 
 | Key | Default | Notes |
@@ -111,6 +127,10 @@ deliberately separate from the MANET node's `hh_config_t`:
 | `opencpi_agent` | *(compiled-in)* | rh_agent path; `/opt/txrx_worker_rt_ch2_dma/rh_agent` |
 | `opencpi_reply_timeout_ms` | `3000` | ceiling on how long one agent call may block the loop |
 | `opencpi_start_timeout_ms` | `60000` | larger because `start` may run `ad9361_init` |
+| `backend` | `mock` | `mock` or `ocpi` |
+| `ocpi_app` | — | application XML; required when `backend = ocpi` |
+| `ocpi_library_path` | — | exported as `OCPI_LIBRARY_PATH` before the app is created; empty = use the environment |
+| `ocpi_property` | — | repeatable, `instance.property=value`, up to 16; written after `initialize`, before `start` |
 
 Defaults reproduce pre-config behaviour exactly — including `radio_backend =
 mock`, so an existing deployment is unaffected. A bad key reports its line
@@ -120,6 +140,9 @@ There is still **no per-worker or per-property configuration**, and there must
 not be: property names, types and ranges belong to the backend, and properties
 are set at run time with `opencpi set`. Hopset and TLV settings remain absent
 because those contracts still do not exist (U-01, U-14).
+radiod names **no** worker, property or application itself — every one comes
+from these keys. There are no PL, hopset or TLV settings: those contracts
+don't exist, and configuration for them would be inventing them.
 
 ---
 
@@ -236,10 +259,10 @@ those are data plane.
 ```
 main()                                            radiod_main.c
  ├─ hh_radiod_config_defaults / _load_file / _set     (CLI overrides file)
- ├─ hh_mock_backend_init(&backend, &radio)            ← backend chosen HERE
+ ├─ make_backend(&cfg, ...)                           ← backend chosen HERE (`backend` key)
  ├─ hh_radiod_init(&daemon, &radio, hh_clock_monotonic())
  ├─ hh_radiod_configure(&daemon, &cfg)
- ├─ hh_radiod_set_fault_hook(&daemon, fault_hook, &backend)
+ ├─ hh_radiod_set_fault_hook(&daemon, fault_hook, &backend)   (mock only)
  ├─ hh_radiod_listen(&daemon, cfg.sock_path)          → bind + listen(16)
  ├─ install_signal_handlers()                         → sigaction; SIGPIPE ignored
  │
@@ -271,8 +294,14 @@ implementation regardless of how the request arrived.
 
 ## Concurrency model
 
-**Single-threaded. No locks, no threads, no atomics.** Zero `pthread` or `mutex`
-usage in the whole repository.
+**Single-threaded. No locks, no threads, no atomics.** radiod's own code has
+zero `pthread` or `mutex` usage.
+
+One qualification with `backend = ocpi`: the OpenCPI runtime starts its own
+container threads inside the process once an application exists, and links
+`pthread` to do so. radiod still makes every ACI call from its one control
+thread and shares no state with those threads, so nothing here needs a lock —
+but the process is no longer single-threaded as a whole (U-12).
 
 Consequences worth knowing:
 
@@ -375,6 +404,38 @@ Building it changes nothing about radiod's build: no OpenCPI header is included
 and no OpenCPI symbol referenced anywhere in `hhsdr_radiod`, so the library and
 the daemon compile identically on a host with no CDK installed. See
 `docs/OPENCPI-INTEGRATION.md` for the end-to-end picture and the build commands.
+### `ocpi_backend.cpp` — an OpenCPI application, through the ACI
+
+Built only with `-DHH_WITH_OPENCPI=ON`. The one C++ file in radiod: the ACI is
+C++ and OpenCPI 2.4.7's `aci/OcpiApi.h` declares nothing callable. Every entry
+point is `extern "C"`, and every ACI exception (thrown as `std::string`) is
+caught inside it and turned into an `hh_status_t` plus an `aci_error` log line.
+
+| Operation | Does |
+|---|---|
+| `open` (radiod `start`) | create the application → `initialize` → write each `ocpi_property` → `start`. Any failure releases the half-built application. Same sequence as the radio project's `dma_stream.cc`. |
+| `close` (radiod `stop`) | `stop`, then release. Safe twice. |
+| `poll` | `wait(1 µs)`; an application that ended on its own is logged `app_finished` and reported not operational |
+| `get_status` | `operational` = open and not finished; everything else 0 (no property is defined as its source) |
+| `set_channel` | `HH_ERR_UNSUPPORTED` — no channel plan (U-14) |
+| `transmit` | `HH_ERR_NOT_IMPLEMENTED` — data plane undecided (U-15) |
+| `get_link_metrics` | `HH_ERR_UNSUPPORTED` |
+
+`hh_ocpi_backend_get_property()` reads any property of the running
+application; the tests use it to prove data is flowing.
+
+Build and run it on a development host:
+
+```bash
+source ~/opencpi/cdk/opencpi-setup.sh -s
+cmake -S . -B build-ocpi -DHH_WITH_OPENCPI=ON && cmake --build build-ocpi -j8
+ctest --test-dir build-ocpi -R ocpi --output-on-failure
+```
+
+The link follows the CDK's `ocpisetup.mk` recipe with two corrections found
+by linking against 2.4.7, recorded in `CMakeLists.txt`. The resulting binary is
+statically linked against OpenCPI (about 16 MB in a Debug build). Cross-building
+for the board (`xilinx19_2_aarch32`) has not been done yet.
 
 ### `hw_adapter.c` — the honest stub
 
@@ -390,10 +451,56 @@ than pretending to work.
 
 ---
 
+## Frame rings
+
+`src/ring.c` and `include/hhsdr/radiod/ring.h` hold the buffer ring from the
+PS-PL data path design ([`../docs/RADIOD-PSPL-DATAPATH.md`](../docs/RADIOD-PSPL-DATAPATH.md),
+PROPOSED). radiod is the owner of two rings: an RX ring (PL produces, MAC
+consumes) and a TX ring (MAC produces, PL consumes). Frames never pass through
+the control socket or through radiod's process.
+
+What exists today is the software model of one ring, `hh_ring_t`:
+
+| Item | Behavior |
+|---|---|
+| Shape | Fixed-size slots, single producer, single consumer, FIFO |
+| Indices | Free running, wrapped by modulo, so the slot count must be a power of two |
+| Ordering | Each index has one writer; the other side reads it with C11 acquire/release atomics. No locks, no threads |
+| Storage | Supplied by the caller (`mem` and `lens` arrays), so radiod can later place it in reserved DMA memory |
+| Full ring | `hh_ring_push` returns `HH_ERR_NOMEM`, counts the drop, and never overwrites a queued frame |
+| Empty ring | `hh_ring_pop` returns `HH_ERR_AGAIN` |
+| Size checks | A frame longer than the slot is `HH_ERR_INVAL` on push; a too-small output buffer is `HH_ERR_INVAL` on pop and the frame stays queued |
+
+```c
+static uint8_t mem[8 * 512];
+static uint32_t lens[8];
+hh_ring_t rx;
+
+hh_ring_init(&rx, mem, lens, 512, 8);   /* 8 slots of 512 bytes */
+hh_ring_push(&rx, frame, frame_len);    /* producer side */
+hh_ring_pop(&rx, out, sizeof out, &n);  /* consumer side */
+```
+
+Not defined yet: the PL-visible descriptor bytes, ring sizes, slot size,
+per-frame metadata (CRC result, RSSI, slot number), the ownership handoff to
+the MAC process, and the interrupt path. These are open (OI-1, OI-3, OI-4 in
+the design document); nothing here claims a PL format.
+
+---
+
 ## Tests
 
 ```bash
-ctest --test-dir build -R 'radiod|mock_backend' --output-on-failure
+ctest --test-dir build -R 'radiod|mock_backend|^test_ring$' --output-on-failure
+```
+
+Or use the helper, which configures, builds and runs the radiod tests and
+prints a short summary (`--asan` for the sanitizer tree, `--keep-going` to
+run past a failure):
+
+```bash
+radiod/tests/run-tests.sh
+radiod/tests/run-tests.sh --asan
 ```
 
 | Test | Covers |
@@ -402,7 +509,15 @@ ctest --test-dir build -R 'radiod|mock_backend' --output-on-failure
 | `test_radiod_config` | defaults, parsing, validation, line-accurate errors |
 | `test_radiod_faults` | registry in isolation **and** as radiod drives it |
 | `test_mock_backend` | the `hh_radio_ops_t` contract |
+| `test_ring` | frame ring: bad geometry, FIFO order across wraps, full-ring drop keeps queued frames, slot and buffer size checks |
 | `test_radiod_daemon` | **end-to-end**: forks the real binary, drives it over a real socket |
+| `test_ocpi_backend` | OpenCPI backend against real OpenCPI applications: start, data flowing, stop, restart, configured property applied, bad property / missing app fail cleanly, self-finishing app detected (`HH_WITH_OPENCPI` only) |
+| `test_radiod_ocpi_daemon` | **end-to-end** with `backend = ocpi`: the real binary owns a real OpenCPI application; a failed start leaves radiod `faulted` (`HH_WITH_OPENCPI` only) |
+
+The two OpenCPI tests use real time (short, bounded waits) rather than the
+virtual clock, because they drive a real runtime moving real data. Their
+fixtures in `tests/ocpi/` use only the stock `ocpi.core` file_read/file_write
+components, so they stand in for a waveform without being one.
 
 `test_radiod_daemon` links `librc` — *not* `hhsdr_radiod` — so it exercises the
 daemon exactly as an external client would. That is what proves the client
@@ -421,5 +536,6 @@ verb breaks older peers in both directions.
 `src/backends/`, add an `init` that fills an `hh_radio_t`, and select it in
 `radiod_main.c`. Nothing else changes — that is the seam working as intended.
 
-**Before adding OpenCPI**, read U-03, U-04, U-11 (the ACI is C++; this project
-is strict C11) and U-15 in [`../unknown.md`](../unknown.md).
+**Before extending the OpenCPI backend** (board bring-up, status counters from
+application properties, frames), read U-03, U-04, U-12, U-14, U-15 and U-19 in
+[`../unknown.md`](../unknown.md).

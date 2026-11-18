@@ -30,6 +30,8 @@ librc users) · **E1–E4** = HDL/OpenCPI. See ADD §1.4.
 | **BLOCKING** | Work cannot start until this is answered |
 | **DEFERRED** | Deliberately out of scope for the current round |
 | **PARTIAL** | Some of the contract is known; the rest is not |
+| **DECIDED** | The decision is made; the entry keeps its history and any follow-on gaps it points to |
+| **OPEN** | A question is raised; code runs on stated assumptions that are not yet agreed |
 
 ---
 
@@ -126,6 +128,20 @@ The original statement of the item follows, unedited.
 ---
 
 **Status (original):** BLOCKING
+**Status:** PARTIAL (was BLOCKING; updated 2026-09-28)
+
+**Update 2026-09-28:** a working OpenCPI project now exists —
+`txrx_worker_rt_ch2_dma` (OpenCPI 2.4.7, XC7Z100 + AD9361). It has real
+application XMLs (`qpsk_dma_null_app.xml`, `proxy_only.xml`) and workers with
+typed properties (`ad9361_proxy`, `qpsk_tx`, `qpsk_rx`, `qpsk_ctrl`, plus
+`ocpi.core` file_read/file_write). What is still open: those workers are a
+point-to-point QPSK chain, not the five PS RCC workers the drawing names
+(`waveform_ctrl`, `drc`, `mac_ps`, `ad9361_config_proxy`, `telemetry`), and
+which application radiod is to run on the radio is not decided (see U-17,
+U-18). radiod's OpenCPI backend therefore takes the application path and
+every property from configuration and names none of them itself.
+
+The original entry follows.
 
 **What is missing:**
 
@@ -182,6 +198,28 @@ The original statement of the item follows, unedited.
 ---
 
 **Status (original):** BLOCKING
+**Status:** PARTIAL (was BLOCKING; updated 2026-09-28)
+
+**Update 2026-09-28:** the sequence is now known from working code and
+implemented in `radiod/src/backends/ocpi_backend.cpp`: construct
+`OCPI::API::Application(xml)` → `initialize()` → `setProperty()` → `start()`;
+`wait(timeout)` returns true while running and false once finished; `stop()`;
+destroy. Errors are thrown as `std::string` (verified against OpenCPI 2.4.7).
+radiod maps it as: `start` = create…start, `stop` = stop + release, a start
+failure = `faulted`. Tested on the host with real applications.
+
+Still open, all from the radio project's board experience:
+- `ad9361_init` must run before anything touches the PL, or the CPU hangs; the
+  radio-setup application (`proxy_only.xml`) must be running before the data
+  application, and must not be in it. Who performs these steps is U-19.
+- Stopping the application does not stop the RF carrier (the PL free-runs), so
+  radiod `stop` is not an emission-off command.
+- A process that dies holding an application leaves the driver's DMA block
+  allocated, and the next start fails until it is freed.
+- Whether an application can be reloaded without restarting the process has
+  not been tested on the board.
+
+The original entry follows.
 
 **What is missing:** The required call sequence and its failure semantics —
 initialize, create/load, configure, start, stop, shutdown — plus which ACI
@@ -315,7 +353,35 @@ touches RF state.
 
 ## U-09 — OLSRv2 versus the existing MANET stack
 
-**Status:** DEFERRED (by decision, 2026-09-21)
+**Status:** DECIDED (2026-10-08). Previously DEFERRED (by decision, 2026-09-21).
+
+**Decision (2026-10-08):** OLSRv2 (RFC 7181) with NHDP (RFC 6130), as
+implemented by OLSRd2 from OONF, is the routing engine. OLSRd2 runs as an
+external process, as an ordinary Linux routing daemon: it is not embedded in
+`hh_node_t`, not linked into any HH-SDR target, and its source is neither
+copied into this repository nor modified. Linux forwards IP with the routes
+it installs. HH-SDR's part is the network-interface adapter `hh_netif`
+(`include/hhsdr/netif/netif.h`) between a host interface and
+`hh_radio_ops_t`. The custom distance-vector stack (`src/manet/`,
+`src/dataplane/`) stays, unchanged, as a legacy reference and simulator
+workload; nothing on the OLSRv2 path depends on it, and the build enforces
+that. See ARCHITECTURE.md, "OLSRv2: who owns routing".
+
+Background: the routing selection record for task F01-AK-1 (version 1.0,
+5 October 2026) proposes OLSRv2 with Babel as fallback; it is held outside
+this repository. The integration study found that OONF cannot be embedded
+without porting its operating-system layer (clock, sockets, interfaces,
+routes) and removing its single-instance globals, which is why OLSRd2 stays
+external.
+
+**What remains open:** the Linux binding between OLSRd2 and `hh_netif`, and
+how radio metrics reach OLSRd2: [U-24](#u-24--linux-network-interface-binding-for-the-olsrv2-path).
+How OLSRd2's data traffic and `radiod` share one radio once a real backend
+exists: [U-15](#u-15--controldata-split-of-hh_radio_ops_t). The neighbour-stats
+question below (OLSRv2 fed through `radiod` versus its own HELLOs) is now part
+of U-24's metric item.
+
+**Original entry, kept for history:**
 
 **What is missing:** A decision on the fate of the existing routing stack.
 
@@ -390,6 +456,20 @@ The original statement of the item follows, unedited.
 ---
 
 **Status (original):** BLOCKING (OpenCPI only)
+**Status:** PARTIAL (was BLOCKING; updated 2026-09-28)
+
+**Update 2026-09-28:** decided — C++ is allowed in radiod for the OpenCPI
+backend. OpenCPI 2.4.7's `aci/OcpiApi.h` declares nothing callable, so there
+is no C binding to use instead. The C++ is confined to
+`radiod/src/backends/ocpi_backend.cpp`, behind `extern "C"` entry points, and
+built only with `-DHH_WITH_OPENCPI=ON`; the rest of the project stays C11.
+Exceptions map to `HH_ERR_IO` with the OpenCPI message logged.
+
+Still open: cross-building for the board. The radio project targets RCC
+platform `xilinx19_2_aarch32` (rootfs GCC 8.2) and has built with a GCC 7.5
+cross compiler; how its ACI program `dma_stream` was built is not documented.
+
+The original entry follows.
 
 **What is missing:** A decision on how C11 code reaches a C++ API.
 
@@ -429,6 +509,16 @@ The original statement of the item follows, unedited.
 ---
 
 **Status (original):** PARTIAL
+
+**Update 2026-09-28:** the ACI is poll-friendly — `Application::wait()` takes a
+timeout, so radiod polls it with 1 µs from its existing control loop and makes
+every ACI call from its one thread. But the OpenCPI runtime links `pthread`
+and runs its own container threads inside the process once an application
+exists. radiod's code still needs no locks (it shares no state with those
+threads); the process as a whole is no longer single-threaded. Whether that is
+acceptable is the remaining decision.
+
+The original entry follows.
 
 **What is missing:** Whether radiod may remain single-threaded once it owns a
 live OpenCPI application.
@@ -606,6 +696,475 @@ with Wireshark's existing RFC 5444 dissector.
 
 ---
 
+## U-17 — Which OpenCPI project is the integration baseline
+
+**Status:** BLOCKING (for on-board integration)
+
+**What is missing:** A named, versioned OpenCPI project to integrate against.
+The copy examined (`txrx_worker_rt_ch2_dma_Mishra_c`) is, by its own
+hand-over notes, a verbatim copy of `txrx_worker_rt_ch2_dma` whose
+OpenCPI package id (`local.txrx_worker_rt_ch2_dma`) still collides with the
+original. Its latest QA release is R2 (`b72b4ee`).
+
+**Why radiod needs it:** Application XML paths, artifact names and package ids
+are matched by exact string on the board; configuring radiod against the wrong
+copy fails, or worse, runs the wrong artifacts.
+
+**Where it must come from:** The OpenCPI project owner (E1–E4).
+
+**What can proceed:** radiod's OpenCPI backend, which takes the application
+and properties from configuration and is tested on the host with stock
+`ocpi.core` components.
+
+---
+
+## U-18 — Waveform and MAC gap between the OpenCPI chain and the MANET
+
+**Status:** BLOCKING (MANET over RF)
+
+**What is missing:** The OpenCPI chain is a point-to-point FDD QPSK link:
+fixed 2240-bit (280-byte) frames, continuous transmit, no MAC, no addressing,
+no multiple access, no CRC, and no per-frame RSSI/SNR. The MANET stack
+assumes a shared broadcast medium carrying frames of up to 512 bytes
+(`HH_RADIO_MAX_FRAME`) with `kind`/`src`/`dst`, and per-frame link metrics
+(`docs/MANET-RADIO-REQUIREMENTS.md`).
+
+**Why it is needed:** Without a MAC and framing, several nodes cannot share
+the channel, and the MANET cannot tell who sent a frame.
+
+**Where it must come from:** System architect with E1–E4 (the drawing's
+`mac_ps`/`mac_pl`), related to U-06, U-08 and U-15.
+
+**What can proceed:** radiod lifecycle control of the existing application;
+off-radio MANET work and ATP tooling.
+
+---
+
+## U-19 — Board bring-up steps versus the single-owner rule
+
+**Status:** BLOCKING (on-board operation)
+
+**What is missing:** On the board today, three separate things touch the
+hardware: `ad9361_init` (programs the AD9361 over SPI through `/dev/mem`,
+outside OpenCPI), a long-lived `ocpirun proxy_only.xml` (the radio-setup
+application, which must not share an application with the DMA data path), and
+the data application run by `dma_stream`. That is two ACI processes plus raw
+SPI access. Undecided:
+
+- whether "never a second ACI instance" means one process or one application
+  — i.e. may radiod hold both applications in one process;
+- whether radiod runs `ad9361_init` itself, and in which lifecycle state;
+- what radiod does when asked to stop, given that stopping the application
+  does not stop the RF carrier (U-04).
+
+**Why radiod needs it:** Note 1 makes radiod the single owner. It cannot be,
+while other processes bring the radio up.
+
+**Where it must come from:** System architect with the OpenCPI project owner.
+
+**What can proceed:** The OpenCPI backend for one application, tested on the
+host.
+
+---
+
+## U-20 — Data-path test specification: undefined limits and methods
+
+**Status:** PARTIAL (ATP on the board)
+
+**What is missing:** OSL-SQA-TCS-002-EX1 (Operator, Application and BER Test
+Cases) gives most limits, and `tools/atp/opencpi/atp-ocpi.sh` applies them.
+These are named but not given:
+
+- **CNF-07**, the mechanism for setting worker properties (Operator TC-3 to
+  TC-6, Application TC-4, 5, 10 to 12). It lives in the parent document
+  OSL-SQA-TCS-002, which we do not have. `dma_stream` uses ACI `setProperty`,
+  which is the likely answer, unconfirmed.
+- **Numbers for "not growing"** (the words-in-flight gap), **"about
+  119 540 kB"** (MemTotal) and **"the agreed duration"** plus "throughput
+  holds" and "loss counters do not trend upward" (Application TC-15).
+- **Methods** for bursts (Application TC-8), "each supported block size"
+  (TC-9) and deliberately stalling the sink or starving the source (TC-13).
+- Operator TC-1 and Application TC-2 launch `qpsk_trx_app.xml`, which in the
+  project holds only `ad9361_proxy`; the four data-path workers are in
+  `qpsk_dma_null_app.xml` and `qpsk_dma_app.xml`.
+
+**Why it is needed:** without a number the script measures the criterion and
+reports `unjudged`, never `pass`.
+
+**Where it must come from:** QA (author of OSL-SQA-TCS-002).
+
+**What can proceed:** every case with a written limit (Operator TC-1, 2, 8,
+9, 10; Application TC-1 to 3, 6, 7, 16; BER TC-1), judged by
+`atp-ocpi.sh` and self-tested on the host.
+
+---
+
+## U-21 — MAC frame and slot structure
+
+**Status:** BLOCKING (MAC timing)
+
+**What is missing:** The slot is fixed at 1 ms by the 1000 hop/s rate. The
+rest is not given: frame length, slots per frame, guard time, the maximum
+number of nodes and the maximum range. `docs/MAC-ARCHITECTURE.md` §8.1
+recommends a 20 ms frame of 20 slots inside a 1 s superframe on the 1PPS
+edge, as a **candidate** only.
+
+**Why it is needed:** The guard time and range fix the timing precision
+requirement (`docs/MAC-ARCHITECTURE.md` §8.3). The node count fixes the frame
+length.
+
+**Where it must come from:** Logic owner (guard) and network owner (nodes,
+range).
+
+**What can proceed:** The architecture, with frame length kept as a parameter
+on both sides.
+
+---
+
+## U-22 — Burst-mode air interface for the MAC
+
+**Status:** BLOCKING (MAC over RF)
+
+**What is missing:** A TDMA MAC on a shared hop frequency needs half-duplex
+burst operation. The existing chain is continuous FDD (U-18). Not given: the
+AD9361 LO settle time per hop on this board, the TX/RX turnaround time, the
+burst bit rate, the maximum PDU per slot, and the MAC header layout. The MANET
+allows 512-byte frames and the existing PHY frame is 280 bytes, so either the
+MAC fragments or the limits change.
+
+**Why it is needed:** Settle and turnaround set how much of the 1 ms slot is
+left for data and guard.
+
+**Where it must come from:** Logic owner (E1–E4), with the architect for the
+maximum PDU.
+
+**What can proceed:** MAC architecture and the software service, with these
+values left open.
+
+---
+
+## U-23 — Network entry and slot allocation
+
+**Status:** BLOCKING (MAC policy)
+
+**What is missing:** How a node gets its slots: a fixed map from the node id,
+or a dynamic claim with conflict handling. Also the listen time before entry
+and what happens on a slot conflict.
+
+**Why it is needed:** It decides the ENTRY state of the MAC state machine
+(`docs/MAC-ARCHITECTURE.md` §9) and whether an entry protocol must exist.
+
+**Where it must come from:** Network owner, related to U-09.
+
+**What can proceed:** The state machine, with ENTRY defined by its exit
+conditions only.
+
+**Proceeding on proposed values (2026-11-12):** The entry state machine and
+the MAC commands 0x01 to 0x04 (`src/mac/entry.c`) run in the host simulation
+with the design note's values: request and grant from any member, one shared
+entry slot per frame, back-off window 2^4 to 2^6 entry opportunities, time-out
+of 3 frames, 5 requests per cycle, 3 cycles, 2 superframes of listening. These
+are PROPOSED, not decided by the network owner. No document sets the hold-off
+time, the lead from grant to apply-at, the time after which an unused grant
+lapses, or the number of leave repeats. These four have placeholder values.
+Still open: a quarantine period for released slots, a MAC failure code for a
+bad request, the entropy source for the back-off draws and request IDs,
+reporting of the arrival offset by the logic, authentication of requests and
+grants, and the binding to the logic (U-28). Evidence:
+`evidence/f03-ak2/2026-11-12`.
+
+---
+
+## U-24 — Linux network-interface binding for the OLSRv2 path
+
+**Status:** BLOCKING (for running OLSRd2 over HH-SDR)
+
+**What is missing:** Everything between a Linux network interface (`manet0`)
+and the `hh_netif` adapter that no project document defines:
+
+1. **Framing:** a TAP (Ethernet) or TUN (IP) device, or something else.
+2. **Link-layer address to node id:** how the next hop Linux resolves (for
+   example a destination MAC address on TAP) becomes the `hh_node_id_t` given
+   to `hh_netif_send()`, and the reverse on receive. Node ids are 32-bit;
+   Ethernet addresses are 48-bit; no mapping is defined.
+3. **IP addressing of `manet0`:** subnet, per-node addresses, IPv4, IPv6 or
+   both. OLSRv2 identifies nodes by IP address.
+4. **ARP / neighbour policy:** resolution over the air, or static entries.
+5. **MTU:** one radio frame carries at most 512 bytes (`HH_RADIO_MAX_FRAME`,
+   itself TBD) and the PHY frame is 280 bytes (U-22). IPv6 needs at least
+   1280. OLSRd2 builds RFC 5444 packets up to 1472 bytes regardless of MTU.
+   Who fragments is MAC-NETWORK-INTERFACE section 18, undecided.
+6. **Frame kind and MAC class:** whether OLSRv2 HELLO and TC, ARP, and user
+   traffic are sent as BEACON, ROUTING (control class) or DATA
+   (MAC-NETWORK-INTERFACE section 7.1, DP-10). `hh_netif` leaves the kind to
+   its caller for this reason.
+7. **Radio metrics into OLSRd2:** whether per-frame RSSI, SNR and PER from
+   `hh_radio_ops_t` reach OLSRd2's link metric, and by which path (OONF's
+   layer-2 database, DLEP RFC 8175, a constant metric). Averaging is
+   MAC-NETWORK-INTERFACE DP-6.
+8. **OONF baseline and deployment:** which OONF version (the last tag is
+   v0.15.1 from 2018; upstream asks users to follow master), build flags (a
+   Release build fails with -Werror on GCC 11; Debug builds), how it is built
+   for the board (no ARM cross compiler here), and how it is started on a
+   node.
+
+**Why it is needed:** Without these, OLSRd2 has no interface to run on, and
+nothing can carry its packets to `hh_netif`.
+
+**Where it must come from:** Network owner (E6) and system architect; items 5
+and 6 with the MAC owners; item 8 with the build owner.
+
+**What can proceed:** The `hh_netif` adapter itself, which needs none of the
+above and is built and tested on an emulated medium (`test_netif`,
+`test_netif_emulation`). A test-only binding can be prototyped in network
+namespaces once items 1 to 6 are chosen for the test, labelled as test
+choices, not contract.
+
+**Related:** the general `hh_radio_ops_t` callback, buffer-lifetime and close
+rules that `hh_netif` relies on are U-25, not part of this entry. Test choices
+made here must not settle them.
+
+---
+
+## U-25 — Radio interface callback, buffer-lifetime and close semantics
+
+**Status:** OPEN
+
+**Scope:** `hh_radio_ops_t` and its use by `hh_netif`. This is the general
+radio contract, separate from the F01 emulation and protocol test choices in
+U-24 and MAC-NETWORK-INTERFACE DP-11.
+
+**What is missing:** `include/hhsdr/radio/radio.h` does not answer:
+
+1. Does `transmit()` have to copy the frame, or finish using it, before it
+   returns? Or may the radio keep the pointer it was given?
+2. Can the receive callback be given NULL link metrics? If so, what should
+   the adapter do?
+3. Must the radio guarantee that no receive callback happens after `close()`
+   returns?
+4. If `close()` fails, is the radio closed, open, or in an unknown state?
+   What cleanup and freeing rules apply?
+
+**Current implementation assumptions** (not approved API requirements):
+
+- `hh_netif` passes a frame on its stack to `transmit()`, so it assumes the
+  radio uses or copies it before `transmit()` returns. The mock radio copies.
+- `hh_netif` passes NULL metrics to its sink unchanged. The legacy
+  `hh_node_on_frame()` drops such frames instead.
+- `hh_netif` clears its receive callback on close and drops any delivery
+  after close.
+- `hh_netif` stays closed when the radio's `close()` fails, and returns the
+  error.
+
+**Why it is needed:** Each adapter (mock, `hw_adapter`, `mock_backend`, a
+future PL adapter) and each user of the seam must agree on these rules. If
+they do not, a frame can be read after it is freed, or a callback can reach
+an object that no longer exists.
+
+**Where it must come from:** System architect, with the radio adapter owners.
+
+**Required resolution:**
+
+- Review the radio API and every adapter that implements it.
+- Write the ownership, callback and close rules into `radio.h`.
+- Add a contract test for each agreed rule.
+
+**What can proceed:** `hh_netif` and its tests, built on the assumptions
+above. They protect `hh_netif` either way and do not make the assumptions
+binding.
+
+---
+
+## U-26 — Evaluation board test command and reply contract
+
+**Status:** BLOCKING (for the real-board run only)
+
+**Scope:** the host test application `tools/hosttest/`, which talks to a test
+board over TCP from a host PC. Development tooling, not part of `radiod`.
+
+**What is missing:** the board side of the link is not specified:
+
+- Message framing (line, length prefix, fixed size) and text or binary encoding
+- Command names and arguments the board accepts, and what each should return
+- How a reply carries the tag that ties it to its command, and the tag type
+- Reply status values and the error reply form
+- The query that returns the board ID and the firmware version
+- Whether the board runs a test responder today, and on which port
+
+**Current implementation assumptions** (placeholders, not requirements):
+
+- `hosttest/codec.py` uses one ASCII line each way: `<tag> <command> [arg ...]`
+  out, `<tag> <status> [key=value ...]` back. It is marked `TODO`.
+- The command names in `config/hosttest.example.json` are examples. They are
+  not commands of any real board.
+- The identity query and its two reply fields are named in the config.
+
+**Why it is needed:** Without the contract the tool can only be proved against
+a fake board. Results logged from a real board need the real board ID and
+firmware version to be traceable into a test report.
+
+**Where it must come from:** The test and hardware engineers who own the board
+test responder, from the host test application work package summary.
+
+**Required resolution:**
+
+- Supply one example of each message type, the tag rule and the identity query.
+- Replace `codec.py` and the example config, and add a contract test for each.
+
+**What can proceed:** the transport, command layer, results log, runner, CLI and
+GUI, all tested against the fake board.
+
+---
+
+## U-27 — Data terminal call setup and priority classes
+
+**Status:** OPEN (PROPOSED values in code)
+
+**What is missing:** The data terminal now sends voice call setup and class
+priority messages with values nobody has specified:
+
+- Call setup payload: CoAP POST to `/call`, Content-Format 42, four bytes: call
+  id (16 bits, big endian, never 0), type (1 request, 2 accept, 3 reject, 4
+  release), reason (0 none, 1 busy, 2 declined, 3 timeout, 4 normal).
+- Call timeouts: 10 s waiting for accept or reject, 30 s ringing. An active
+  call has no timeout, because no keepalive or media contract exists.
+- Both sides calling each other at once end in a busy reject on both sides.
+- Send order voice, signalling, video, data; voice limited to a burst of 8
+  then one send per 20 ms; data sent at least once in every 8 sends while it
+  waits.
+- Call setup is marked CS5, as RFC 4594 names for signalling. Interface spec
+  7.1 has no CS5 row, so the MAC treats it as Data and call setup can wait
+  behind other data on the air.
+- CoAP keeps NSTART at 1, so each class session has one message outstanding
+  and a second voice message waits for the first one's ACK. Raising NSTART for
+  the voice and signalling sessions would change congestion behaviour.
+
+**Why it is needed:** The payload layout is a wire contract between terminals.
+The numbers decide how voice and data share the link. The CS5 mapping decides
+whether call setup is delayed behind data.
+
+**Where it must come from:** Network owner (payload, timeouts, glare rule, CS5
+mapping, NSTART) and QA (traffic shares).
+
+**Required resolution:**
+
+- Approve or replace the payload layout and the two timeouts.
+- Add a CS5 row, or choose another DSCP, in interface spec 7.1.
+- Fix the voice cap, the data share and the NSTART value.
+- Define an active-call keepalive.
+
+**What can proceed:** the call state machine, the send queue and the tests,
+with every value above a named constant or marked `TODO`.
+
+---
+
+## U-28 — Slot PDU hand-off between MAC software and the logic
+
+**Status:** BLOCKING (for running the slot scheduler on hardware)
+
+**What is missing:** The binding of the slot scheduler's transmit and receive
+seam to the logic. On the host, `src/mac/slot.c` hands each PDU v2 to a
+transmit function and takes received PDUs through `hh_slot_receive()`. Not
+defined for the board:
+
+1. How a PDU is named for its slot in the logic's transmit buffer, and the
+   lead time before the slot (`docs/SLOT-ENGINE-SPEC.md` OI-12, OI-14).
+2. Receive buffer depth and how long software may take to read it (OI-17).
+3. The slot capacity in bytes per PDU: the host code uses a placeholder (128 or
+   256 bytes) because the burst rate and coding are not chosen (U-22, OI-7).
+4. How the logic reports late or missed hand-over to software.
+
+`hh_radio_ops_t` carries whole frames, not PDUs, so it is not this seam.
+
+**Why it is needed:** Without it the scheduler cannot be tied to the FPGA slot
+engine, and throughput figures from the host simulation cannot be turned into
+real figures.
+
+**Where it must come from:** Logic owner and network owner.
+
+**What can proceed:** the host simulation (`tests/sim/slot_net`, `hh-slot-sim`,
+`hh-slot-bridge`) with the capacity as a printed parameter.
+## U-29 — Network plan fields: address widths, Net ID, command radio rule
+
+**Status:** OPEN (limits in one table in `tools/hosttest/hosttest/netplan.py`)
+
+**What is missing:** The network plan page checks values that the sources do
+not agree on or do not define:
+
+- Address widths: the task update of 19 Oct 2026 (MAC frame spec v2) gives node
+  addresses 0x0001 to 0xEFFF and group addresses 0xF000 to 0xFFFD (16 bit).
+  `docs/MAC-NETWORK-INTERFACE.md` and `docs/MAC-SERVICE.md` show 32-bit node ids
+  with groups at 0xF0000000 to 0xFFFFFFFE. The page follows the 16-bit values.
+- Net ID: no width or range is defined. The page checks only a non-negative
+  integer, one per net per RF head. The MAC docs describe a net identity as the
+  founding superframe plus the founder's node id, which has a different shape.
+- Command radio rule (break-in rule 13): the rule says command radios take the
+  lowest addresses but gives no count or boundary. The page checks only that
+  every command radio address is below every member address.
+- EUI-64: checked for 8 bytes only. How it feeds the security nonce (frame spec
+  4.5 and 4.9) is not in the repository.
+- Consumers: dataterm accepts only a node id and peers on its command line. Net
+  ID, group table and EUI-64 have no input anywhere, so the page saves them in
+  the plan file only.
+- Dataterm flags: the optional per-node IP in the plan exists only to build the
+  `-P` peer flags and is not part of any specified plan.
+
+**Why it is needed:** An operator tool that accepts or rejects addresses must
+use the real limits, or it either blocks valid plans or passes invalid ones.
+
+**Where it must come from:** Network owner (address widths, rule 13 boundary,
+Net ID) and security owner (EUI-64 and nonce use).
+
+**Required resolution:**
+
+- Confirm the address widths and update whichever source is stale.
+- Define the Net ID width and its relation to the beacon net identity.
+- State the rule 13 boundary.
+- Define how a plan reaches radiod, MAC and dataterm.
+
+**What can proceed:** the plan page and its checks, with every limit in the
+`LIMITS` table. The status page waits for a radiod status command and format.
+
+---
+
+## U-30 — Bench instrument control contract for test sequences
+
+**Status:** OPEN
+
+**Scope:** the sequence runner in `tools/hosttest/`. A sequence step can today
+only command the test board over the radio link (U-26). Steps that read a bench
+instrument (signal generator, analyzer, power meter) are not implemented.
+
+**What is missing:**
+
+- Which instruments are allocated, with model and address
+- The control interface (for example SCPI over TCP or VISA) and the commands
+- The calibration and uncertainty budget that gives each limit, its source
+  clause and its uncertainty
+
+**Current implementation assumptions** (placeholders, not requirements):
+
+- `config/sequence.example.json` carries a placeholder limit, source clause and
+  uncertainty. They are not from any budget.
+- No instrument step type exists. A sequence file cannot name an instrument.
+
+**Why it is needed:** Without it a sequence cannot measure RF quantities, and a
+logged pass cannot be traced to a calibrated limit.
+
+**Where it must come from:** The test and hardware engineers, and the owner of
+the calibration and uncertainty budget.
+
+**Required resolution:**
+
+- Name the instruments and their control interface, then add an instrument step
+  type that returns `HH_ERR_UNSUPPORTED`-style failures for a missing driver.
+- Replace the example limits with values from the budget.
+
+**What can proceed:** sequence loading, limit checking, stop or continue on
+failure and the log with unit serial number, all tested against the fake board.
+
+---
+
 ## Summary
 
 | ID | Topic | Status | Primary source |
@@ -614,19 +1173,59 @@ with Wireshark's existing RFC 5444 dissector.
 | U-02 | `rc_*` API signatures | PARTIAL | System architect / E6 |
 | U-03 | OpenCPI app XML + workers | **RESOLVED** | — (RADHAWK + rh_agent) |
 | U-04 | ACI lifecycle + errors | **RESOLVED** | — (RADHAWK owns the sequence) |
+| U-03 | OpenCPI app XML + workers | PARTIAL | E1–E4 |
+| U-04 | ACI lifecycle + errors | PARTIAL | E1–E4 |
 | U-05 | Event/fault taxonomy | PARTIAL | Architect + E1–E4 |
 | U-06 | ICD-1 PDU descriptor layout | BLOCKING | E5 + E1–E4 |
 | U-07 | ICD-3 time register map | BLOCKING | E5 + E1–E4 |
 | U-08 | MANET STROBE semantics | BLOCKING | E1–E4 |
-| U-09 | OLSRv2 vs existing stack | DEFERRED | Architect + E6 |
+| U-09 | OLSRv2 vs existing stack | DECIDED 2026-10-08: OLSRd2, external | Architect + E6 |
 | U-10 | Socket path + permissions | PARTIAL | Architect / integrator |
 | U-11 | C vs C++ at the ACI | **RESOLVED** | — (process boundary) |
 | U-12 | Threading model | **RESOLVED** | — (still single-threaded) |
+| U-11 | C vs C++ at the ACI | PARTIAL (C++ decided; cross-build open) | Build owner |
+| U-12 | Threading model | PARTIAL | Architect |
 | U-13 | Audio path ownership | PARTIAL | Architect + E1–E4 |
 | U-14 | Frequency-hopping control | BLOCKING | E1–E4 + architect |
 | U-15 | Control/data vtable split | BLOCKING | Architect |
 | U-16 | Capture point for MANET frames | BLOCKING | E5 + architect |
+| U-17 | OpenCPI integration baseline | BLOCKING | OpenCPI project owner |
+| U-18 | Waveform/MAC gap vs MANET | BLOCKING | Architect + E1–E4 |
+| U-19 | Board bring-up vs single owner | BLOCKING | Architect + OpenCPI owner |
+| U-20 | Data-path test limits and methods | PARTIAL | QA |
+| U-21 | MAC frame and slot structure | BLOCKING | Logic + network owners |
+| U-22 | Burst-mode air interface for the MAC | BLOCKING | E1–E4 + architect |
+| U-23 | Network entry and slot allocation | BLOCKING | Network owner |
+| U-24 | Linux interface binding for OLSRv2 | BLOCKING | E6 + architect |
+| U-25 | Radio callback, buffer-lifetime and close rules | OPEN | Architect + radio adapter owners |
+| U-26 | Evaluation board test command and reply contract | BLOCKING | Test and hardware engineers |
+| U-27 | Data terminal call setup and priority classes | OPEN | Network owner + QA |
+| U-28 | Slot PDU hand-off between MAC software and the logic | BLOCKING | Logic + network owners |
+| U-29 | Network plan fields: address widths, Net ID, command radio rule | OPEN | Network owner + security owner |
+| U-30 | Bench instrument control contract for test sequences | OPEN | Test and hardware engineers + budget owner |
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol
 forward unchanged, with no invented contracts.
+
+**Added 2026-09-28:** radiod's OpenCPI backend (`backend = ocpi`), which owns
+one OpenCPI application through the ACI. It takes the application and every
+property from configuration and names nothing itself, and is tested on the
+development host against real OpenCPI 2.4.7 applications. Board operation
+waits on U-17 and U-19.
+
+**Added 2026-11-06 (simulation fixture, not a project contract):** `tools/sim/hh_slot_bridge.c`
+runs real OLSRd2 over the slot-timed host simulation with these choices, made
+only to exercise the stack: TAP framing; link address `02-00-00-00-hh-ll` as in
+MAC frame specification v2 section 4.5, so the destination address names the next
+hop; IPv4 `10.99.0.<id>/24`; static neighbour entries instead of ARP; TAP MTU
+equal to the largest packet one PDU carries (fragmentation excluded); OLSRv2
+packets (UDP port 269 or IP protocol 138) sent as routing control and all else
+as data. U-24 items 1 to 6 remain undecided for the product.
+
+**Added 2026-10-08:** the OLSRv2 architecture (U-09 decided). The
+network-interface adapter `hh_netif` (`src/netif/`) carries payloads between
+a host interface and `hh_radio_ops_t`, with the next hop as the MAC
+destination and broadcast as id 0. It invents none of U-24's items: the frame
+kind is the caller's, destination ids are passed through, and the payload is
+opaque. Tested on an emulated three-node medium; no OLSRd2 is involved yet.

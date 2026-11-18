@@ -1,0 +1,19 @@
+{
+  "name": "example-sequence",
+  "version": "0.1",
+  "steps": [
+    {
+      "id": "example-read-ch1",
+      "command": "EXAMPLE_READ",
+      "args": ["ch1"],
+      "expect": {"status": "OK"},
+      "timeout_s": 2.0,
+      "field": "value",
+      "unit": "dBm",
+      "limit": {"min": 40, "max": 45},
+      "limit_source": "PLACEHOLDER clause, replace from the calibration and uncertainty budget",
+      "uncertainty": 0.5,
+      "on_fail": "stop"
+    }
+  ]
+}

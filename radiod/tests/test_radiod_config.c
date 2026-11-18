@@ -169,6 +169,54 @@ static void test_null_arguments_rejected(void)
     HH_ASSERT_ERR(hh_radiod_config_load_file(&cfg, NULL, NULL), HH_ERR_INVAL);
 }
 
+static void test_backend_selection(void)
+{
+    hh_radiod_config_t cfg;
+    hh_radiod_config_defaults(&cfg);
+
+    /* The mock stays the default, so existing deployments are unchanged. */
+    HH_ASSERT_EQ_INT(cfg.backend, HH_RADIOD_BACKEND_MOCK);
+    HH_ASSERT_OK(hh_radiod_config_set(&cfg, "backend", "ocpi"));
+    HH_ASSERT_EQ_INT(cfg.backend, HH_RADIOD_BACKEND_OCPI);
+    HH_ASSERT_ERR(hh_radiod_config_set(&cfg, "backend", "fpga"), HH_ERR_INVAL);
+
+    /* The OpenCPI backend has nothing to open without an application. */
+    HH_ASSERT_ERR(hh_radiod_config_validate(&cfg), HH_ERR_INVAL);
+    HH_ASSERT_OK(hh_radiod_config_set(&cfg, "ocpi_app", "/opt/app/app.xml"));
+    HH_ASSERT_OK(hh_radiod_config_validate(&cfg));
+    HH_ASSERT_EQ_STR(cfg.ocpi.app_path, "/opt/app/app.xml");
+    HH_ASSERT_ERR(hh_radiod_config_set(&cfg, "ocpi_app", ""), HH_ERR_INVAL);
+}
+
+static void test_ocpi_keys_from_file(void)
+{
+    char path[64];
+    hh_radiod_config_t cfg;
+    int line = 0;
+
+    write_cfg(path, sizeof path,
+              "backend = ocpi\n"
+              "ocpi_app = app.xml\n"
+              "ocpi_library_path = /opt/artifacts\n"
+              "ocpi_property = src.fileName=/opt/in.bin\n"
+              "ocpi_property = sink.stopOnEOF=false\n");
+    hh_radiod_config_defaults(&cfg);
+    HH_ASSERT_OK(hh_radiod_config_load_file(&cfg, path, &line));
+    HH_ASSERT_EQ_STR(cfg.ocpi.library_path, "/opt/artifacts");
+    /* Repeated keys accumulate, in file order. */
+    HH_ASSERT_EQ_INT(cfg.ocpi.prop_count, 2);
+    HH_ASSERT_EQ_STR(cfg.ocpi.props[0].instance, "src");
+    HH_ASSERT_EQ_STR(cfg.ocpi.props[0].value, "/opt/in.bin");
+    HH_ASSERT_EQ_STR(cfg.ocpi.props[1].property, "stopOnEOF");
+
+    /* A malformed property points at its own line. */
+    write_cfg(path, sizeof path, "backend = ocpi\nocpi_property = nodot\n");
+    hh_radiod_config_defaults(&cfg);
+    HH_ASSERT_ERR(hh_radiod_config_load_file(&cfg, path, &line), HH_ERR_INVAL);
+    HH_ASSERT_EQ_INT(line, 2);
+    unlink(path);
+}
+
 HH_TEST_MAIN_BEGIN("radiod configuration")
     HH_RUN(test_defaults_preserve_prior_behaviour);
     HH_RUN(test_set_known_keys);
@@ -178,4 +226,6 @@ HH_TEST_MAIN_BEGIN("radiod configuration")
     HH_RUN(test_load_file_reports_offending_line);
     HH_RUN(test_missing_file_is_io_error);
     HH_RUN(test_null_arguments_rejected);
+    HH_RUN(test_backend_selection);
+    HH_RUN(test_ocpi_keys_from_file);
 HH_TEST_MAIN_END()

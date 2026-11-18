@@ -23,12 +23,17 @@
  * time (`opencpi set ...`), and their names, types and ranges belong to the
  * backend, not to radiod's configuration file. Hopset and TLV settings remain
  * absent because those contracts still do not exist (unknown.md U-01, U-14).
+ *
+ * Upstream also added an in-process OpenCPI backend (`backend = ocpi`, keys
+ * ocpi_app / ocpi_library_path / ocpi_property). It is independent of the
+ * rh_agent backend; radiod refuses a config that selects both.
  */
 #ifndef HHSDR_RADIOD_CONFIG_H
 #define HHSDR_RADIOD_CONFIG_H
 
 #include "hhsdr/core/log.h"
 #include "hhsdr/core/types.h"
+#include "hhsdr/radiod/ocpi_backend.h"
 
 /* Longest socket path radiod will accept. sockaddr_un.sun_path is 108 bytes on
  * Linux; bind() is what ultimately enforces the limit, and this bound simply
@@ -40,6 +45,13 @@
  * bytes, and an executable path has no such limit. Sharing the socket bound
  * rejected a perfectly ordinary agent path out of a development tree. */
 #define HH_RADIOD_MAX_EXEC_PATH 512
+/* Which hh_radio_ops_t implementation radiod owns. */
+typedef enum {
+    HH_RADIOD_BACKEND_MOCK = 0,   /* control-plane validation, no hardware */
+    HH_RADIOD_BACKEND_OCPI        /* an OpenCPI application, via the ACI    */
+} hh_radiod_backend_kind_t;
+
+const char *hh_radiod_backend_str(hh_radiod_backend_kind_t k);
 
 typedef struct {
     /* Control socket to bind. Overridable on the command line. */
@@ -76,6 +88,14 @@ typedef struct {
      * reprogrammes the AD9361 and is the slowest operation in the system. */
     uint32_t opencpi_reply_timeout_ms;
     uint32_t opencpi_start_timeout_ms;
+
+    /* Backend selection. Defaults to the mock, which is what radiod ran before
+     * a backend could be chosen. */
+    hh_radiod_backend_kind_t backend;
+
+    /* Used only when backend == HH_RADIOD_BACKEND_OCPI. Keys: ocpi_app,
+     * ocpi_library_path, and ocpi_property (repeatable). */
+    hh_ocpi_config_t ocpi;
 } hh_radiod_config_t;
 
 /* Populate with the documented defaults. Never fails. */

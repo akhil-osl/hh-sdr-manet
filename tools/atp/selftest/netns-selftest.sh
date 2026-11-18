@@ -49,6 +49,17 @@ if [ "${HH_ATP_INNER-}" != 1 ]; then
         echo "netns-selftest: SKIP — unprivileged user namespaces (or unshare --keep-caps, util-linux >= 2.37) unavailable" >&2
         exit 77
     fi
+    # Inside a confined snap (VS Code's integrated terminal, for one), Ubuntu's
+    # AppArmor profile for tcpdump refuses signals from the sandbox: timeout(1)
+    # cannot end the capture and the self-test would wait forever. Detect it
+    # and skip the capture case, loudly, instead of hanging.
+    label=$(cat /proc/self/attr/current 2>/dev/null)
+    case $label in
+        snap.*)
+            HH_ATP_SKIP_CAPTURE="shell is confined by AppArmor profile '${label%% *}'; tcpdump would ignore timeout's signals and hang — run from an ordinary terminal to cover capture"
+            export HH_ATP_SKIP_CAPTURE
+            ;;
+    esac
     ev=${1:-$(mktemp -d "${TMPDIR:-/tmp}/hh-atp-selftest.XXXXXX")}
     mkdir -p "$ev" || exit 3
     HH_ATP_INNER=1 exec unshare -n -c --keep-caps --fork "$SELF" "$ev"
@@ -57,7 +68,7 @@ fi
 # ---- inner: we hold every capability in a private network namespace ("node A")
 
 ev=$1
-fails=0 total=0
+fails=0 total=0 skipped=0
 
 # A second namespace ("node B") is held open by a sleeping child; commands run
 # in it through nsenter. It lives inside our user namespace, so no root needed.
@@ -120,19 +131,25 @@ mgen_run() {  # mgen_run NAME DIR [extra analyze args...]
 
 echo "== clean link (expect pass) =="
 clean="$ev/clean"
-# Headers only (-s 96): a veth link moves gigabits per second, and full
-# packets would write gigabytes of pcap to prove a packet count.
-"$ATP_DIR/atp-capture.sh" -i veth0 -o "$clean" -t 4 -s 96 -f "tcp port 5201" \
-    --min-packets 10 >"$clean.capture.out" 2>&1 &
-cap=$!
-sleep 0.5
-expect iperf3-tcp-clean 0 pass "$ATP_DIR/atp-iperf3.sh" -c "$B" -o "$clean" -t 2 --min-bps 1000000
-wait "$cap"
-total=$((total + 1))
-if jq -e '.result == "pass" and .metrics.packets >= 10' "$clean/capture.veth0.json" >/dev/null 2>&1; then
-    printf 'ok    %-28s %s\n' capture-clean pass
+if [ -n "${HH_ATP_SKIP_CAPTURE-}" ]; then
+    expect iperf3-tcp-clean 0 pass "$ATP_DIR/atp-iperf3.sh" -c "$B" -o "$clean" -t 2 --min-bps 1000000
+    skipped=$((skipped + 1))
+    printf 'SKIP  %-28s %s\n' capture-clean "$HH_ATP_SKIP_CAPTURE"
 else
-    fails=$((fails + 1)); printf 'FAIL  %-28s see %s\n' capture-clean "$clean.capture.out"
+    # Headers only (-s 96): a veth link moves gigabits per second, and full
+    # packets would write gigabytes of pcap to prove a packet count.
+    "$ATP_DIR/atp-capture.sh" -i veth0 -o "$clean" -t 4 -s 96 -f "tcp port 5201" \
+        --min-packets 10 >"$clean.capture.out" 2>&1 &
+    cap=$!
+    sleep 0.5
+    expect iperf3-tcp-clean 0 pass "$ATP_DIR/atp-iperf3.sh" -c "$B" -o "$clean" -t 2 --min-bps 1000000
+    wait "$cap"
+    total=$((total + 1))
+    if jq -e '.result == "pass" and .metrics.packets >= 10' "$clean/capture.veth0.json" >/dev/null 2>&1; then
+        printf 'ok    %-28s %s\n' capture-clean pass
+    else
+        fails=$((fails + 1)); printf 'FAIL  %-28s see %s\n' capture-clean "$clean.capture.out"
+    fi
 fi
 expect iperf3-udp-clean 0 pass "$ATP_DIR/atp-iperf3.sh" -c "$B" -o "$clean" -t 2 -u -b 5M \
     --max-loss-pct 1
@@ -152,5 +169,6 @@ expect iperf3-no-threshold 5 unjudged "$ATP_DIR/atp-iperf3.sh" -c "$B" -o "$misc
 expect mgen-latency-unsynced 4 blocked mgen_run udp "$misc" --max-latency-ms 50
 expect iperf3-no-server 3 error "$ATP_DIR/atp-iperf3.sh" -c "$B" -p 5999 -o "$misc" -n noserver -t 1
 
-echo "== $((total - fails))/$total passed; evidence in $ev =="
+echo "== $((total - fails))/$total passed, $skipped skipped; evidence in $ev =="
+[ "$skipped" -eq 0 ] || echo "== NOT full coverage: skipped cases were not tested =="
 [ "$fails" -eq 0 ]

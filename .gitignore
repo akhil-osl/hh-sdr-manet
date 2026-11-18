@@ -4,6 +4,8 @@ build/
 __pycache__/
 *.pyc
 build-asan/
+build-ocpi/
+CLAUDE.md
 Testing/
 CMakeCache.txt
 CMakeFiles/
@@ -19,3 +21,13 @@ tests/demo_selfheal
 logs/
 *.log
 .vscode/
+
+temp/
+build-ocpi/
+CLAUDE.md
+tools/olsrd2-mesh-emulation/ca-certificates.crt
+tools/olsrd2-arm-cross-build/out/
+tools/olsrd2-arm-cross-build/ca-certificates.crt
+TASKLIST.md
+CONTEXT.md
+build-arm/

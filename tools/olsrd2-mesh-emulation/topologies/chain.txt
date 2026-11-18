@@ -1,0 +1,2 @@
+# Blocked node pairs, one per line. A-B-C with no A-C link.
+A C

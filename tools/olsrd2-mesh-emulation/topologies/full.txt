@@ -1,0 +1,1 @@
+# Full mesh: every node hears every other.

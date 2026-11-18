@@ -22,6 +22,12 @@ if(HH_BUILD_TESTS)
             $<TARGET_FILE:hh_wire_pcapgen> ${CMAKE_CURRENT_BINARY_DIR}/dissector)
   set_tests_properties(check_dissector PROPERTIES SKIP_RETURN_CODE 77)
 
+  # PDU v2 dissector against the spec examples and a capture from hh-slot-sim.
+  add_test(NAME check_pdu_dissector
+    COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/wireshark/check-pdu-dissector.sh
+            $<TARGET_FILE:hh-slot-sim> ${CMAKE_CURRENT_BINARY_DIR}/pdu-dissector)
+  set_tests_properties(check_pdu_dissector PROPERTIES SKIP_RETURN_CODE 77)
+
   # atp-radioctl.sh against the real radiod and radioctl binaries: the public
   # CLI path the architecture requires test automation to use. Needs jq.
   add_test(NAME check_atp_radioctl
@@ -29,4 +35,12 @@ if(HH_BUILD_TESTS)
             $<TARGET_FILE:radiod> $<TARGET_FILE:radioctl>
             ${CMAKE_CURRENT_BINARY_DIR}/radioctl)
   set_tests_properties(check_atp_radioctl PROPERTIES SKIP_RETURN_CODE 77)
+
+  # atp-ocpi.sh (board data-path checks, OSL-SQA-TCS-002-EX1) against fixture
+  # logs and a fake /sys and /proc, once with host tools and once with
+  # BusyBox's, since the board runs BusyBox. Needs jq and busybox.
+  add_test(NAME check_atp_ocpi
+    COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/opencpi/selftest/ocpi-selftest.sh
+            ${CMAKE_CURRENT_BINARY_DIR}/ocpi)
+  set_tests_properties(check_atp_ocpi PROPERTIES SKIP_RETURN_CODE 77)
 endif()

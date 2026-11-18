@@ -8,7 +8,22 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-add_compile_options(-Wall -Wextra -Wshadow -Wpointer-arith -Wcast-qual -Wstrict-prototypes)
+# -Wstrict-prototypes is C-only; applied per language so the one C++ unit
+# (radiod's OpenCPI backend) builds warning-free under the same flags.
+add_compile_options(-Wall -Wextra -Wshadow -Wpointer-arith -Wcast-qual
+                    $<$<COMPILE_LANGUAGE:C>:-Wstrict-prototypes>)
+
+# ---------------------------------------------------------------------------
+# OpenCPI. Off by default: the project builds and tests without it, and only
+# radiod's OpenCPI backend needs it. When ON, C++ is enabled for that one
+# backend, because the OpenCPI ACI is a C++ API with no C binding.
+# ---------------------------------------------------------------------------
+option(HH_WITH_OPENCPI "Build radiod's OpenCPI backend (needs an OpenCPI CDK)" OFF)
+if(HH_WITH_OPENCPI)
+  enable_language(CXX)
+  set(CMAKE_CXX_STANDARD 11)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif()
 
 option(HH_SANITIZE "Build with address/UB sanitizers" OFF)
 if(HH_SANITIZE)
@@ -77,6 +92,27 @@ add_library(hhsdr_core STATIC
 target_link_libraries(hhsdr_core PUBLIC hhsdr_core_base)
 
 # ---------------------------------------------------------------------------
+# hhsdr_netif : network interface to hh_radio_ops_t (OLSRv2 path).
+# Links hhsdr_core_base only, never hhsdr_core or tests/.
+# ---------------------------------------------------------------------------
+add_library(hhsdr_netif STATIC
+  src/netif/netif.c
+)
+target_link_libraries(hhsdr_netif PUBLIC hhsdr_core_base)
+
+# ---------------------------------------------------------------------------
+# hhsdr_mac : MAC service for the network layer (queues, priority, link
+# quality). Links hhsdr_core_base only.
+# ---------------------------------------------------------------------------
+add_library(hhsdr_mac STATIC
+  src/mac/mac.c
+  src/mac/pdu.c
+  src/mac/slot.c
+  src/mac/entry.c
+)
+target_link_libraries(hhsdr_mac PUBLIC hhsdr_core_base)
+
+# ---------------------------------------------------------------------------
 # protocol : the control-protocol codec, shared by radiod and its clients.
 # Kept separate from both so that a client library never has to link the
 # daemon. See protocol/CMakeLists.txt.
@@ -111,6 +147,12 @@ add_subdirectory(radiod)
 # ---------------------------------------------------------------------------
 add_subdirectory(radioctl)
 
+# ---------------------------------------------------------------------------
+# dataterm : data terminal application over UDP. Data plane user, never the
+# control socket. See apps/dataterm/README.md.
+# ---------------------------------------------------------------------------
+add_subdirectory(apps/dataterm)
+
 add_subdirectory(tests)
 
 # ---------------------------------------------------------------------------
@@ -118,3 +160,6 @@ add_subdirectory(tests)
 # golden-capture generator. Development tooling, never linked into production.
 # ---------------------------------------------------------------------------
 add_subdirectory(tools/atp)
+
+# Host test application for evaluation boards (Python, development tooling).
+add_subdirectory(tools/hosttest)
