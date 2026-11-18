@@ -37,6 +37,7 @@ add_library(hhsdr_radiod STATIC
   src/config.c
   src/events.c
   src/ring.c
+  src/shm_ring.c
   src/backends/mock_backend.c
   src/backends/opencpi_backend.c
   # Always built, even without OpenCPI, so a daemon lacking the backend can
@@ -115,6 +116,11 @@ if(HH_BUILD_TESTS)
   target_link_libraries(test_mock_backend PRIVATE hhsdr_radiod)
   target_include_directories(test_mock_backend PRIVATE ${CMAKE_SOURCE_DIR}/tests)
   add_test(NAME test_mock_backend COMMAND test_mock_backend)
+
+  add_executable(test_shm_ring tests/test_shm_ring.c)
+  target_link_libraries(test_shm_ring PRIVATE hhsdr_radiod)
+  target_include_directories(test_shm_ring PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+  add_test(NAME test_shm_ring COMMAND test_shm_ring)
 
   add_executable(test_ring tests/test_ring.c)
   target_link_libraries(test_ring PRIVATE hhsdr_radiod)

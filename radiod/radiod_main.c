@@ -37,6 +37,7 @@
 #include "hhsdr/radiod/opencpi.h"
 #include "hhsdr/radiod/ocpi_backend.h"
 #include "hhsdr/radiod/radiod.h"
+#include "hhsdr/radiod/shm_ring.h"
 #include <errno.h>
 #include <poll.h>
 #include <signal.h>
@@ -124,6 +125,7 @@ int main(int argc, char **argv)
     hh_ocpi_backend_t ocpi_backend;
     hh_radio_t radio;
     hh_radiod_props_t props;
+    hh_shm_ring_t rx_frames;   /* the third ring: received frames, owned here */
     hh_radiod_t daemon;
     hh_status_t st;
     const char *cfg_path = NULL;
@@ -197,6 +199,22 @@ int main(int argc, char **argv)
         fprintf(stderr, "radiod: radio_backend = opencpi and backend = %s both select a "
                         "real backend; choose one\n", hh_radiod_backend_str(cfg.backend));
         return 1;
+    }
+    memset(&rx_frames, 0, sizeof rx_frames);
+    if (use_opencpi) {
+        /* THE THIRD RING. radiod owns the RX frame ring: rh_agent (another
+         * process) attaches to it and pushes every complete received frame,
+         * before its own extract/demux. Created before the agent can start.
+         * Not fatal: without it the agent only skips the push. The consumer
+         * is the MAC, not connected yet, so a full ring counts drops. */
+        st = hh_shm_ring_create(&rx_frames, HH_RX_FRAME_RING_PATH,
+                                HH_RX_FRAME_RING_SLOT, HH_RX_FRAME_RING_COUNT);
+        if (st == HH_OK)
+            HH_LOGI("radiod", "rx_frame_ring", "path=%s slots=%u slot_bytes=%u",
+                    HH_RX_FRAME_RING_PATH, HH_RX_FRAME_RING_COUNT, HH_RX_FRAME_RING_SLOT);
+        else
+            fprintf(stderr, "radiod: RX frame ring %s not created: %s\n",
+                    HH_RX_FRAME_RING_PATH, hh_status_str(st));
     }
     if (use_opencpi) {
         hh_oc_config_t occ;
@@ -279,5 +297,6 @@ int main(int argc, char **argv)
 
     hh_radiod_release(&daemon);
     if (use_opencpi) hh_oc_backend_release(&oc_backend);
+    hh_shm_ring_close(&rx_frames);
     return 0;
 }
