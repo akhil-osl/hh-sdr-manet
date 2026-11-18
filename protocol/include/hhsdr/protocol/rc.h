@@ -53,8 +53,10 @@
  * key names around them (1536 + 256 + ~100 < 2048). Raised again to 4096 on
  * 2026-10-07 with HH_RC_MAX_ITEMS 3072 (3072 + 256 + ~100 < 4096). The framing
  * is unchanged -- still exactly one line per message -- so this only grows the
- * per-client buffers (8 KiB per client). */
-#define HH_RC_MAX_LINE 4096
+ * per-client buffers (8 KiB per client). Raised again to 12288 on 2026-10-16
+ * with HH_RC_MAX_ITEMS 8192, for API 9's audio chain: opencpi_status now
+ * reports 89 read-only properties (8192 + 256 + ~100 < 12288). */
+#define HH_RC_MAX_LINE 12288
 
 /* A worker or property name. Long enough for the names the OpenCPI workers
  * actually carry (the longest today is "enable_descrambler", 18). */
@@ -74,8 +76,11 @@
  * spare; 1536 doubles the budget so the next few properties need no protocol
  * change. Raised to 3072 on 2026-10-07: the per-worker debug counters took
  * opencpi_status to 53 elements. Must stay below
- * HH_RC_MAX_LINE - HH_RC_MAX_TEXT - ~100 (see above). */
-#define HH_RC_MAX_ITEMS 3072
+ * HH_RC_MAX_LINE - HH_RC_MAX_TEXT - ~100 (see above). Raised to 8192 on
+ * 2026-10-16: API 9's audio chain takes opencpi_status to 89 elements, worst
+ * case 89 x 56 = 4984 bytes with every counter at full width, which 3072
+ * could not hold - and a truncated status line is a status line that lies. */
+#define HH_RC_MAX_ITEMS 8192
 
 /* Human-readable detail carried with a response. Always the LAST key on the
  * wire, because it is the only field allowed to contain spaces. */

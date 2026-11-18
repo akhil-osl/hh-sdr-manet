@@ -71,8 +71,18 @@
  * A registry larger than either limit is reported as an error at startup
  * rather than silently truncated. HH_OC_MAX_WORKERS was 12 until the split,
  * which silently dropped every name after the 12th (rx_rrc onwards, radio). */
-#define HH_OC_MAX_PROPS   128
-#define HH_OC_MAX_WORKERS 24
+/* 2026-10-16, API 9: the audio chain added 74 rows (38 writable + 36
+ * volatile across audio_codec_dev, audio_fe, audio_tx_framer and
+ * audio_rx_deframer), taking the registry to 191 properties on 22 worker
+ * names. 128 would have refused to load it - which is the designed
+ * behaviour, an error at startup rather than a silent truncation, but it
+ * would have meant no audio control at all. */
+/* 2026-10-30, API 16: the voice equaliser added 4 audio_fe rows (eq_bypass +
+ * eq_gain_lo/hi/mid), taking the registry from 255 to 259. The ceiling went
+ * 256 -> 320 so the 259-row registry loads (256 would have errored at startup,
+ * by design); the headroom is for further audio_fe / FEC growth. */
+#define HH_OC_MAX_PROPS   320
+#define HH_OC_MAX_WORKERS 32
 
 typedef struct {
     char worker[HH_RC_MAX_NAME];

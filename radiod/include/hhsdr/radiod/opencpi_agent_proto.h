@@ -98,10 +98,13 @@
  * opencpi_list only ever returns one worker's share of it. This link is
  * internal to radiod and its own helper, so its framing is sized for what it
  * actually carries rather than for what a client needs. */
-#define HH_RH_AGENT_MAX_LINE 8192
+/* 2026-10-16, API 9: 191 elements after the audio chain. Worst case per
+ * element is worker(17) + prop(16) + type(9) + access(8) + separators = 54 B,
+ * so 191 x 54 = 10.3 KB - past both of the old bounds. */
+#define HH_RH_AGENT_MAX_LINE 24576
 
 /* The `items` value within such a line. */
-#define HH_RH_AGENT_MAX_ITEMS 7680
+#define HH_RH_AGENT_MAX_ITEMS 20480
 
 /* Request verbs. */
 #define HH_RH_AGENT_HELLO  "hello"
