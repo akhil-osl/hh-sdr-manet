@@ -4,7 +4,10 @@
  */
 #include "ring_net.h"
 #include "hh_test.h"
+#include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 typedef struct { unsigned node; hh_node_id_t src; uint16_t len; uint8_t first; } got_t;
 
@@ -114,6 +117,70 @@ static void test_stream_in_order(void)
     rn_destroy(net);
 }
 
+/* A ring file path for node %u, unique to this process. */
+static const char *fmt(void)
+{
+    static char f[64];
+    snprintf(f, sizeof f, "/tmp/hh-rnet-%d-%%u", (int)getpid());
+    return f;
+}
+
+/* True if the ring file of node n exists. */
+static int file_exists(unsigned n)
+{
+    char p[96];
+    struct stat sb;
+    snprintf(p, sizeof p, fmt(), n);
+    return stat(p, &sb) == 0;
+}
+
+/* With ring files, each side opens the file by path, and a frame still arrives. */
+static void test_ring_files(void)
+{
+    rn_config_t c;
+    ring_net_t *net;
+    uint8_t pay[16] = { 0x42 };
+
+    n_got = 0;
+    rn_config_default(&c, 2);
+    c.rx_hook = on_rx;
+    c.ring_path_fmt = fmt();
+    c.ring_create = 1;
+    net = rn_create(&c);
+    HH_ASSERT(net != NULL);
+    HH_ASSERT(file_exists(1) && file_exists(2));
+    rn_topology_line(net);
+    rn_send(net, 1, HH_FRAME_DATA, HH_MAC_CLASS_DATA, 2, pay, sizeof pay);
+    run(net, 0, 60);
+    HH_ASSERT_EQ_INT(n_got, 1);
+    HH_ASSERT_EQ_INT(got[0].first, 0x42);
+    rn_destroy(net);
+    HH_ASSERT(!file_exists(1) && !file_exists(2));      /* the creator removes them */
+}
+
+/* Without the files, or with slots too small for the PDU, creation is refused. */
+static void test_ring_files_refused(void)
+{
+    rn_config_t c;
+    hh_ring_shm_t own;
+    hh_ring_region_t r;
+    char p[96];
+
+    rn_config_default(&c, 2);
+    c.ring_path_fmt = fmt();                            /* radiod has not made them */
+    HH_ASSERT(rn_create(&c) == NULL);
+
+    snprintf(p, sizeof p, fmt(), 1u);
+    HH_ASSERT_OK(hh_ring_shm_create(&own, &r, p, 8, 8, 128));   /* slots smaller than the PDU capacity */
+    c.ring_create = 0;
+    HH_ASSERT(rn_create(&c) == NULL);
+    hh_ring_shm_close(&own);
+
+    c.ring_path_fmt = NULL;
+    c.ring_create = 1;                                  /* create without a path makes no sense */
+    HH_ASSERT(rn_create(&c) == NULL);
+}
+
 /* Invalid configurations are refused. */
 static void test_invalid(void)
 {
@@ -133,5 +200,7 @@ HH_TEST_MAIN_BEGIN("ring_net")
     HH_RUN(test_unicast_and_range);
     HH_RUN(test_broadcast_and_link_down);
     HH_RUN(test_stream_in_order);
+    HH_RUN(test_ring_files);
+    HH_RUN(test_ring_files_refused);
     HH_RUN(test_invalid);
 HH_TEST_MAIN_END()

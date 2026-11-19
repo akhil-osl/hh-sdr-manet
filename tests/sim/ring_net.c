@@ -1,5 +1,6 @@
 #include "ring_net.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -14,7 +15,10 @@ typedef struct {
     hh_node_id_t      id;
     unsigned          slot;
     void             *mem;
-    hh_ring_region_t  region;
+    hh_ring_shm_t     own_shm, mac_shm, pl_shm;   /* with ring_path_fmt */
+    hh_ring_region_t  own_region;
+    hh_ring_region_t  region;                     /* the MAC side view */
+    hh_ring_region_t  pl_region;                  /* the fake PL view */
     hh_mac_t          mac;
     hh_slot_t         sl;
     hh_ring_mac_t     drv;
@@ -84,6 +88,7 @@ ring_net_t *rn_create(const rn_config_t *cfg)
         cfg->slots_per_frame > HH_SLOT_FRAME_MAX || cfg->capacity > FAKE_PL_MAX_FRAME || cfg->lead_frames == 0)
         return NULL;
     slot_size = up32(cfg->capacity);
+    if (cfg->ring_create && !cfg->ring_path_fmt) return NULL;
     rsize = hh_ring_region_size(cfg->ring_slots, cfg->ring_slots, slot_size);
     if (!rsize) return NULL;
     n = calloc(1, sizeof *n);
@@ -105,10 +110,26 @@ ring_net_t *rn_create(const rn_config_t *cfg)
         nd->net = n;
         nd->id = i + 1u;
         nd->slot = i;
-        nd->mem = aligned_alloc(HH_RING_ALIGN, up32((uint32_t)rsize));
-        if (!nd->mem) { rn_destroy(n); return NULL; }
-        if (hh_ring_region_init(nd->mem, rsize, cfg->ring_slots, cfg->ring_slots, slot_size) != HH_OK ||
-            hh_ring_region_attach(&nd->region, nd->mem, rsize) != HH_OK) { rn_destroy(n); return NULL; }
+        if (cfg->ring_path_fmt) {
+            char p[HH_RING_SHM_PATH_MAX];
+
+            snprintf(p, sizeof p, cfg->ring_path_fmt, (unsigned)nd->id);
+            if (cfg->ring_create &&
+                hh_ring_shm_create(&nd->own_shm, &nd->own_region, p, cfg->ring_slots, cfg->ring_slots,
+                                   slot_size) != HH_OK) { rn_destroy(n); return NULL; }
+            if (hh_ring_shm_open(&nd->mac_shm, &nd->region, p) != HH_OK ||
+                hh_ring_shm_open(&nd->pl_shm, &nd->pl_region, p) != HH_OK ||
+                nd->region.rx.slot_size < cfg->capacity || nd->region.tx.slot_size < cfg->capacity) {
+                rn_destroy(n);
+                return NULL;
+            }
+        } else {
+            nd->mem = aligned_alloc(HH_RING_ALIGN, up32((uint32_t)rsize));
+            if (!nd->mem) { rn_destroy(n); return NULL; }
+            if (hh_ring_region_init(nd->mem, rsize, cfg->ring_slots, cfg->ring_slots, slot_size) != HH_OK ||
+                hh_ring_region_attach(&nd->region, nd->mem, rsize) != HH_OK) { rn_destroy(n); return NULL; }
+            nd->pl_region = nd->region;
+        }
         hh_mac_config_default(&mc, nd->id, &n->clock);
         mc.receive = on_mac_rx;
         mc.receive_ctx = nd;
@@ -133,7 +154,12 @@ void rn_destroy(ring_net_t *n)
 {
     if (!n) return;
     if (n->nodes)
-        for (unsigned i = 0; i < n->cfg.nodes; i++) free(n->nodes[i].mem);
+        for (unsigned i = 0; i < n->cfg.nodes; i++) {
+            hh_ring_shm_close(&n->nodes[i].mac_shm);
+            hh_ring_shm_close(&n->nodes[i].pl_shm);
+            hh_ring_shm_close(&n->nodes[i].own_shm);
+            free(n->nodes[i].mem);
+        }
     free(n->nodes);
     free(n);
 }
@@ -173,7 +199,7 @@ static void pull_frame(ring_net_t *n, uint32_t superframe, uint16_t frame)
     for (unsigned i = 0; i < n->cfg.nodes; i++) {
         rnode_t *nd = &n->nodes[i];
         uint16_t own = (uint16_t)nd->slot;
-        nd->sent_valid = fake_pl_transmit(&nd->pl, &nd->region, superframe, frame, &own, 1, &nd->sent) == HH_OK;
+        nd->sent_valid = fake_pl_transmit(&nd->pl, &nd->pl_region, superframe, frame, &own, 1, &nd->sent) == HH_OK;
     }
 }
 
@@ -208,7 +234,7 @@ static void air(ring_net_t *n, uint32_t superframe, uint16_t slot)
             memset(&meta, 0, sizeof meta);
             meta.superframe = superframe;
             meta.slot_in_frame = slot;
-            fake_pl_receive(&n->nodes[r].pl, &n->nodes[r].region, s->bytes, s->length, 1, &meta);
+            fake_pl_receive(&n->nodes[r].pl, &n->nodes[r].pl_region, s->bytes, s->length, 1, &meta);
         }
     }
     for (unsigned t = 0; t < n->cfg.nodes; t++) {

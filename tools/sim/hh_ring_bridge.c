@@ -64,6 +64,9 @@ static void usage(void)
           "  --slot-ms N          slot length in ms (default 1)\n"
           "  --capacity N         PDU bytes per slot, up to 2048 (default 256, a placeholder)\n"
           "  --ring-slots N       places in each ring, a power of two (default 32)\n"
+          "  --ring-path FMT      keep each node's rings in a file, FMT has one %u for the node\n"
+          "                       number, for example /dev/shm/hh-ring-%u (default: rings in memory)\n"
+          "  --ring-create        create those files here; without it radiod must have made them\n"
           "  --lead N             TDMA frames between building a PDU and sending it (default 1)\n"
           "  --loss N             link loss in permille (default 0)\n"
           "  --seed N             random seed (default 1)\n"
@@ -84,6 +87,7 @@ static int parse(int argc, char **argv, opts_t *o)
     for (int i = 1; i < argc; i++) {
         const char *k = argv[i], *v = i + 1 < argc ? argv[i + 1] : NULL;
         if (!strcmp(k, "-h") || !strcmp(k, "--help")) return 0;
+        if (!strcmp(k, "--ring-create")) { o->cfg.ring_create = 1; continue; }
         if (!v) { fprintf(stderr, "missing value for %s\n", k); return 0; }
         i++;
         if (!strcmp(k, "--nodes")) o->cfg.nodes = (uint16_t)atoi(v);
@@ -94,6 +98,7 @@ static int parse(int argc, char **argv, opts_t *o)
         else if (!strcmp(k, "--capacity")) o->cfg.capacity = (uint16_t)atoi(v);
         else if (!strcmp(k, "--ring-slots")) o->cfg.ring_slots = (uint16_t)atoi(v);
         else if (!strcmp(k, "--lead")) o->cfg.lead_frames = (uint16_t)atoi(v);
+        else if (!strcmp(k, "--ring-path")) o->cfg.ring_path_fmt = v;
         else if (!strcmp(k, "--loss")) o->cfg.loss_permille = (uint32_t)atoi(v);
         else if (!strcmp(k, "--seed")) o->cfg.seed = (uint32_t)atoi(v);
         else if (!strcmp(k, "--netns-prefix")) o->prefix = v;
@@ -226,8 +231,8 @@ static void print_summary(FILE *o, const opts_t *op, uint64_t run_ms)
             op->cfg.slot_ms, (unsigned long long)run_ms);
     fprintf(o, "capacity_bytes=%u capacity_is_placeholder=yes max_packet_bytes=%u fragmentation=excluded ring_slots=%u lead_frames=%u\n",
             op->cfg.capacity, max_payload, op->cfg.ring_slots, op->cfg.lead_frames);
-    fprintf(o, "routing=real (processes on the TAP interfaces) link_loss_permille=%u seed=%u\n",
-            op->cfg.loss_permille, op->cfg.seed);
+    fprintf(o, "routing=real (processes on the TAP interfaces) link_loss_permille=%u seed=%u rings=%s\n",
+            op->cfg.loss_permille, op->cfg.seed, op->cfg.ring_path_fmt ? op->cfg.ring_path_fmt : "memory");
     fprintf(o, "== nodes ==\n");
     for (unsigned i = 0; i < op->cfg.nodes; i++) {
         const port_t *p = &g_port[i];
@@ -272,7 +277,7 @@ int main(int argc, char **argv)
     }
     op.cfg.rx_hook = to_tap;
     g_net = rn_create(&op.cfg);
-    if (!g_net) { fputs("invalid configuration: nodes 2 to 32, nodes <= slots per frame <= 64, ring slots a power of two\n", stderr); return 2; }
+    if (!g_net) { fputs("invalid configuration: nodes 2 to 32, nodes <= slots per frame <= 64, ring slots a power of two, ring files present and big enough\n", stderr); return 2; }
     if (!strcmp(op.topology, "line")) rn_topology_line(g_net);
     else if (!strcmp(op.topology, "ring")) rn_topology_ring(g_net);
     else if (!strcmp(op.topology, "mesh")) rn_topology_mesh(g_net);

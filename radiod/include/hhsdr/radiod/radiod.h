@@ -78,6 +78,12 @@ typedef struct {
 
     uint64_t requests_total;
     uint64_t requests_rejected;
+
+    /* Frame rings, when ring_path is set. radiod owns the memory and its
+     * layout. Frames never pass through radiod. */
+    hh_ring_shm_t    rings;
+    hh_ring_region_t ring_region;
+    bool             rings_open;
 } hh_radiod_t;
 
 /* Construct radiod bound to `radio` (not yet opened) and `clock`. */
@@ -99,6 +105,15 @@ hh_status_t hh_radiod_configure(hh_radiod_t *d, const hh_radiod_config_t *cfg);
  * a stale socket file was left behind on every exit, and recovery depended on
  * the *next* start unlinking it. */
 hh_status_t hh_radiod_listen(hh_radiod_t *d, const char *sock_path);
+
+/* Create the shared-memory file for the frame rings from the configuration and
+ * lay out the rings in it. Does nothing, and returns HH_OK, when ring_path is
+ * empty. The MAC process and the radio program open the same path with
+ * hh_ring_shm_open. Call once, after hh_radiod_configure. */
+hh_status_t hh_radiod_open_rings(hh_radiod_t *d, const hh_radiod_config_t *cfg);
+
+/* The radiod view of the rings, or NULL when they are off. */
+const hh_ring_region_t *hh_radiod_rings(const hh_radiod_t *d);
 
 /* Fill `fds` with the descriptors radiod wants watched, and return how many
  * were written. Lets the caller block in poll() rather than spinning on a

@@ -9,6 +9,11 @@
  * hear it, through that node's RX ring. A receiver loses the frame when it
  * hears two or more senders in a slot, or is sending itself.
  *
+ * The rings of a node live on the heap, or in a shared-memory file when
+ * ring_path_fmt is set. With a file, the MAC driver and the fake PL each open
+ * it by path with their own mapping, as separate programs would. radiod
+ * normally creates the file; ring_create makes ring_net create it instead.
+ *
  * Every node owns slot (id - 1). The clock is set by the caller, one slot per
  * step in real time or in a loop.
  */
@@ -18,6 +23,7 @@
 #include <stdio.h>
 
 #include "hhsdr/mac/slot.h"
+#include "hhsdr/ring/shm.h"
 
 #define RN_MAX_NODES 32u
 
@@ -30,6 +36,10 @@ typedef struct {
     uint16_t net_id;
     uint16_t ring_slots;        /* per ring, power of two */
     uint16_t lead_frames;       /* TDMA frames between building a PDU and sending it */
+    /* Ring file of node n (1-based): printf format with one %u for n. NULL = heap rings.
+     * An existing file made by radiod must hold slots of at least capacity bytes. */
+    const char *ring_path_fmt;
+    int      ring_create;       /* create the files here instead of opening radiod's */
     uint32_t loss_permille;     /* every link, per PDU */
     uint32_t seed;
     /* Called for every frame put on the air, with the run time in ms. NULL = none. */

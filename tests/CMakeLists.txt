@@ -66,6 +66,10 @@ add_executable(test_ring_region unit/test_ring_region.c)
 target_link_libraries(test_ring_region PRIVATE hhsdr_ring)
 add_test(NAME test_ring_region COMMAND test_ring_region)
 
+add_executable(test_ring_shm unit/test_ring_shm.c)
+target_link_libraries(test_ring_shm PRIVATE hhsdr_ring_shm)
+add_test(NAME test_ring_shm COMMAND test_ring_shm)
+
 # Fake PL for the ring interface. Test infrastructure, never linked into production.
 add_library(hhfakepl STATIC sim/fake_pl.c)
 target_link_libraries(hhfakepl PUBLIC hhsdr_ring_pull)
@@ -80,7 +84,7 @@ add_test(NAME test_ring_mac COMMAND test_ring_mac)
 
 # Ring-based multi-node test network. Test infrastructure, never linked into production.
 add_library(hhringnet STATIC sim/ring_net.c)
-target_link_libraries(hhringnet PUBLIC hhsdr_ring_mac hhfakepl)
+target_link_libraries(hhringnet PUBLIC hhsdr_ring_mac hhsdr_ring_shm hhfakepl)
 
 add_executable(test_ring_net scenario/test_ring_net.c)
 target_link_libraries(test_ring_net PRIVATE hhringnet)

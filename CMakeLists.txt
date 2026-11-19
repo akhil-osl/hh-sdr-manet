@@ -123,6 +123,15 @@ add_library(hhsdr_ring STATIC
 target_link_libraries(hhsdr_ring PUBLIC hhsdr_core_base)
 
 # ---------------------------------------------------------------------------
+# hhsdr_ring_shm : the shared-memory file that holds the rings. radiod creates
+# it, the MAC process and the radio program open it by path.
+# ---------------------------------------------------------------------------
+add_library(hhsdr_ring_shm STATIC
+  src/ring/shm.c
+)
+target_link_libraries(hhsdr_ring_shm PUBLIC hhsdr_ring)
+
+# ---------------------------------------------------------------------------
 # hhsdr_ring_pull : the TX servant logic, how a pull for one TDMA frame is
 # answered from the TX ring. Plain logic with no ORB. Links hhsdr_ring only.
 # ---------------------------------------------------------------------------
