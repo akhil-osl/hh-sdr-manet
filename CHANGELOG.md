@@ -18,7 +18,7 @@ Adds the frame ring interface that carries MAC frames between the PL, radiod and
 * Test infrastructure, never linked into production targets: a fake PL (`tests/sim/fake_pl`) that writes received frames and descriptors into the RX ring and pulls the TX frames once per TDMA frame, a ring-based multi-node network (`tests/sim/ring_net`), and `hh-ring-bridge` (`tools/sim/hh_ring_bridge.c`), the Linux TAP bridge that runs unmodified OLSRd2 over the rings. The ring network can keep each node's rings on the heap or in a ring file opened by path, with the MAC driver and the fake PL each mapping the file separately.
 * `tools/olsrd2-mesh-emulation/slot-mesh.sh`: `BRIDGE_LOG=0` leaves out `--log` for the ring bridge, and `RING_RADIOD=1` starts one radiod per node to create the ring files.
 * 46 new tests: `test_ring_region` (11), `test_ring_pull` (14), `test_ring_mac` (7), `test_ring_shm` (4), `test_ring_net` (7) and `test_radiod_rings` (3). The suite is 57 tests and passes on the standard and sanitizer builds with no warnings.
-* Documents: `docs/RING-INTERFACE.md` (the ring interface contract, with worked frame examples), `docs/RING-REFERENCE-FRAMES.md` (four full-size reference frames with their descriptors, for checking an implementation) and `docs/RING-INTERFACE-COMPARISON.md` (the contract compared with the PS ring path in the radio and OpenCPI project).
+* Documents: `docs/RING-INTERFACE.md` (the ring interface contract, with worked frame examples), `docs/RING-REFERENCE-FRAMES.md` (four full-size reference frames with their descriptors, for checking an implementation).
 * README: steps to generate `compile_commands.json` for clang tools.
 
 #### Changed
@@ -45,7 +45,3 @@ Real, unmodified OLSRd2 over the rings, a simulated air and the fake PL, in netw
 * The real value of `lead_frames`, the ring sizes and the slot size are placeholders until the PL fixes them.
 * The MAC process on a board, and the link quality feed into the routing cost.
 * Nothing in this change has been run on a board or over a radio.
-
-#### Known differences from the radio project
-
-The PS ring path in the radio and OpenCPI project feeds frames to the PL continuously and finds received frames by hunting for the frame control and CRC. It uses a different ring type inside its own process. See `docs/RING-INTERFACE-COMPARISON.md` for the comparison.
