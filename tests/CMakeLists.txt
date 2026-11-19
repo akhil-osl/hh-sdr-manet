@@ -78,6 +78,14 @@ add_executable(test_ring_mac unit/test_ring_mac.c)
 target_link_libraries(test_ring_mac PRIVATE hhsdr_ring_mac hhfakepl)
 add_test(NAME test_ring_mac COMMAND test_ring_mac)
 
+# Ring-based multi-node test network. Test infrastructure, never linked into production.
+add_library(hhringnet STATIC sim/ring_net.c)
+target_link_libraries(hhringnet PUBLIC hhsdr_ring_mac hhfakepl)
+
+add_executable(test_ring_net scenario/test_ring_net.c)
+target_link_libraries(test_ring_net PRIVATE hhringnet)
+add_test(NAME test_ring_net COMMAND test_ring_net)
+
 # Slot-timed multi-node test network. Test infrastructure, never linked into production.
 add_library(hhslotsim STATIC sim/slot_net.c)
 target_link_libraries(hhslotsim PUBLIC hhsdr_mac)
@@ -110,6 +118,13 @@ set_target_properties(hh-slot-sim PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BI
 add_executable(hh-slot-bridge ${CMAKE_SOURCE_DIR}/tools/sim/hh_slot_bridge.c)
 target_link_libraries(hh-slot-bridge PRIVATE hhslotsim hhbridgeframes)
 set_target_properties(hh-slot-bridge PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+# hh-ring-bridge: the same bridge with every PDU going through the frame rings and the
+# fake PL. Development tooling only. Needs root to run.
+add_executable(hh-ring-bridge ${CMAKE_SOURCE_DIR}/tools/sim/hh_ring_bridge.c)
+target_include_directories(hh-ring-bridge PRIVATE ${CMAKE_SOURCE_DIR}/tools/sim)
+target_link_libraries(hh-ring-bridge PRIVATE hhringnet hhslotsim hhbridgeframes)
+set_target_properties(hh-ring-bridge PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 add_executable(test_slot unit/test_slot.c)
 target_link_libraries(test_slot PRIVATE hhsdr_mac)

@@ -16,6 +16,8 @@
 #   NODES=4  TOPOLOGY=line|ring|mesh  SCENARIO=line|ring-cut  CAPACITY=256
 #   CONVERGE=30 (seconds before traffic)  TEST_S=30 (seconds of ping)  IPERF_S=20
 #   BRIDGE=path/to/hh-slot-bridge  OLSRD2=olsrd2  OUT=output directory
+#   BRIDGE=build/hh-ring-bridge BRIDGE_LOG=0 runs the same test through the frame rings
+#   (hh-ring-bridge has no --log, so BRIDGE_LOG=0 leaves it out)
 # SCENARIO=ring-cut uses a ring, pings node 1 to node 3, cuts the link 1-2 for a
 # while and restores it.
 
@@ -49,7 +51,8 @@ run_local() {
 
 # Builds the namespaces, bridge and OLSRd2 nodes, runs the measurements, collects the logs.
 run() {
-    local i k dst cut=0 mtu
+    local i k dst cut=0 mtu logargs=(--log "$OUT/slots.log")
+    [ "${BRIDGE_LOG:-1}" = 0 ] && logargs=()
     [ -x "$BRIDGE" ] || { echo "slot-mesh: bridge not found: $BRIDGE" >&2; exit 2; }
     command -v "$OLSRD2" >/dev/null || { echo "slot-mesh: $OLSRD2 not found" >&2; exit 2; }
     mkdir -p "$OUT" || exit 3
@@ -67,7 +70,7 @@ run() {
 
     mkfifo "$OUT/control"
     "$BRIDGE" --nodes "$NODES" --topology "$TOPOLOGY" --capacity "$CAPACITY" --control "$OUT/control" \
-        --log "$OUT/slots.log" --pcap "$OUT/run.pcap" --summary "$OUT/bridge.summary" \
+        "${logargs[@]}" --pcap "$OUT/run.pcap" --summary "$OUT/bridge.summary" \
         >"$OUT/bridge.out" 2>"$OUT/bridge.err" &
     BRIDGE_PID=$!
     for _ in $(seq 1 50); do
