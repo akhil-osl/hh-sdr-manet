@@ -752,6 +752,28 @@ hh_status_t hh_radiod_tick(hh_radiod_t *d, hh_time_ms_t now)
     return HH_OK;
 }
 
+/* Creates the ring file from the configuration. */
+hh_status_t hh_radiod_open_rings(hh_radiod_t *d, const hh_radiod_config_t *cfg)
+{
+    hh_status_t st;
+
+    if (!d || !cfg) return HH_ERR_INVAL;
+    if (cfg->ring_path[0] == '\0' || d->rings_open) return HH_OK;
+    st = hh_ring_shm_create(&d->rings, &d->ring_region, cfg->ring_path, cfg->ring_rx_slots,
+                            cfg->ring_tx_slots, cfg->ring_slot_size);
+    if (st != HH_OK) return st;
+    d->rings_open = true;
+    HH_LOGI("radiod", "rings", "path=%s rx_slots=%u tx_slots=%u slot_size=%u", cfg->ring_path,
+            (unsigned)cfg->ring_rx_slots, (unsigned)cfg->ring_tx_slots, (unsigned)cfg->ring_slot_size);
+    return HH_OK;
+}
+
+/* Returns the rings as radiod sees them, or NULL when they are off. */
+const hh_ring_region_t *hh_radiod_rings(const hh_radiod_t *d)
+{
+    return d && d->rings_open ? &d->ring_region : NULL;
+}
+
 void hh_radiod_release(hh_radiod_t *d)
 {
     if (!d) return;
@@ -761,6 +783,7 @@ void hh_radiod_release(hh_radiod_t *d)
     if (d->console_in >= 0) (void)fcntl(d->console_in, F_SETFL, d->console_in_flags);
     d->console_in = -1;
     d->console_out = -1;
+    if (d->rings_open) { hh_ring_shm_close(&d->rings); d->rings_open = false; }
     for (int i = 0; i < HH_RADIOD_MAX_CLIENTS; i++) close_client(&d->clients[i]);
     if (d->listen_fd >= 0) { close(d->listen_fd); d->listen_fd = -1; }
     /* Remove our own socket file rather than leaving it for the next start. */

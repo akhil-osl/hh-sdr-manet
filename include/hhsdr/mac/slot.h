@@ -32,12 +32,14 @@ typedef struct {
     uint16_t     slots_per_frame;        /* 1 to 64; default 20 */
     uint16_t     frames_per_superframe;  /* default 50 */
     uint16_t     slot_ms;                /* default 1 */
-    uint16_t     capacity;               /* bytes in one PDU, CRC included */
+    uint16_t     capacity;               /* bytes in one PDU, CRC included, whoever adds it */
     uint16_t     net_id;
     hh_node_id_t node_id;                /* on-air address, 1 to 0xEFFF */
     uint64_t     own_slots;              /* bit n = own slot n of every frame */
     uint64_t     entry_slots;            /* bit n = shared entry slot n; apart from own_slots */
     hh_time_ms_t epoch_ms;               /* start of slot 0 of superframe 0 */
+    bool         logic_adds_crc;         /* PDUs go out without the CRC-32 and come in without it:
+                                          * the PL appends, checks and removes it. Default off. */
 } hh_slot_config_t;
 
 typedef struct {

@@ -101,8 +101,9 @@ static void w32(wr_t *w, uint32_t v) { w16(w, (uint16_t)v); w16(w, (uint16_t)(v 
 /* Copies len raw bytes to the cursor. */
 static void wn(wr_t *w, const uint8_t *s, size_t len) { if (len) memcpy(w->b + w->n, s, len); w->n += len; }
 
-/* Encodes the PDU into buf in the frame specification v2 layout and appends the CRC-32. */
-hh_status_t hh_pdu_encode(const hh_pdu_t *p, uint8_t *buf, size_t cap, size_t *out_len)
+/* Encodes the PDU into buf in the frame specification v2 layout, with the CRC-32 appended
+ * when with_crc is set. */
+static hh_status_t encode(const hh_pdu_t *p, uint8_t *buf, size_t cap, size_t *out_len, bool with_crc)
 {
     wr_t w = { buf, 0 };
     size_t total;
@@ -110,6 +111,7 @@ hh_status_t hh_pdu_encode(const hh_pdu_t *p, uint8_t *buf, size_t cap, size_t *o
     if (!p || !buf || !out_len) return HH_ERR_INVAL;
     total = hh_pdu_size(p);
     if (!total) return HH_ERR_INVAL;
+    if (!with_crc) total -= CRC_LEN;
     if (total > cap) return HH_ERR_NOMEM;
 
     w16(&w, (uint16_t)(HH_PDU_FRAME_CONTROL | (p->more_data ? FC_MORE_DATA : 0u)));
@@ -161,9 +163,21 @@ hh_status_t hh_pdu_encode(const hh_pdu_t *p, uint8_t *buf, size_t cap, size_t *o
         wn(&w, m->data, m->len);
     }
 
-    w32(&w, hh_crc32(buf, w.n));
+    if (with_crc) w32(&w, hh_crc32(buf, w.n));
     *out_len = w.n;
     return HH_OK;
+}
+
+/* Encodes the PDU and appends the CRC-32. */
+hh_status_t hh_pdu_encode(const hh_pdu_t *p, uint8_t *buf, size_t cap, size_t *out_len)
+{
+    return encode(p, buf, cap, out_len, true);
+}
+
+/* Encodes the PDU without the CRC-32, for a PL that appends it. */
+hh_status_t hh_pdu_encode_nocrc(const hh_pdu_t *p, uint8_t *buf, size_t cap, size_t *out_len)
+{
+    return encode(p, buf, cap, out_len, false);
 }
 
 typedef struct {
@@ -189,23 +203,26 @@ static uint32_t r32(rd_t *r) { uint32_t lo = r16(r); return lo | ((uint32_t)r16(
 /* Copies k bytes from the cursor into d. */
 static void rn(rd_t *r, uint8_t *d, size_t k) { if (need(r, k)) { memcpy(d, r->b + r->n, k); r->n += k; } }
 
-/* Checks the CRC and decodes a received PDU. Message data points into buf. */
-hh_status_t hh_pdu_decode(const uint8_t *buf, size_t len, hh_pdu_t *p)
+/* Decodes a received PDU. With has_crc the last four bytes are the CRC-32 and are checked;
+ * without it the whole buffer is the PDU. Message data points into buf. */
+static hh_status_t decode(const uint8_t *buf, size_t len, hh_pdu_t *p, bool has_crc)
 {
     rd_t r;
     uint16_t fc;
     uint8_t flags, counts;
-    uint32_t crc;
+    size_t tail = has_crc ? CRC_LEN : 0;
 
     if (!buf || !p) return HH_ERR_INVAL;
-    if (len < HDR_LEN + CTL_FIXED + CRC_LEN || len > HH_PDU_MAX_LEN) return HH_ERR_INVAL;
+    if (len < HDR_LEN + CTL_FIXED + tail || len > HH_PDU_MAX_LEN - (has_crc ? 0 : CRC_LEN)) return HH_ERR_INVAL;
 
-    crc = (uint32_t)buf[len - 4] | ((uint32_t)buf[len - 3] << 8) |
-          ((uint32_t)buf[len - 2] << 16) | ((uint32_t)buf[len - 1] << 24);
-    if (hh_crc32(buf, len - CRC_LEN) != crc) return HH_ERR_INVAL;
+    if (has_crc) {
+        uint32_t crc = (uint32_t)buf[len - 4] | ((uint32_t)buf[len - 3] << 8) |
+                       ((uint32_t)buf[len - 2] << 16) | ((uint32_t)buf[len - 1] << 24);
+        if (hh_crc32(buf, len - CRC_LEN) != crc) return HH_ERR_INVAL;
+    }
 
     memset(p, 0, sizeof *p);
-    r.b = buf; r.n = 0; r.end = len - CRC_LEN; r.bad = false;
+    r.b = buf; r.n = 0; r.end = len - tail; r.bad = false;
 
     fc = r16(&r);
     if (fc & (FC_SECURITY | FC_ELEMENTS)) return HH_ERR_UNSUPPORTED;
@@ -274,4 +291,16 @@ hh_status_t hh_pdu_decode(const uint8_t *buf, size_t len, hh_pdu_t *p)
         p->n_msg++;
     }
     return r.bad ? HH_ERR_INVAL : HH_OK;
+}
+
+/* Checks the CRC and decodes a received PDU. */
+hh_status_t hh_pdu_decode(const uint8_t *buf, size_t len, hh_pdu_t *p)
+{
+    return decode(buf, len, p, true);
+}
+
+/* Decodes a received PDU whose CRC-32 the PL has already checked and removed. */
+hh_status_t hh_pdu_decode_nocrc(const uint8_t *buf, size_t len, hh_pdu_t *p)
+{
+    return decode(buf, len, p, false);
 }

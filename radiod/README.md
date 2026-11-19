@@ -453,6 +453,18 @@ than pretending to work.
 
 ## Frame rings
 
+radiod owns the frame ring buffers. With `ring_path` set it creates a shared-memory file there at start, lays out the RX and TX rings in it with `hh_ring_shm_create` and removes the file on exit. The MAC process and the radio program open the same path with `hh_ring_shm_open` and move frames through the ring interface in `hhsdr/ring/ring.h`. Frames do not pass through radiod.
+
+| Key | Meaning |
+|---|---|
+| `ring_path` | File to create. Empty (the default) means no rings. |
+| `ring_rx_slots`, `ring_tx_slots` | Places in each ring, a power of two. Default 64. |
+| `ring_slot_size` | Bytes per place, a multiple of 32. Default 288, a placeholder. |
+
+Access is limited by the file permissions (0660). A process that still has an old file open when radiod restarts keeps the old memory and has to open the file again. The ring layout is in `docs/RING-INTERFACE.md`.
+
+### Earlier single-ring model (`hh_ring_t`), still used by the RX frame ring
+
 `src/ring.c` and `include/hhsdr/radiod/ring.h` hold the buffer ring from the
 PS-PL data path design ([`../docs/RADIOD-PSPL-DATAPATH.md`](../docs/RADIOD-PSPL-DATAPATH.md),
 PROPOSED). radiod is the owner of two rings: an RX ring (PL produces, MAC
@@ -508,6 +520,7 @@ radiod/tests/run-tests.sh --asan
 | `test_radiod_state_machine` | every transition, legal and illegal |
 | `test_radiod_config` | defaults, parsing, validation, line-accurate errors |
 | `test_radiod_faults` | registry in isolation **and** as radiod drives it |
+| `test_radiod_rings` | ring keys, radiod creates the ring file, a client opens it, release removes it |
 | `test_mock_backend` | the `hh_radio_ops_t` contract |
 | `test_ring` | frame ring: bad geometry, FIFO order across wraps, full-ring drop keeps queued frames, slot and buffer size checks |
 | `test_radiod_daemon` | **end-to-end**: forks the real binary, drives it over a real socket |
