@@ -42,7 +42,7 @@ typedef struct {
     int      ring_create;       /* create the files here instead of opening radiod's */
     uint32_t loss_permille;     /* every link, per PDU */
     uint32_t seed;
-    /* Called for every frame put on the air, with the run time in ms. NULL = none. */
+    /* Called for every frame put on the air, CRC-32 included, with the run time in ms. NULL = none. */
     void   (*pdu_hook)(void *ctx, uint32_t t_ms, const uint8_t *pdu, size_t len);
     void    *hook_ctx;
     /* Called for every frame delivered to a node's network layer. node is 1-based. */

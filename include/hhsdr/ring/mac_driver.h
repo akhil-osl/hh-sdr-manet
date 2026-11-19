@@ -29,7 +29,9 @@ typedef struct {
     hh_ring_mac_stats_t st;
 } hh_ring_mac_t;
 
-/* HH_ERR_INVAL on a null argument or lead_frames of 0. */
+/* HH_ERR_INVAL on a null argument or lead_frames of 0. HH_ERR_STATE if the
+ * scheduler is not configured with logic_adds_crc: frames in the rings carry no
+ * CRC-32, because the PL appends it on transmit and removes it on receive. */
 hh_status_t hh_ring_mac_init(hh_ring_mac_t *m, hh_ring_region_t *region, hh_slot_t *slot,
                              uint16_t lead_frames);
 

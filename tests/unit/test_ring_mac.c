@@ -64,6 +64,7 @@ static void setup(node_t *n, hh_node_id_t id, uint64_t own, uint32_t ring_slots)
     sc.own_slots = own;
     sc.capacity = 128;
     sc.epoch_ms = EPOCH;
+    sc.logic_adds_crc = true;                         /* the PL owns the CRC-32 */
     HH_ASSERT_OK(hh_slot_init(&n->slot, &sc, &vclock, &n->mac, hh_ring_mac_tx, &n->drv));
     HH_ASSERT_OK(hh_ring_mac_init(&n->drv, &n->region, &n->slot, 1));
     fake_pl_init(&n->pl);
@@ -117,7 +118,8 @@ static void test_tx_descriptor(void)
     HH_ASSERT_EQ_INT(na.drv.st.tx_frames, 1);
 
     hh_ring_consume_peek(&na.region.tx, &s);
-    HH_ASSERT_OK(hh_pdu_decode(s.frame, d.length, &p));
+    HH_ASSERT_OK(hh_pdu_decode_nocrc(s.frame, d.length, &p));   /* no CRC-32 in the ring */
+    HH_ASSERT_ERR(hh_pdu_decode(s.frame, d.length, &p), HH_ERR_INVAL);
     HH_ASSERT_EQ_INT(p.n_msg, 1);
     HH_ASSERT_EQ_INT(p.msg[0].len, 20);
 }
@@ -178,6 +180,7 @@ static void test_end_to_end(void)
     uint8_t pay[20];
     uint16_t own = 0;
     fake_pl_sent_t out;
+    hh_ring_tx_desc_t d;
     hh_ring_rx_desc_t meta = { .slot_in_frame = 0, .superframe = 0 };
 
     reset(16);
@@ -185,12 +188,14 @@ static void test_end_to_end(void)
     hh_mac_send(&na.mac, HH_FRAME_DATA, HH_MAC_CLASS_DATA, B, 0, pay, sizeof pay);
     run_ms(&na, 1);
 
+    HH_ASSERT_OK(peek_tx(&na, &d));
     HH_ASSERT_OK(fake_pl_transmit(&na.pl, &na.region, 0, 1, &own, 1, &out));
     HH_ASSERT_EQ_INT(out.control_only, 0);
+    HH_ASSERT_EQ_INT(out.length, d.length + HH_PDU_CRC_LEN);      /* the PL added the CRC-32 */
     HH_ASSERT_EQ_INT(na.pl.servant.frames_returned, 1);
 
     t_now = EPOCH + FRAME_MS;                        /* B hears it in frame 1, slot 0 */
-    HH_ASSERT_OK(fake_pl_receive(&nb.pl, &nb.region, out.bytes, out.length, 1, &meta));
+    HH_ASSERT_OK(fake_pl_receive(&nb.pl, &nb.region, out.bytes, out.length, &meta));
     HH_ASSERT_EQ_INT(hh_ring_mac_poll(&nb.drv), 1);
     HH_ASSERT_EQ_INT(nb.n_got, 1);
     HH_ASSERT_EQ_INT(nb.got[0].src, A);
@@ -230,6 +235,9 @@ static void test_args(void)
     HH_ASSERT_ERR(hh_ring_mac_init(&m, NULL, &na.slot, 1), HH_ERR_INVAL);
     HH_ASSERT_ERR(hh_ring_mac_init(&m, &na.region, NULL, 1), HH_ERR_INVAL);
     HH_ASSERT_ERR(hh_ring_mac_init(&m, &na.region, &na.slot, 0), HH_ERR_INVAL);
+    na.slot.cfg.logic_adds_crc = false;                          /* a scheduler that writes the CRC-32 */
+    HH_ASSERT_ERR(hh_ring_mac_init(&m, &na.region, &na.slot, 1), HH_ERR_STATE);
+    na.slot.cfg.logic_adds_crc = true;
     HH_ASSERT_EQ_INT(hh_ring_mac_poll(NULL), 0);
 }
 

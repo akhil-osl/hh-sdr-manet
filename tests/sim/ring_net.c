@@ -142,6 +142,7 @@ ring_net_t *rn_create(const rn_config_t *cfg)
         sc.slot_ms = cfg->slot_ms;
         sc.capacity = cfg->capacity;
         sc.own_slots = 1ull << i;
+        sc.logic_adds_crc = true;      /* the fake PL appends and checks the CRC-32 */
         sc.epoch_ms = EPOCH_MS;
         if (hh_slot_init(&nd->sl, &sc, &n->clock, &nd->mac, hh_ring_mac_tx, &nd->drv) != HH_OK ||
             hh_ring_mac_init(&nd->drv, &nd->region, &nd->sl, cfg->lead_frames) != HH_OK) { rn_destroy(n); return NULL; }
@@ -234,7 +235,7 @@ static void air(ring_net_t *n, uint32_t superframe, uint16_t slot)
             memset(&meta, 0, sizeof meta);
             meta.superframe = superframe;
             meta.slot_in_frame = slot;
-            fake_pl_receive(&n->nodes[r].pl, &n->nodes[r].pl_region, s->bytes, s->length, 1, &meta);
+            fake_pl_receive(&n->nodes[r].pl, &n->nodes[r].pl_region, s->bytes, s->length, &meta);
         }
     }
     for (unsigned t = 0; t < n->cfg.nodes; t++) {

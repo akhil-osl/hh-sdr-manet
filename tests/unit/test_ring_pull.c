@@ -212,13 +212,13 @@ static void test_fake_receive(void)
     hh_ring_rx_desc_t d;
 
     HH_ASSERT_OK(fresh());
-    HH_ASSERT_OK(fake_pl_receive(&pl, &reg, vec_a, sizeof vec_a, 1, &meta));
-    HH_ASSERT_OK(fake_pl_receive(&pl, &reg, vec_a, sizeof vec_a, 1, &meta));
+    HH_ASSERT_OK(fake_pl_receive(&pl, &reg, vec_a, sizeof vec_a, &meta));
+    HH_ASSERT_OK(fake_pl_receive(&pl, &reg, vec_a, sizeof vec_a, &meta));
     HH_ASSERT_EQ_INT(pl.rx_frames, 2);
     HH_ASSERT_OK(hh_ring_consume_peek(&reg.rx, &s));
     hh_ring_rx_desc_read(s.desc, &d);
     HH_ASSERT_EQ_INT(d.flags, HH_RING_F_READY | HH_RING_RX_CRC_OK);
-    HH_ASSERT_EQ_INT(d.length, sizeof vec_a);
+    HH_ASSERT_EQ_INT(d.length, sizeof vec_a - HH_PDU_CRC_LEN);   /* the PL removed the CRC-32 */
     HH_ASSERT_EQ_INT(d.slot_in_frame, 5);
     HH_ASSERT_EQ_INT(d.rssi, -320);
     HH_ASSERT_EQ_INT(d.rx_seq, 1);
@@ -232,14 +232,22 @@ static void test_fake_receive(void)
 static void test_fake_receive_drops(void)
 {
     hh_ring_rx_desc_t meta = { 0 };
+    uint8_t bad[sizeof vec_a];
     unsigned i;
 
     HH_ASSERT_OK(fresh());
-    HH_ASSERT_OK(fake_pl_receive(&pl, &reg, vec_a, sizeof vec_a, 0, &meta));
+    memcpy(bad, vec_a, sizeof bad);
+    bad[10] ^= 0x01;                                             /* one bit wrong on the air */
+    HH_ASSERT_OK(fake_pl_receive(&pl, &reg, bad, sizeof bad, &meta));
     HH_ASSERT_EQ_INT(pl.rx_crc_bad, 1);
     HH_ASSERT_EQ_INT(hh_ring_view_used(&reg.rx), 0);
-    for (i = 0; i < SLOTS; i++) HH_ASSERT_OK(fake_pl_receive(&pl, &reg, vec_a, sizeof vec_a, 1, &meta));
-    HH_ASSERT_ERR(fake_pl_receive(&pl, &reg, vec_a, sizeof vec_a, 1, &meta), HH_ERR_NOMEM);
+    memcpy(bad, vec_a, sizeof bad);
+    bad[sizeof bad - 1] ^= 0x80;                                 /* or the CRC-32 itself */
+    HH_ASSERT_OK(fake_pl_receive(&pl, &reg, bad, sizeof bad, &meta));
+    HH_ASSERT_EQ_INT(pl.rx_crc_bad, 2);
+    HH_ASSERT_ERR(fake_pl_receive(&pl, &reg, vec_a, 3, &meta), HH_ERR_INVAL);   /* shorter than a CRC-32 */
+    for (i = 0; i < SLOTS; i++) HH_ASSERT_OK(fake_pl_receive(&pl, &reg, vec_a, sizeof vec_a, &meta));
+    HH_ASSERT_ERR(fake_pl_receive(&pl, &reg, vec_a, sizeof vec_a, &meta), HH_ERR_NOMEM);
     HH_ASSERT_EQ_INT(pl.rx_ring_full, 1);
     HH_ASSERT_EQ_INT(hh_ring_view_used(&reg.rx), SLOTS);
 }
@@ -255,8 +263,13 @@ static void test_fake_transmit_control_only(void)
     HH_ASSERT_OK(fake_pl_transmit(&pl, &reg, 0x1235, 7, own, 2, out));
     HH_ASSERT(out[0].control_only);
     HH_ASSERT(!out[1].control_only);
-    HH_ASSERT_EQ_INT(out[1].length, 30);
+    HH_ASSERT_EQ_INT(out[1].length, 30 + HH_PDU_CRC_LEN);        /* the frame plus the CRC-32 the PL adds */
     HH_ASSERT_EQ_INT(out[1].bytes[29], 0x5A);
+    {
+        uint32_t crc = hh_crc32(out[1].bytes, 30);
+        HH_ASSERT_EQ_INT(out[1].bytes[30], crc & 0xFFu);
+        HH_ASSERT_EQ_INT(out[1].bytes[33], crc >> 24);
+    }
     HH_ASSERT_EQ_INT(pl.tx_control_only, 1);
     HH_ASSERT_EQ_INT(pl.tx_frames_sent, 1);
     HH_ASSERT_EQ_INT(pl.tx_pulls, 1);
@@ -278,7 +291,7 @@ static void test_fake_transmit_late_reply(void)
     HH_ASSERT_EQ_INT(hh_ring_view_used(&reg.tx), 0);
 }
 
-/* A real MAC PDU goes through the TX path and the RX path with every byte unchanged. */
+/* A real MAC PDU goes through the TX path and the RX path: the ring holds it without the CRC-32, the PL adds and removes the CRC-32. */
 static void test_real_pdu_both_ways(void)
 {
     static fake_pl_sent_t out[1];
@@ -286,26 +299,26 @@ static void test_real_pdu_both_ways(void)
     hh_ring_rx_desc_t meta = { .slot_in_frame = 5, .superframe = 0x1234 };
     hh_ring_slot_t s;
     hh_ring_slot_t w;
-    hh_ring_tx_desc_t td = { .length = sizeof vec_a, .traffic_class = HH_RING_CLASS_DATA,
+    hh_ring_tx_desc_t td = { .length = sizeof vec_a - HH_PDU_CRC_LEN, .traffic_class = HH_RING_CLASS_DATA,
                              .target_superframe = 0x1235, .target_frame = 7, .target_slot = 5 };
     hh_pdu_t p;
 
     HH_ASSERT_OK(fresh());
     HH_ASSERT_OK(hh_ring_produce_begin(&reg.tx, &w));
-    memcpy(w.frame, vec_a, sizeof vec_a);
+    memcpy(w.frame, vec_a, sizeof vec_a - HH_PDU_CRC_LEN);      /* the ring holds the PDU only */
     hh_ring_tx_desc_write(w.desc, &td);
     hh_ring_produce_commit(&reg.tx, &w, 0);
     HH_ASSERT_OK(fake_pl_transmit(&pl, &reg, 0x1235, 7, own, 1, out));
     HH_ASSERT(!out[0].control_only);
-    HH_ASSERT_EQ_INT(out[0].length, sizeof vec_a);
-    HH_ASSERT(memcmp(out[0].bytes, vec_a, sizeof vec_a) == 0);
+    HH_ASSERT_EQ_INT(out[0].length, sizeof vec_a);                /* the PL appended the CRC-32 */
+    HH_ASSERT(memcmp(out[0].bytes, vec_a, sizeof vec_a) == 0);   /* and it is the one the codec test expects */
     HH_ASSERT_OK(hh_pdu_decode(out[0].bytes, out[0].length, &p));
     HH_ASSERT(memcmp(p.msg[0].data, "HELLO", 5) == 0);
 
-    HH_ASSERT_OK(fake_pl_receive(&pl, &reg, vec_a, sizeof vec_a, 1, &meta));
+    HH_ASSERT_OK(fake_pl_receive(&pl, &reg, vec_a, sizeof vec_a, &meta));
     HH_ASSERT_OK(hh_ring_consume_peek(&reg.rx, &s));
-    HH_ASSERT(memcmp(s.frame, vec_a, sizeof vec_a) == 0);
-    HH_ASSERT_OK(hh_pdu_decode(s.frame, sizeof vec_a, &p));
+    HH_ASSERT(memcmp(s.frame, vec_a, sizeof vec_a - HH_PDU_CRC_LEN) == 0);
+    HH_ASSERT_OK(hh_pdu_decode_nocrc(s.frame, sizeof vec_a - HH_PDU_CRC_LEN, &p));
     HH_ASSERT_EQ_INT(p.msg[0].dst, 2);
     HH_ASSERT_EQ_INT(p.msg[0].len, 5);
 }

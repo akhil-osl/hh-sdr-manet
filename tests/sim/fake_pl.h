@@ -30,7 +30,8 @@ typedef struct {
     uint8_t buf[FAKE_PL_MAX_ITEMS * FAKE_PL_MAX_FRAME];
 } fake_pl_t;
 
-/* What the PL put on the air for one own slot. */
+/* What the PL put on the air for one own slot: the frame from the pull reply with
+ * its CRC-32 appended, so length is the frame length plus 4. */
 typedef struct {
     uint16_t slot;
     int      control_only;          /* no frame arrived in time */
@@ -40,11 +41,13 @@ typedef struct {
 
 void fake_pl_init(fake_pl_t *p);
 
-/* A burst arrives. A bad CRC is counted and not delivered. A full RX ring drops
- * the frame and counts it. meta gives the descriptor fields other than length
- * and the receive count, which the fake sets itself. */
+/* A burst arrives, frame being the bytes on the air with the CRC-32 at the end.
+ * The PL checks the CRC-32 and removes it. A bad CRC is counted and not
+ * delivered. A full RX ring drops the frame and counts it. meta gives the
+ * descriptor fields other than length and the receive count, which the fake
+ * sets itself. The ring holds the PDU without the CRC-32. */
 hh_status_t fake_pl_receive(fake_pl_t *p, hh_ring_region_t *r, const uint8_t *frame,
-                            uint16_t len, int crc_ok, const hh_ring_rx_desc_t *meta);
+                            uint16_t len, const hh_ring_rx_desc_t *meta);
 
 /* The PL pulls for (superframe, frame) and fills out[i] for own_slots[i]: the
  * frame bytes if the reply carried one, otherwise a control-only frame. */

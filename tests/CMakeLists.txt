@@ -72,7 +72,7 @@ add_test(NAME test_ring_shm COMMAND test_ring_shm)
 
 # Fake PL for the ring interface. Test infrastructure, never linked into production.
 add_library(hhfakepl STATIC sim/fake_pl.c)
-target_link_libraries(hhfakepl PUBLIC hhsdr_ring_pull)
+target_link_libraries(hhfakepl PUBLIC hhsdr_ring_pull hhsdr_mac)
 
 add_executable(test_ring_pull unit/test_ring_pull.c)
 target_link_libraries(test_ring_pull PRIVATE hhfakepl hhsdr_mac)

@@ -6,6 +6,7 @@ hh_status_t hh_ring_mac_init(hh_ring_mac_t *m, hh_ring_region_t *region, hh_slot
                              uint16_t lead_frames)
 {
     if (!m || !region || !slot || lead_frames == 0) return HH_ERR_INVAL;
+    if (!slot->cfg.logic_adds_crc) return HH_ERR_STATE;   /* ring frames carry no CRC-32 */
     memset(m, 0, sizeof *m);
     m->region = region;
     m->slot = slot;
@@ -21,7 +22,7 @@ static uint8_t class_of(const uint8_t *pdu, size_t len)
     uint8_t best = HH_RING_CLASS_CONTROL;
     bool any = false;
 
-    if (hh_pdu_decode(pdu, len, &p) != HH_OK) return HH_RING_CLASS_CONTROL;
+    if (hh_pdu_decode_nocrc(pdu, len, &p) != HH_OK) return HH_RING_CLASS_CONTROL;
     for (unsigned i = 0; i < p.n_msg; i++) {
         uint8_t c = p.msg[i].cls > HH_RING_CLASS_DATA ? HH_RING_CLASS_DATA : p.msg[i].cls;
         if (!any || c < best) best = c;

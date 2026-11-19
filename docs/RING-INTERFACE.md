@@ -89,9 +89,9 @@ flowchart LR
 | Party | May do | May not do |
 |---|---|---|
 | radiod | Allocate and map the rings. Program the PL with ring base, size and indices. Enable and disable DMA and the slot engine. Read counters. | Link the MANET stack. Carry frames. |
-| MAC process | Write TX descriptors and frames. Read RX descriptors and frames. Return RX slots. | Open the PL. |
+| MAC process | Write TX descriptors and frames. Read RX descriptors and frames. Return RX slots. | Open the PL. Write the CRC-32. |
 | TX buffer servant | Read the TX ring. Mark slots taken. Reply to pull calls. | Write TX frame content. Wait inside a pull call. |
-| PL | Pull TX frames. Write RX frames and descriptors. Decide every transmission. Send a control-only frame when nothing arrives in time. | Transmit stale data. Overwrite an RX slot the MAC holds. |
+| PL | Pull TX frames. Append the CRC-32 to every transmitted frame, and check and remove it on every received frame. Write RX frames and descriptors. Decide every transmission. Send a control-only frame when nothing arrives in time. | Transmit stale data. Overwrite an RX slot the MAC holds. |
 
 ## 5. Ring memory and ring header
 
@@ -134,8 +134,8 @@ PROPOSED layout. One frame is one descriptor and one slot. A frame never spans t
 
 | Offset | Size | Field | Meaning |
 |---|---|---|---|
-| 0 | 4 | flags | Bit 0 FILLED: set by the PL after the frame and the rest of the descriptor are written. Bit 1 CRC_OK. Bit 2 AUTH_OK (demonstration crypto only, otherwise 0). Others 0. |
-| 4 | 2 | length | Bytes of frame in the slot. |
+| 0 | 4 | flags | Bit 0 FILLED: set by the PL after the frame and the rest of the descriptor are written. Bit 1 CRC_OK: the PL checked the CRC-32 of the burst and it was good. Bit 2 AUTH_OK (demonstration crypto only, otherwise 0). Others 0. |
+| 4 | 2 | length | Bytes of PDU in the slot. The CRC-32 is not in the slot and is not counted. |
 | 6 | 2 | slot_in_frame | Receive slot number inside the TDMA frame. |
 | 8 | 4 | superframe | Receive time as the superframe number in net time. |
 | 12 | 4 | arrival_offset_ns | Signed. Burst arrival against the slot edge. |
@@ -151,7 +151,7 @@ PROPOSED layout. One frame is one descriptor and one slot. A frame never spans t
 | Offset | Size | Field | Meaning |
 |---|---|---|---|
 | 0 | 4 | flags | Bit 0 READY: set by the MAC process last, after the frame and the rest of the descriptor are written. Bit 1 TAKEN: set by the servant when it has put the frame in a pull reply. Others 0. |
-| 4 | 2 | length | Bytes of frame in the slot. |
+| 4 | 2 | length | Bytes of PDU in the slot. The CRC-32 is not in the slot and is not counted. |
 | 6 | 1 | traffic_class | 0 control, 1 emergency, 2 voice, 3 video, 4 data. |
 | 7 | 1 | reserved | Zero. |
 | 8 | 4 | target_superframe | Superframe the frame is intended for. |
@@ -165,10 +165,11 @@ PROPOSED layout. One frame is one descriptor and one slot. A frame never spans t
 * The writer writes the frame bytes and every other field before it sets the flag. Section 12 gives the ordering.
 * Reserved fields are written as zero and ignored on read, so later versions can use them.
 * The class values match the class list of the MAC to network interface (control, emergency, voice, video, data).
+* The frame in a slot is the PDU without its final CRC-32. The PL appends the CRC-32 (IEEE 802.3, over every PDU byte) after the last PDU byte on transmit, and checks and removes it on receive. The burst header carries the length of the PDU plus the CRC-32, and any padding to a fixed frame size follows the CRC-32. The layout of the burst header and the padding are the PL owner's. (PROPOSED)
 
 ## 7. Receive path
 
-1. The PL receives a burst in a slot, checks the CRC, measures RSSI, SNR and gain, and writes the frame into the next free RX slot by DMA. It then writes the descriptor and sets FILLED. It advances the RX write index. (PROPOSED)
+1. The PL receives a burst in a slot, checks the CRC-32 and removes it together with any padding, measures RSSI, SNR and gain, and writes the PDU into the next free RX slot by DMA. It then writes the descriptor and sets FILLED. It advances the RX write index. (PROPOSED)
 2. The PL raises an RX event. Events are coalesced. The mechanism is open (OI-6). A Linux UIO device suits this: a blocking read on the device returns on each interrupt together with a total interrupt count, so a missed interrupt can be detected ([Linux UIO howto](https://www.kernel.org/doc/html/latest/driver-api/uio-howto.html)). If an AMD AXI DMA is used, its interrupt threshold and delay fields set how completions are batched ([PG021, S2MM_DMACR](https://docs.amd.com/r/en-US/pg021_axi_dma/S2MM_DMACR-S2MM-DMA-Control-Register-Offset-30h)).
 3. The MAC process reads every descriptor from its read index to the write index. It discards a frame with CRC_OK clear, but counts it against the neighbour that owned the slot, because the per-neighbour CRC failure count needs it. It filters by address, reassembles fragments, updates the link metrics and delivers the packet.
 4. The MAC process clears the descriptor flags and advances the RX read index, which returns the slot to the PL.
@@ -287,7 +288,7 @@ Derived, PROPOSED. The geometry is set by radiod and passed in the region header
 
 | Item | Value | Working |
 |---|---|---|
-| Slot size | 2048 bytes | The largest MAC PDU is 2047 bytes. |
+| Slot size | 2048 bytes | The largest MAC PDU is 2047 bytes with its CRC-32, so 2043 bytes in a slot. |
 | Descriptor size | 32 bytes | One Cortex-A9 cache line. |
 | TX slots | 64 | At most 20 own slots in a frame (20 slots per frame in the current design), two frames in flight is 40, rounded up to a power of two. |
 | RX slots | 128 | Up to 19 other nodes' slots per frame at 50 frames per second is 950 frames per second at worst, 128 slots hold about 135 ms. |
@@ -300,7 +301,7 @@ Bandwidth does not decide the port. An HP port is 64 bits wide with a theoretica
 
 This section shows the exact bytes on each side of the ring interface, in both directions. The PL side is the PL and its modem, reached through OpenCPI. The NW side is the MAC process and the network layer above it. All multi-byte fields are little-endian. Hex values are in memory order, lowest address first.
 
-Two things are exchanged for every frame: the frame in a ring slot, and a 32-byte descriptor. The frame is a MAC PDU in the layout of the MAC frame specification v2, as the PDU codec writes and reads it (IMPLEMENTED: the example below is vector A of the codec test, and its CRC-32 was recomputed). The descriptor is the layout of section 6 (PROPOSED). The values in the descriptors are chosen for illustration.
+Two things are exchanged for every frame: the frame in a ring slot, and a 32-byte descriptor. The frame is a MAC PDU in the layout of the MAC frame specification v2 without its final CRC-32, which the PL appends on transmit and checks and removes on receive (PROPOSED). The example below is vector A of the codec test with its last four bytes, the CRC-32, taken off. The PDU codec in this repository still appends and requires the CRC-32 (IMPLEMENTED), so a codec form without it is not written yet. The descriptor is the layout of section 6 (PROPOSED). The values in the descriptors are chosen for illustration.
 
 ### 14.1 The frame in a slot
 
@@ -321,20 +322,18 @@ Two things are exchanged for every frame: the frame in a ring slot, and a 32-byt
 | next | 4 each | link report list | Neighbour 2, error rate 1, SNR 1. |
 | next | variable | beacon body, queue report | Only when the flags say so. |
 | next | variable | messages | Per message: protocol 1, destination 2, length and flags 2 (bits 0 to 10 length, bits 11 to 13 class, bit 14 fragment, bit 15 acknowledgement requested), link sequence 1 if acknowledgement requested, fragment header 5 if fragment (datagram size 2, tag 2, offset 1 in units of 8 bytes), then the data. |
-| last | 4 | CRC-32 | IEEE 802.3 CRC-32 over every earlier byte. |
 
-The length of the frame is the descriptor length. There is no end marker inside the frame bytes.
+The length of the frame is the descriptor length. There is no end marker and no CRC-32 inside the frame bytes. On the air the PL adds a 4-byte CRC-32 (IEEE 802.3) over every PDU byte after the last one.
 
 ### 14.2 Receive: PL side to NW side
 
 Example: node 2 receives a frame in which node 1 sends the test text HELLO to node 2.
 
-Frame bytes in the RX slot, 33 bytes:
+Frame bytes in the RX slot, 29 bytes:
 
 ```
 41 A8 21 10 00 FF FF 01 00 10 00 00 00 00 03 20
-00 00 F0 02 00 05 A0 07 48 45 4C 4C 4F 5F 1A D6
-46
+00 00 F0 02 00 05 A0 07 48 45 4C 4C 4F
 ```
 
 | Offset | Bytes | Field | Value |
@@ -355,21 +354,22 @@ Frame bytes in the RX slot, 33 bytes:
 | 21 | 05 A0 | length and flags | 0xA005: length 5, class 4, acknowledgement requested |
 | 23 | 07 | link sequence | 7 |
 | 24 | 48 45 4C 4C 4F | data | the text HELLO |
-| 29 | 5F 1A D6 46 | CRC-32 | 0x46D61A5F |
 
 The 0xFFFF at offset 5 is the broadcast destination of the whole PDU. It is not payload data.
+
+On the air the PL received the CRC-32 0x46D61A5F (bytes 5F 1A D6 46) after these 29 bytes. It checked it and removed it, so it is not in the slot.
 
 RX descriptor next to it, 32 bytes:
 
 ```
-03 00 00 00 21 00 05 00 34 12 00 00 78 00 00 00
+03 00 00 00 1D 00 05 00 34 12 00 00 78 00 00 00
 C0 FE 50 00 78 00 0F 00 E8 03 00 00 00 00 00 00
 ```
 
 | Offset | Bytes | Field | Value |
 |---|---|---|---|
 | 0 | 03 00 00 00 | flags | FILLED and CRC_OK |
-| 4 | 21 00 | length | 33 |
+| 4 | 1D 00 | length | 29 |
 | 6 | 05 00 | slot in frame | 5 |
 | 8 | 34 12 00 00 | superframe | 0x1234 |
 | 12 | 78 00 00 00 | arrival offset | +120 ns |
@@ -382,30 +382,30 @@ C0 FE 50 00 78 00 0F 00 E8 03 00 00 00 00 00 00
 
 Data flow, in order:
 
-1. The PL receives the burst in slot 5, removes the burst header and modem framing, and checks the CRC-32. The layout of the burst header is the PL owner's and is not part of this contract.
-2. The PL writes the 33 frame bytes into the next free RX slot, then writes the descriptor with FILLED set last, and advances the RX write index.
+1. The PL receives the burst in slot 5, removes the burst header and modem framing, checks the CRC-32 (0x46D61A5F, good) and removes it. The layout of the burst header is the PL owner's and is not part of this contract.
+2. The PL writes the 29 PDU bytes into the next free RX slot, then writes the descriptor with FILLED set last, and advances the RX write index.
 3. The PL raises the RX event.
 4. The MAC process reads the flags word first. FILLED is set, so it trusts the rest. CRC_OK is set, so it takes the frame. A frame with CRC_OK clear is counted against the neighbour that owned the slot and dropped.
-5. The MAC process copies or reads in place the first 33 bytes, as given by the length field.
-6. The PDU codec checks the CRC-32 again and every length, then decodes the header, the slot claims and the message: protocol 0xF0, destination node 2, class 4, acknowledgement requested with link sequence 7, data HELLO.
+5. The MAC process copies or reads in place the first 29 bytes, as given by the length field.
+6. The PDU codec checks every length, then decodes the header, the slot claims and the message: protocol 0xF0, destination node 2, class 4, acknowledgement requested with link sequence 7, data HELLO.
 7. The decoded result goes to the MAC receive entry together with the metrics and the superframe from the descriptor. The metric flags say which values may be used.
 8. The MAC process clears the descriptor flags and advances the RX read index. The slot goes back to the PL.
 
 ### 14.3 Transmit: NW side to PL side
 
-Example: node 1 sends the same frame. The bytes are the output of the PDU codec for the same PDU, so the frame bytes in the TX slot are identical to the 33 bytes in section 14.2.
+Example: node 1 sends the same frame. The bytes are the PDU without its CRC-32, so the frame bytes in the TX slot are identical to the 29 bytes in section 14.2.
 
 TX descriptor, 32 bytes:
 
 ```
-01 00 00 00 21 00 04 00 35 12 00 00 07 00 05 00
+01 00 00 00 1D 00 04 00 35 12 00 00 07 00 05 00
 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 ```
 
 | Offset | Bytes | Field | Value |
 |---|---|---|---|
 | 0 | 01 00 00 00 | flags | READY |
-| 4 | 21 00 | length | 33 |
+| 4 | 1D 00 | length | 29 |
 | 6 | 04 | traffic class | 4, data |
 | 7 | 00 | reserved | zero |
 | 8 | 35 12 00 00 | target superframe | 0x1235 |
@@ -418,17 +418,17 @@ The pull call for this frame:
 | Direction | Content |
 |---|---|
 | Request, PL to servant | pull_frame with superframe 0x1235 and frame 7 |
-| Reply, servant to PL | a list of one item: slot 5, traffic class 4, frame bytes: the same 33 bytes as in section 14.2 |
+| Reply, servant to PL | a list of one item: slot 5, traffic class 4, frame bytes: the same 29 bytes as in section 14.2 |
 
 Data flow, in order:
 
-1. During frame 6 of superframe 0x1235 (the frame before), the MAC process builds the PDU, the codec appends the CRC-32, and the process writes the 33 bytes into the next TX slot.
+1. During frame 6 of superframe 0x1235 (the frame before), the MAC process builds the PDU and writes its 29 bytes, without a CRC-32, into the next TX slot.
 2. It writes the descriptor with the target superframe, frame and slot and the class, then sets READY last and advances the TX write index.
 3. At its lead time before frame 7, the PL sends the pull request for superframe 0x1235 and frame 7.
 4. The servant reads the descriptors from the TX read index. A descriptor with READY set and a matching target is used. The servant copies the descriptor class and the frame bytes into the reply. It sets TAKEN and advances the TX read index.
 5. A descriptor for an earlier target is late. The servant drops it and counts it. A slot with no matching frame is absent from the reply.
-6. The PL receives the reply. For slot 5 it takes the frame bytes unchanged, adds the burst header and the modem framing, and transmits at the start of slot 5.
+6. The PL receives the reply. For slot 5 it takes the frame bytes unchanged, appends the CRC-32 0x46D61A5F, adds the burst header carrying the length 33 (the PDU plus the CRC-32) and the modem framing, and transmits at the start of slot 5.
 7. If the reply is empty, or arrives after the slot edge, the PL sends a control-only frame in that slot and counts it.
 
-How the header is handled on this path: the PL never reads the descriptor. The servant is the only reader. It uses the target fields to choose which frames to return, and the class to fill the reply item. The frame bytes reach the PL unchanged, so the PDU header, the messages and the CRC-32 are exactly what the MAC process wrote.
+How the header is handled on this path: the PL never reads the descriptor. The servant is the only reader. It uses the target fields to choose which frames to return, and the class to fill the reply item. The frame bytes reach the PL unchanged, so the PDU header and the messages are exactly what the MAC process wrote. The CRC-32 is added by the PL.
 
