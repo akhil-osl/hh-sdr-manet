@@ -113,6 +113,34 @@ add_library(hhsdr_mac STATIC
 target_link_libraries(hhsdr_mac PUBLIC hhsdr_core_base)
 
 # ---------------------------------------------------------------------------
+# hhsdr_ring : shared frame rings between radiod, the MAC process and the PL.
+# Linked by radiod (to lay out the region) and by the MAC process (to use it).
+# Links hhsdr_core_base only, never hhsdr_radiod, the MANET stack or tests/.
+# ---------------------------------------------------------------------------
+add_library(hhsdr_ring STATIC
+  src/ring/ring.c
+)
+target_link_libraries(hhsdr_ring PUBLIC hhsdr_core_base)
+
+# ---------------------------------------------------------------------------
+# hhsdr_ring_pull : the TX servant logic, how a pull for one TDMA frame is
+# answered from the TX ring. Plain logic with no ORB. Links hhsdr_ring only.
+# ---------------------------------------------------------------------------
+add_library(hhsdr_ring_pull STATIC
+  src/ring/pull.c
+)
+target_link_libraries(hhsdr_ring_pull PUBLIC hhsdr_ring)
+
+# ---------------------------------------------------------------------------
+# hhsdr_ring_mac : MAC-side driver between the slot scheduler and the rings.
+# Links the ring library and the MAC, never radiod, the MANET stack or tests/.
+# ---------------------------------------------------------------------------
+add_library(hhsdr_ring_mac STATIC
+  src/ring/mac_driver.c
+)
+target_link_libraries(hhsdr_ring_mac PUBLIC hhsdr_ring hhsdr_mac)
+
+# ---------------------------------------------------------------------------
 # protocol : the control-protocol codec, shared by radiod and its clients.
 # Kept separate from both so that a client library never has to link the
 # daemon. See protocol/CMakeLists.txt.

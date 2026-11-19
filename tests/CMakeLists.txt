@@ -62,6 +62,22 @@ add_executable(test_pdu unit/test_pdu.c)
 target_link_libraries(test_pdu PRIVATE hhsdr_mac)
 add_test(NAME test_pdu COMMAND test_pdu)
 
+add_executable(test_ring_region unit/test_ring_region.c)
+target_link_libraries(test_ring_region PRIVATE hhsdr_ring)
+add_test(NAME test_ring_region COMMAND test_ring_region)
+
+# Fake PL for the ring interface. Test infrastructure, never linked into production.
+add_library(hhfakepl STATIC sim/fake_pl.c)
+target_link_libraries(hhfakepl PUBLIC hhsdr_ring_pull)
+
+add_executable(test_ring_pull unit/test_ring_pull.c)
+target_link_libraries(test_ring_pull PRIVATE hhfakepl hhsdr_mac)
+add_test(NAME test_ring_pull COMMAND test_ring_pull)
+
+add_executable(test_ring_mac unit/test_ring_mac.c)
+target_link_libraries(test_ring_mac PRIVATE hhsdr_ring_mac hhfakepl)
+add_test(NAME test_ring_mac COMMAND test_ring_mac)
+
 # Slot-timed multi-node test network. Test infrastructure, never linked into production.
 add_library(hhslotsim STATIC sim/slot_net.c)
 target_link_libraries(hhslotsim PUBLIC hhsdr_mac)
