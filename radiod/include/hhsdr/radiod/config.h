@@ -23,6 +23,7 @@
 #include "hhsdr/core/log.h"
 #include "hhsdr/core/types.h"
 #include "hhsdr/radiod/ocpi_backend.h"
+#include "hhsdr/ring/shm.h"
 
 /* Longest socket path radiod will accept. sockaddr_un.sun_path is 108 bytes on
  * Linux; bind() is what ultimately enforces the limit, and this bound simply
@@ -61,6 +62,15 @@ typedef struct {
     /* Used only when backend == HH_RADIOD_BACKEND_OCPI. Keys: ocpi_app,
      * ocpi_library_path, and ocpi_property (repeatable). */
     hh_ocpi_config_t ocpi;
+
+    /* Frame rings. radiod creates the shared-memory file at ring_path and lays
+     * out the rings in it. An empty path switches the rings off. Keys:
+     * ring_path, ring_rx_slots, ring_tx_slots, ring_slot_size. The sizes are
+     * placeholders until the PL fixes them. */
+    char     ring_path[HH_RING_SHM_PATH_MAX];
+    uint32_t ring_rx_slots;
+    uint32_t ring_tx_slots;
+    uint32_t ring_slot_size;
 } hh_radiod_config_t;
 
 /* Populate with the documented defaults. Never fails. */

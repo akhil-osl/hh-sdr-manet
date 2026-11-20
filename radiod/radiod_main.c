@@ -165,6 +165,9 @@ int main(int argc, char **argv)
     st = hh_radiod_listen(&daemon, cfg.sock_path);
     if (st != HH_OK) { fprintf(stderr, "radiod listen failed: %s\n", hh_status_str(st)); return 1; }
 
+    st = hh_radiod_open_rings(&daemon, &cfg);
+    if (st != HH_OK) { fprintf(stderr, "radiod rings failed: %s\n", hh_status_str(st)); return 1; }
+
     install_signal_handlers();
 
     while (!g_stop) {

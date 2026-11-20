@@ -200,6 +200,15 @@ cmake .. -DHH_SANITIZE=ON
 make -j4 && ctest
 ```
 
+Compile commands for clang tools (clangd, clang-tidy). CMake writes `compile_commands.json` into the build directory, and clangd looks for it in the project root, so link it there:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+ln -sf build/compile_commands.json compile_commands.json
+```
+
+Re-run the first command after adding or removing source files. The link is a generated file and must not be committed.
+
 ---
 
 ## Running

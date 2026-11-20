@@ -16,6 +16,10 @@
 #   NODES=4  TOPOLOGY=line|ring|mesh  SCENARIO=line|ring-cut  CAPACITY=256
 #   CONVERGE=30 (seconds before traffic)  TEST_S=30 (seconds of ping)  IPERF_S=20
 #   BRIDGE=path/to/hh-slot-bridge  OLSRD2=olsrd2  OUT=output directory
+#   BRIDGE=build/hh-ring-bridge BRIDGE_LOG=0 runs the same test through the frame rings
+#   (hh-ring-bridge has no --log, so BRIDGE_LOG=0 leaves it out)
+#   RING_RADIOD=1 with hh-ring-bridge starts one radiod per node (RADIOD=build/radiod/radiod);
+#   each creates its node's ring file in /dev/shm and the bridge opens it by path
 # SCENARIO=ring-cut uses a ring, pings node 1 to node 3, cuts the link 1-2 for a
 # while and restores it.
 
@@ -25,6 +29,7 @@ HERE=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 export NODES=${NODES:-4} TOPOLOGY=${TOPOLOGY:-line} SCENARIO=${SCENARIO:-line} CAPACITY=${CAPACITY:-256}
 export CONVERGE=${CONVERGE:-30} TEST_S=${TEST_S:-30} IPERF_S=${IPERF_S:-20}
 export BRIDGE=${BRIDGE:-$HERE/../../build/hh-slot-bridge} OLSRD2=${OLSRD2:-olsrd2}
+export RING_RADIOD=${RING_RADIOD:-0} RADIOD=${RADIOD:-$HERE/../../build/radiod/radiod}
 export OUT=${OUT:-$PWD/slot-mesh-out}
 BRIDGE_PID=""
 PIDS=""
@@ -49,7 +54,8 @@ run_local() {
 
 # Builds the namespaces, bridge and OLSRd2 nodes, runs the measurements, collects the logs.
 run() {
-    local i k dst cut=0 mtu
+    local i k dst cut=0 mtu ringargs=() ringfmt="/dev/shm/hh-ring-$$-%u" slot_size logargs=(--log "$OUT/slots.log")
+    [ "${BRIDGE_LOG:-1}" = 0 ] && logargs=()
     [ -x "$BRIDGE" ] || { echo "slot-mesh: bridge not found: $BRIDGE" >&2; exit 2; }
     command -v "$OLSRD2" >/dev/null || { echo "slot-mesh: $OLSRD2 not found" >&2; exit 2; }
     mkdir -p "$OUT" || exit 3
@@ -65,9 +71,27 @@ run() {
         ip netns exec "n$i" sysctl -qw net.ipv6.conf.all.disable_ipv6=1 2>/dev/null
     done
 
+    if [ "$RING_RADIOD" = 1 ]; then
+        [ -x "$RADIOD" ] || { echo "slot-mesh: radiod not found: $RADIOD" >&2; exit 2; }
+        slot_size=$(( (CAPACITY + 31) / 32 * 32 ))
+        for i in $(seq 1 "$NODES"); do
+            # The socket path is short on purpose: a unix socket path may not exceed 108 bytes.
+            printf 'sock_path = /dev/shm/hh-radiod-%s-%s.sock\nring_path = %s\nring_rx_slots = 32\nring_tx_slots = 32\nring_slot_size = %s\n' \
+                "$$" "$i" "$(printf "$ringfmt" "$i")" "$slot_size" >"$OUT/radiod-n$i.conf"
+            "$RADIOD" -c "$OUT/radiod-n$i.conf" >"$OUT/radiod-n$i.out" 2>&1 &
+            PIDS="$PIDS $!"
+        done
+        for i in $(seq 1 "$NODES"); do
+            for _ in $(seq 1 50); do [ -e "$(printf "$ringfmt" "$i")" ] && break; sleep 0.1; done
+            [ -e "$(printf "$ringfmt" "$i")" ] || { echo "slot-mesh: radiod $i did not create its ring file:" >&2; cat "$OUT/radiod-n$i.out" >&2; exit 3; }
+        done
+        ringargs=(--ring-path "$ringfmt")
+        log "radiod started on $NODES nodes, ring files $ringfmt"
+    fi
+
     mkfifo "$OUT/control"
     "$BRIDGE" --nodes "$NODES" --topology "$TOPOLOGY" --capacity "$CAPACITY" --control "$OUT/control" \
-        --log "$OUT/slots.log" --pcap "$OUT/run.pcap" --summary "$OUT/bridge.summary" \
+        "${logargs[@]}" "${ringargs[@]}" --pcap "$OUT/run.pcap" --summary "$OUT/bridge.summary" \
         >"$OUT/bridge.out" 2>"$OUT/bridge.err" &
     BRIDGE_PID=$!
     for _ in $(seq 1 50); do

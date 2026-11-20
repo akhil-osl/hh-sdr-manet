@@ -16,6 +16,9 @@ void hh_radiod_config_defaults(hh_radiod_config_t *cfg)
     cfg->tick_interval_ms      = HH_RADIOD_DEFAULT_TICK_MS;
     cfg->client_idle_timeout_ms = 0;   /* disabled: prior behaviour */
     cfg->log_level             = HH_LOG_INFO;
+    cfg->ring_rx_slots         = 64;     /* rings off until ring_path is set */
+    cfg->ring_tx_slots         = 64;
+    cfg->ring_slot_size        = 288;    /* 280 byte frame rounded to 32 */
 }
 
 const char *hh_radiod_backend_str(hh_radiod_backend_kind_t k)
@@ -36,6 +39,10 @@ hh_status_t hh_radiod_config_validate(const hh_radiod_config_t *cfg)
         return HH_ERR_INVAL;
     /* A zero tick would spin the control loop without ever yielding. */
     if (cfg->tick_interval_ms == 0) return HH_ERR_INVAL;
+    /* With the rings on, the geometry must be one the ring layout accepts. */
+    if (cfg->ring_path[0] != '\0' &&
+        hh_ring_region_size(cfg->ring_rx_slots, cfg->ring_tx_slots, cfg->ring_slot_size) == 0)
+        return HH_ERR_INVAL;
     /* An idle timeout shorter than a tick could expire a client before it is
      * ever serviced. Zero is valid and means "no timeout". */
     if (cfg->client_idle_timeout_ms != 0 &&
@@ -78,6 +85,14 @@ hh_status_t hh_radiod_config_set(hh_radiod_config_t *cfg, const char *key,
         return parse_u32(value, &cfg->tick_interval_ms);
     if (!strcmp(key, "client_idle_timeout_ms"))
         return parse_u32(value, &cfg->client_idle_timeout_ms);
+    if (!strcmp(key, "ring_path"))
+        return copy_path(cfg->ring_path, sizeof cfg->ring_path, value);
+    if (!strcmp(key, "ring_rx_slots"))
+        return parse_u32(value, &cfg->ring_rx_slots);
+    if (!strcmp(key, "ring_tx_slots"))
+        return parse_u32(value, &cfg->ring_tx_slots);
+    if (!strcmp(key, "ring_slot_size"))
+        return parse_u32(value, &cfg->ring_slot_size);
     if (!strcmp(key, "log_level")) {
         hh_log_level_t lvl;
         if (!hh_log_level_parse(value, &lvl)) return HH_ERR_INVAL;
