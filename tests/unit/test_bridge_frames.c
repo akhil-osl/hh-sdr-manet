@@ -86,6 +86,40 @@ static void test_unicast_data_goes_to_next_hop(void)
     HH_ASSERT_EQ_INT(t.dst, 3);
 }
 
+/* The DSCP in the IP header picks the class: EF voice, AF41 to AF43 video, the rest data. */
+static void test_dscp_picks_the_class(void)
+{
+    static const struct { uint8_t dscp; hh_mac_class_t cls; } tab[] = {
+        { 46, HH_MAC_CLASS_VOICE }, { 34, HH_MAC_CLASS_VIDEO }, { 36, HH_MAC_CLASS_VIDEO },
+        { 38, HH_MAC_CLASS_VIDEO }, { 0, HH_MAC_CLASS_DATA },   { 40, HH_MAC_CLASS_DATA },
+    };
+    uint8_t f[200], mac[6];
+    const uint8_t ip[4] = { 10, 99, 0, 4 };
+    size_t n, i;
+    br_tx_t t;
+    br_mac_for_node(mac, 3);
+    for (i = 0; i < sizeof tab / sizeof tab[0]; i++) {
+        n = make_frame(f, mac, 1, 17, 5001, ip, 60);
+        f[14 + 1] = (uint8_t)(tab[i].dscp << 2 | 0x03);   /* the ECN bits must not matter */
+        HH_ASSERT_EQ_INT(br_from_eth(f, n, &t), BR_OK);
+        HH_ASSERT_EQ_INT(t.cls, tab[i].cls);
+    }
+}
+
+/* A routing packet stays control whatever its DSCP says. */
+static void test_dscp_cannot_make_routing_traffic_voice(void)
+{
+    uint8_t f[200], mac[6];
+    const uint8_t ip[4] = { 224, 0, 0, 109 };
+    size_t n;
+    br_tx_t t;
+    memset(mac, 0xFF, sizeof mac);
+    n = make_frame(f, mac, 1, 17, 269, ip, 40);
+    f[14 + 1] = (uint8_t)(46 << 2);
+    HH_ASSERT_EQ_INT(br_from_eth(f, n, &t), BR_OK);
+    HH_ASSERT_EQ_INT(t.cls, HH_MAC_CLASS_CONTROL);
+}
+
 /* A non-first IP fragment has no UDP header, so it is not classified by port. */
 static void test_ip_fragment_is_not_classified_by_port(void)
 {
@@ -156,6 +190,8 @@ HH_TEST_MAIN_BEGIN("bridge_frames")
     HH_RUN(test_olsr_multicast_is_routing_broadcast);
     HH_RUN(test_ip_protocol_138_is_routing);
     HH_RUN(test_unicast_data_goes_to_next_hop);
+    HH_RUN(test_dscp_picks_the_class);
+    HH_RUN(test_dscp_cannot_make_routing_traffic_voice);
     HH_RUN(test_ip_fragment_is_not_classified_by_port);
     HH_RUN(test_rejects);
     HH_RUN(test_round_trip_unicast);

@@ -1,5 +1,6 @@
 /* Frame conversion for hh-slot-bridge. See slot_bridge_frames.h. */
 #include "slot_bridge_frames.h"
+#include "hhsdr/mac/dscp.h"
 #include <string.h>
 
 #define ETHERTYPE_IPV4 0x0800u
@@ -56,7 +57,7 @@ br_result_t br_from_eth(const uint8_t *frame, size_t len, br_tx_t *out)
         out->cls = HH_MAC_CLASS_CONTROL;
     } else {
         out->kind = HH_FRAME_DATA;
-        out->cls = HH_MAC_CLASS_DATA;
+        out->cls = hh_mac_class_from_dscp((uint8_t)(out->ip[1] >> 2));
     }
     return BR_OK;
 }
