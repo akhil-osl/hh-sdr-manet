@@ -10,16 +10,22 @@
 #define DSCP_AF41 34
 #define DSCP_AF42 36
 #define DSCP_AF43 38
+#define DSCP_CS3  24
+#define DSCP_AF31 26
+#define DSCP_AF32 28
+#define DSCP_AF33 30
+#define DSCP_CS4  32
 #define DSCP_CS5  40
 #define DSCP_CS6  56
 
-/* Every one of the 64 DSCP values: only EF is voice, only AF41 to AF43 are video, the rest data. */
+/* Every one of the 64 DSCP values: only EF is voice, CS3, AF31 to AF33, CS4 and AF41 to AF43 are video, the rest data. */
 static void test_every_dscp_value(void)
 {
     for (unsigned d = 0; d < 64; d++) {
         hh_mac_class_t c = hh_mac_class_from_dscp((uint8_t)d);
         if (d == DSCP_EF) HH_ASSERT_EQ_INT(c, HH_MAC_CLASS_VOICE);
-        else if (d == DSCP_AF41 || d == DSCP_AF42 || d == DSCP_AF43) HH_ASSERT_EQ_INT(c, HH_MAC_CLASS_VIDEO);
+        else if (d == DSCP_CS3 || d == DSCP_AF31 || d == DSCP_AF32 || d == DSCP_AF33 || d == DSCP_CS4 ||
+                 d == DSCP_AF41 || d == DSCP_AF42 || d == DSCP_AF43) HH_ASSERT_EQ_INT(c, HH_MAC_CLASS_VIDEO);
         else HH_ASSERT_EQ_INT(c, HH_MAC_CLASS_DATA);
     }
 }
@@ -64,7 +70,7 @@ static void test_print_table(void)
     for (unsigned d = 0; d < 64; d++)
         if (hh_mac_class_from_dscp((uint8_t)d) == HH_MAC_CLASS_DATA) data++;
     printf("\ndscp_map class=data dscp=all other values count=%u\n", data);
-    HH_ASSERT_EQ_INT(data, 60);
+    HH_ASSERT_EQ_INT(data, 55);
 }
 
 HH_TEST_MAIN_BEGIN("dscp")

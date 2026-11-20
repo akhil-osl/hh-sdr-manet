@@ -7,8 +7,9 @@
  * is set only through the break-in function and is not reachable by DSCP. The
  * MAC refuses the control class on a data frame, so this never returns it.
  *
- * PROPOSED values, as in the MAC to network interface specification section
- * 7.1: EF is voice, AF41 to AF43 are video, everything else is data.
+ * EF is voice. CS3, AF31 to AF33, CS4 and AF41 to AF43 are video. Everything
+ * else is data, call signalling (CS5) included. The MAC to network interface
+ * specification section 7.1 lists only EF and AF41 to AF43.
  */
 #ifndef HHSDR_MAC_DSCP_H
 #define HHSDR_MAC_DSCP_H
