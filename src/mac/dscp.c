@@ -1,4 +1,4 @@
-/* DSCP to MAC class table. See include/hhsdr/mac/dscp.h. */
+/* DSCP (Differentiated Services Code Point) to MAC class table. See include/hhsdr/mac/dscp.h. */
 #include "hhsdr/mac/dscp.h"
 
 #define DSCP_COUNT 64u
