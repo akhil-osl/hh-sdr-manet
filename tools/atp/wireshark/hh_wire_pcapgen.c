@@ -10,7 +10,7 @@
  *
  * Link types: DLT_USER0 (147) carries beacons, DLT_USER1 (148) carries routing
  * updates. The frame kind is not on the wire — hh_frame_t holds it as a struct
- * field, and no over-the-air frame header is defined (unknown.md U-16) — so
+ * field, and no over-the-air frame header is defined — so
  * the capture file's link type stands in for it. USER0..USER15 are reserved by
  * tcpdump.org for exactly this kind of private use; this is a test-tooling
  * convention, NOT an air format.

@@ -8,7 +8,7 @@
  * contract does not exist yet and the hardware adapter reports that honestly
  * rather than pretending to run. That is the intended behavior.
  *
- * Legacy: runs the distance-vector node. Routing is OLSRd2 (unknown.md U-09).
+ * Legacy: runs the distance-vector node. Routing is OLSRd2.
  */
 #include "hhsdr/manet/node.h"
 #include "hhsdr/manet/telemetry.h"

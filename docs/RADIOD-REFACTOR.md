@@ -27,11 +27,11 @@ there is guessed at in code.
 
 | Item | Reason |
 |---|---|
-| ICD-2 TLV codec | No specification exists — see U-01 |
-| OpenCPI / ACI integration | No app XML, worker names or lifecycle — U-03, U-04 |
-| RCC workers, drivers, FPGA | No contracts — U-03, U-06, U-07 |
-| OLSRv2 migration | Deferred by decision — U-09 |
-| Severing `hh-manet` from the PL adapter | Behaviour change — U-15 |
+| ICD-2 TLV codec | No specification exists |
+| OpenCPI / ACI integration | No app XML, worker names or lifecycle |
+| RCC workers, drivers, FPGA | No contracts |
+| OLSRv2 migration | Deferred |
+| Severing `hh-manet` from the PL adapter | Behaviour change |
 
 **Preserved throughout:** the existing line-oriented ASCII `key=value` control
 protocol, the 7-state lifecycle, all 10 command verbs, and the whole of
@@ -71,7 +71,8 @@ Every phase must satisfy all of these before it is committed:
 
 Phase **6b** — severing `hh-manet`'s link to the PL adapter, which is what
 fully enforces the drawing's Note 1 — is **deliberately not in this round**. It
-is the only genuinely behaviour-changing step and is blocked on U-15.
+is the only genuinely behaviour-changing step and is blocked on how the data plane
+reaches hardware.
 
 ---
 
@@ -83,7 +84,7 @@ Established the reference point that every later phase is measured against.
 - Verified a clean out-of-tree build: **0 warnings**
 - Verified **28/28** tests passing
 - Verified a clean **AddressSanitizer + UBSan** build and run: 28/28, 0 warnings
-- Authored [`unknown.md`](../unknown.md) — 15 entries (U-01 … U-15)
+- Authored [`unknown.md`](../unknown.md) — the register of open contracts
 
 Rollback: `git checkout pre-radiod-refactor`.
 
@@ -138,7 +139,7 @@ Verified: `librc.a` exports the three `hh_rc_client_*` symbols;
 `hhsdr_radiod` exports **zero** of them; the e2e test's link line references
 `librc` and not the daemon library. Build clean, 28/28 passing.
 
-**Not done — U-02.** The drawing shows an `rc_*` API. Those signatures are
+**Not done.** The drawing shows an `rc_*` API. Those signatures are
 unspecified, so the existing `hh_rc_client_*` API is carried forward unchanged
 rather than inventing names.
 
@@ -292,7 +293,7 @@ architecture's single-owner rule. It is deliberately not done here because:
   careful not to do.
 - It touches six files across the MANET stack (`main.c`, `node.c`,
   `self_healing.c`, `forwarder.c`, `discovery.c`, `telemetry.c`).
-- It is blocked on **U-15** — how the data plane reaches hardware once only
+- It is blocked on how the data plane reaches hardware once only
   radiod may open the PL.
 
 The dual-ownership condition is currently **latent and harmless**: the adapter
@@ -367,7 +368,7 @@ assert/clear totals.
 The registry covers **exactly the five fault kinds the protocol already
 defines** — `none`, `tx_failure`, `rx_silence`, `hw_fault`, `backend_io`.
 
-Deliberately absent, because U-05 leaves them unspecified: severity levels,
+Deliberately absent, because the fault taxonomy leaves them unspecified: severity levels,
 fault classes, hardware fault codes, latch-versus-transient policy, clear
 authority, and history depth.
 
@@ -397,7 +398,7 @@ reflected in the lifecycle state.
 `hh_radiod_faults()` gives an in-process read-only view; the registry is
 **not** reported over the control protocol. Doing so needs either a new
 response payload or an asynchronous event, and neither wire format is
-specified (U-01, U-05). The data is maintained and tested now so it is ready
+specified. The data is maintained and tested now so it is ready
 when a format exists.
 
 `test_radiod_faults` adds 11 cases across both the registry in isolation and
@@ -472,7 +473,7 @@ documented as such in the protocol header — it reuses the project's existing
 configuration and telemetry conventions instead of introducing a new
 serialization layer.
 
-Replacing it requires the ICD-2 specification, which does not exist (U-01).
+Replacing it requires the ICD-2 specification, which does not exist.
 Inventing a wire format now would create a second, competing protocol that
 would have to be reconciled later.
 

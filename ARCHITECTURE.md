@@ -53,9 +53,9 @@ Each plane has its own interface contract:
 
 | Contract | Between | Status |
 |---|---|---|
-| **ICD-1** | `manet0` driver ↔ PL DMA | not specified ([U-06](unknown.md)) |
-| **ICD-2** | clients ↔ `radiod` | not specified ([U-01](unknown.md)) |
-| **ICD-3** | radio clock driver ↔ PL time regs | not specified ([U-07](unknown.md)) |
+| **ICD-1** | `manet0` driver ↔ PL DMA | not specified |
+| **ICD-2** | clients ↔ `radiod` | not specified |
+| **ICD-3** | radio clock driver ↔ PL time regs | not specified |
 
 ---
 
@@ -72,8 +72,8 @@ processes could configure the PL simultaneously and neither would know.
 **Current state: not yet enforced.** `hh-manet` still constructs its own radio
 adapter and calls `open()` on it. This is *latent* — the adapter is a stub that
 acquires nothing, so nothing actually conflicts — but it becomes a real
-collision the moment a working backend exists. Tracked as
-[U-15](unknown.md); resolving it needs the data-plane decision first.
+collision the moment a working backend exists. Resolving it needs the data-plane
+decision first.
 
 ---
 
@@ -89,7 +89,7 @@ collision the moment a working backend exists. Tracked as
 
 ╔══ OLSRv2 PATH — adapter built; manet0 binding and OLSRd2 runs next ════╗
 ║                                                                         ║
-║   OLSRd2 (external) ─► Linux routes ─► manet0 (NOT BUILT, U-24)        ║
+║   OLSRd2 (external) ─► Linux routes ─► manet0 (NOT BUILT)              ║
 ║                                           │                             ║
 ║                     hh_netif adapter ◄────┘  ──► hh_radio_ops_t        ║
 ║                     (built, tested on an emulated medium)               ║
@@ -122,8 +122,8 @@ collision the moment a working backend exists. Tracked as
 | [`librc/`](librc/README.md) | client library — the C API to reach `radiod` | ✅ working |
 | [`radioctl/`](radioctl/README.md) | CLI front end | ✅ working |
 | [`protocol/`](protocol/README.md) | wire codec shared by daemon and clients | ✅ working (**not** ICD-2) |
-| `src/mac/` | MAC service for the network layer: five class queues, priority with control cap, pushed receive with events, link records (MAC-NETWORK-INTERFACE v1.1) | ✅ skeleton, plus a host slot scheduler (`slot.c`), PDU v2 codec (`pdu.c`) and network entry with MAC commands 0x01 to 0x04 (`entry.c`), demand-driven slot allocation with traffic classes, a per-node cap and voice admission (`alloc.c`, `dscp.c`) tested in simulation; binding to the logic not defined (U-21 to U-23, U-28) |
-| `src/netif/` | network-interface adapter: host interface ↔ `hh_radio_ops_t` (OLSRv2 path) | ✅ working; Linux binding not built (U-24) |
+| `src/mac/` | MAC service for the network layer: five class queues, priority with control cap, pushed receive with events, link records (MAC-NETWORK-INTERFACE v1.1) | ✅ skeleton, plus a host slot scheduler (`slot.c`), PDU v2 codec (`pdu.c`) and network entry with MAC commands 0x01 to 0x04 (`entry.c`), demand-driven slot allocation with traffic classes, a per-node cap and voice admission (`alloc.c`, `dscp.c`) tested in simulation; binding to the logic not defined (U-02) |
+| `src/netif/` | network-interface adapter: host interface ↔ `hh_radio_ops_t` (OLSRv2 path) | ✅ working; Linux binding not built |
 | [`apps/dataterm/`](apps/dataterm/README.md) | data terminal: text messages as CoAP over UDP with libcoap, ACK and retry (F02-AK-4) | ✅ working on the host; not yet run on boards |
 | `src/manet/` | legacy MANET stack: discovery → distance-vector routing → self-healing | ✅ working, legacy reference |
 | `src/dataplane/` | legacy packet forwarder (fast path of the legacy stack) | ✅ working, legacy reference |
@@ -191,7 +191,7 @@ Who calls what:
 | `hh-manet` (legacy) | all eight, including `transmit`, `set_rx_callback` | control + **data** |
 
 That asymmetry is the unresolved issue: **one vtable currently spans two
-planes**. Splitting it is [U-15](unknown.md).
+planes**. Splitting it is not done.
 
 ### Two daemons, no connection
 
@@ -200,11 +200,11 @@ other** today. Each builds its own radio backend.
 
 In the OLSRv2 architecture below, `hh-manet` (the legacy node daemon) is not
 used at all. How OLSRd2 and `radiod` share the radio once a real backend
-exists is still open ([U-15](unknown.md)).
+exists is still open.
 
 ### OLSRv2: who owns routing
 
-Decided 2026-10-08 ([U-09](unknown.md)): **OLSRv2 (RFC 7181) with NHDP
+Decided 2026-10-08: **OLSRv2 (RFC 7181) with NHDP
 (RFC 6130), as implemented by OLSRd2 from OONF, is the routing engine.**
 OLSRd2 is an external process. It is not embedded in HH-SDR, not linked into
 any HH-SDR target, and not modified; no OONF source is in this repository.
@@ -215,7 +215,7 @@ any HH-SDR target, and not modified; no OONF source is in this repository.
  Linux IP stack ─────────────── forwards IP using the Linux routing table
      │                          OLSRd2 (external process): NHDP, MPR, TC,
      │                          Dijkstra; writes routes into that table
- manet0  (Linux network interface)        NOT BUILT: binding TBD (U-24)
+ manet0  (Linux network interface)        NOT BUILT: binding TBD
      │  bytes + one-hop next hop (or broadcast)
  hh_netif  (src/netif/)  ◄── HH-SDR's part: network interface ↔ radio
      │  hh_frame_t
@@ -249,8 +249,8 @@ any HH-SDR target, and not modified; no OONF source is in this repository.
   judged (MAC-NETWORK-INTERFACE DP-11).
 - Single-threaded, no allocation, links `hhsdr_core_base` only.
 
-**What the Linux binding (next step) must decide, and nothing here does**
-([U-24](unknown.md)): TAP or TUN framing for `manet0`, how a link-layer
+**What the Linux binding (next step) must decide, and nothing here does**:
+TAP or TUN framing for `manet0`, how a link-layer
 address maps to a node id, IP addressing, ARP policy, MTU, which frame kind
 OLSRv2 control and user traffic use, how radio metrics reach OLSRd2, the OONF
 version, and how OLSRd2 is deployed.
@@ -266,8 +266,8 @@ and because some parts may feed the new path later:
 | `forwarder.c` | Legacy reference. Replaced by Linux IP forwarding |
 | `discovery.c`, `neighbor.c` | Legacy reference. Overlap with NHDP HELLO and its neighbour set |
 | `topology.c` | Legacy reference. Overlaps with the OLSRv2 topology set |
-| `link_health.c`, `failure_detector.c` | Legacy today. Possible source of radio-derived link metrics for OLSRd2; whether and how is TBD (U-24) |
-| `self_healing.c` | Legacy today. Route repair is OLSRv2's own; its channel-change reaction has no OLSRd2 counterpart, and who owns that is open (U-14) |
+| `link_health.c`, `failure_detector.c` | Legacy today. Possible source of radio-derived link metrics for OLSRd2; whether and how is TBD |
+| `self_healing.c` | Legacy today. Route repair is OLSRv2's own; its channel-change reaction has no OLSRd2 counterpart, and who owns that is open |
 | `telemetry.c`, `src/sca/` | Legacy. They report the legacy node; OLSRd2 has its own status interfaces, not integrated |
 | `wire.c` | Legacy beacon and route-update format; still used by the dissector tooling |
 | `netsim` | Legacy stack's virtual-time test bed. OLSRd2 cannot run inside it (one instance per process, real clock) |
@@ -307,7 +307,7 @@ that reaches `mock_backend.c`. A real backend implements the same vtable — ste
 **Single-threaded, no locks.** Zero `pthread` or `mutex` in the repository.
 `radiod` serves up to 16 clients round-robin from one `poll()` loop. Requests
 serialize, so there is no shared-state hazard. Whether PL ownership forces
-threads is [U-12](unknown.md).
+threads is open.
 
 **No dynamic allocation in the control path.** Fixed arrays throughout — 16
 client slots, 512-byte line buffers, bounded queues. A 17th connection is
@@ -339,7 +339,7 @@ The target specifies **versioned TLV**. What is implemented is line-oriented
 ASCII `key=value` — no version field, no TLV, no transaction IDs, no async
 events.
 
-This is not an oversight. **No ICD-2 specification exists** ([U-01](unknown.md)),
+This is not an oversight. **No ICD-2 specification exists**,
 so a TLV layout would be invented, then reconciled later against the real one.
 The codec lives in its own `protocol/` component precisely so an ICD-2 codec can
 be added beside it without touching `radiod` or `librc`.
@@ -349,8 +349,8 @@ be added beside it without touching `radiod` or `librc`.
 No OpenCPI integration exists anywhere — no ACI call, no application handle, no
 worker reference. The only mentions of OpenCPI in the source are comments saying
 it is absent. Blocked on the application XML, worker names,
-properties and ACI lifecycle ([U-03](unknown.md), [U-04](unknown.md)), plus the
-C11-versus-C++ boundary ([U-11](unknown.md)).
+properties and ACI lifecycle, plus the
+C11-versus-C++ boundary.
 
 What makes the gap safe: `radiod` depends only on `hh_radio_ops_t` and never
 names a concrete backend. An OpenCPI backend implements that same contract and
@@ -362,18 +362,18 @@ drops into `radiod/src/backends/`.
 
 | Area | Now | Target | Blocked by |
 |---|---|---|---|
-| Control daemon | ✅ working; mock backend, and an OpenCPI backend (host-tested) | PL/OpenCPI owner on the board | U-17, U-19 |
+| Control daemon | ✅ working; mock backend, and an OpenCPI backend (host-tested) | PL/OpenCPI owner on the board | OpenCPI integration baseline, board bring-up under one owner |
 | Client library + CLI | ✅ working | same | — |
-| Wire protocol | ASCII `key=value` | versioned TLV (ICD-2) | U-01 |
-| Async events | none (poll only) | radiod pushes events | U-01, U-05 |
-| Fault registry | ✅ in-process | exposed over ICD-2 | U-01, U-05 |
-| PL ownership | radiod owns one OpenCPI application (host only) | single owner on the board | U-15, U-19 |
-| Data plane | Linux IP forwarding → `hh_netif` → radio seam; adapter built and tested on an emulated medium, `manet0` binding not built (legacy in-process forwarder kept) | manet0 → DMA → MAC → RF | U-24, U-06, U-15 |
-| Time plane | **absent entirely** | 1PPS → PL → PHC | U-07 |
-| MANET routing | OLSRv2 in OLSRd2 selected, external process; not yet run against HH-SDR (legacy distance-vector kept as reference) | OLSRd2 on `manet0` over the radio | U-24 |
-| RCC workers | none | 5 PS workers | U-03 |
-| FPGA fabric | none | DMA, MAC, modem, AD9361 | U-06, U-08, U-14 |
-| Test automation | ✅ ATP/BIT scripts, dissector, JSON evidence | same, on the radio over `manet0` | U-06, U-07, U-16 |
+| Wire protocol | ASCII `key=value` | versioned TLV (ICD-2) | ICD-2 wire format |
+| Async events | none (poll only) | radiod pushes events | ICD-2 wire format, event and fault taxonomy |
+| Fault registry | ✅ in-process | exposed over ICD-2 | ICD-2 wire format, event and fault taxonomy |
+| PL ownership | radiod owns one OpenCPI application (host only) | single owner on the board | control and data split of the radio interface, board bring-up under one owner |
+| Data plane | Linux IP forwarding → `hh_netif` → radio seam; adapter built and tested on an emulated medium, `manet0` binding not built (legacy in-process forwarder kept) | manet0 → DMA → MAC → RF | Linux interface binding, ICD-1 descriptor layout, control and data split |
+| Time plane | **absent entirely** | 1PPS → PL → PHC | ICD-3 time register map |
+| MANET routing | OLSRv2 in OLSRd2 selected, external process; not yet run against HH-SDR (legacy distance-vector kept as reference) | OLSRd2 on `manet0` over the radio | Linux interface binding |
+| RCC workers | none | 5 PS workers | OpenCPI application XML and worker names |
+| FPGA fabric | none | DMA, MAC, modem, AD9361 | ICD-1 descriptor layout, MANET STROBE semantics, frequency-hopping control |
+| Test automation | ✅ ATP/BIT scripts, dissector, JSON evidence | same, on the radio over `manet0` | ICD-1 descriptor layout, ICD-3 time register map, capture point for MANET frames |
 
 ---
 

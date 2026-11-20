@@ -9,7 +9,7 @@ would mean inventing the contracts below.
 
 ## What belongs here
 
-### `manet0` net_device driver — blocked on U-06
+### `manet0` net_device driver — blocked on the ICD-1 descriptor layout
 
 The data-plane driver from the architecture's DATA PLANE path:
 
@@ -30,7 +30,7 @@ ownership, and completion/interrupt semantics.
 
 **Owner: E5 (Linux BSP), with E1–E4 for the HDL side.**
 
-### Radio clock driver — blocked on U-07
+### Radio clock driver — blocked on the ICD-3 time register map
 
 The time-plane driver:
 
@@ -54,6 +54,6 @@ Neither the data plane nor the time plane exists here. A sweep for `PHC`,
 
 Today's data path is entirely in userspace: `src/dataplane/forwarder.c` calls
 `hh_radio_transmit()` on an in-process backend. How that path migrates to
-`manet0` is an open question (U-15).
+`manet0` is an open question.
 
 See [`../unknown.md`](../unknown.md).

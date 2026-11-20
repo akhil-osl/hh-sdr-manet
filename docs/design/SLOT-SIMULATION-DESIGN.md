@@ -192,7 +192,7 @@ Two collision tests are kept separate:
 
 ## 9. Routing and real OLSRd2 traffic
 
-`UNKNOWN / OPEN`. The Linux interface binding for the OLSRv2 path is unresolved (`unknown.md` U-24), so the way OLSRd2 packets reach the MAC is a decision still to be made.
+`UNKNOWN / OPEN`. The Linux interface binding for the OLSRv2 path is unresolved, so the way OLSRd2 packets reach the MAC is a decision still to be made.
 
 OLSRd2 is an external Linux process implementing OLSRv2 (RFC 7181) and NHDP (RFC 6130). Its MANET packets may use IP protocol number 138 or UDP port 269, with link-local multicast. The slot code is a C library. Something must carry the packets between them, and a bridge must support the transport mode actually selected and preserve:
 
@@ -205,7 +205,7 @@ Which transport mode the existing Docker mesh uses is `UNKNOWN / OPEN`. Its conf
 
 | Option | What it is | Gain | Cost |
 |---|---|---|---|
-| A. Bridge process | A small program reads OLSRd2 packets from a Linux interface per node, hands them to the MAC, and writes received packets back. OLSRd2 runs as a real process in network namespaces or in the existing Docker containers | Real OLSRd2 traffic, real route changes | New Linux interface binding that U-24 leaves open. Docker steps are run by the user |
+| A. Bridge process | A small program reads OLSRd2 packets from a Linux interface per node, hands them to the MAC, and writes received packets back. OLSRd2 runs as a real process in network namespaces or in the existing Docker containers | Real OLSRd2 traffic, real route changes | New Linux interface binding that is still open. Docker steps are run by the user |
 | B. Routing stand-in | The harness generates hello and topology-control messages of OLSRv2 size and rate, with fixed next hops, as the existing netif test does | Simple and fully deterministic | Not real OLSRd2 traffic |
 | C. B first, then A | Prove the slot model with B, then add A | Slot work is not blocked by the binding | Two stages |
 
@@ -305,7 +305,7 @@ Decision made in the tooling: captures use DLT_USER2 (149), one PDU per record w
 | | Traffic generator and measurements stay test-only | Hardware time synchronization |
 | | | Real propagation, interference, and hop timing |
 
-The hardware slot engine, the time synchronization plane, and the radio interface for slots depend on contracts that are still open (`unknown.md` U-21). This work proves the logic, not the timing.
+The hardware slot engine, the time synchronization plane, and the radio interface for slots depend on contracts that are still open (`unknown.md` U-02). This work proves the logic, not the timing.
 
 ## 13. Build plan
 

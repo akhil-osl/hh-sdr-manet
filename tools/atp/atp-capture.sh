@@ -9,9 +9,9 @@
 #
 # What a capture on the radio can actually see is limited by what the radio
 # exposes as a network interface. User IP traffic crosses manet0 (target
-# architecture; not yet built, unknown.md U-06/U-15). The MANET's own beacon and
+# architecture; not yet built). The MANET's own beacon and
 # routing frames travel hh_radio_transmit -> DMA -> MAC and have no defined
-# capture point at all (unknown.md U-16). This script captures whatever
+# capture point at all. This script captures whatever
 # interface it is given and claims nothing beyond that.
 
 set -u

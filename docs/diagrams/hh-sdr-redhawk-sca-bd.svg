@@ -58,7 +58,7 @@
 <rect x="360.0" y="250.0" width="230.0" height="20.0" rx="16.0" ry="16.0" fill="#E7EBF0" stroke="#44505E" stroke-width="1.0"/>
 <text x="475.0" y="261.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#44505E" text-anchor="middle">hh_node_t · DV self-healing</text>
 <rect x="360.0" y="280.0" width="230.0" height="20.0" rx="16.0" ry="16.0" fill="#E7EBF0" stroke="#44505E" stroke-width="1.0"/>
-<text x="475.0" y="291.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#44505E" text-anchor="middle">OLSRv2 deferred — U-09</text>
+<text x="475.0" y="291.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#44505E" text-anchor="middle">OLSRv2 deferred</text>
 <g opacity="0.16"><rect x="632.5" y="203.0" width="300.0" height="140.0" rx="4" ry="4" fill="#1A1A1A" stroke="none" stroke-width="0"/></g>
 <g opacity="0.1"><rect x="631.2" y="201.6" width="300.0" height="140.0" rx="4" ry="4" fill="#1A1A1A" stroke="none" stroke-width="0"/></g>
 <rect x="630.0" y="200.0" width="300.0" height="140.0" rx="4" ry="4" fill="#FFFFFF" stroke="#503669" stroke-width="1.5" stroke-dasharray="6 4"/>
@@ -133,7 +133,7 @@
 <rect x="970.0" y="430.0" width="280.0" height="20.0" rx="16.0" ry="16.0" fill="#ECE5F3" stroke="#503669" stroke-width="1.0"/>
 <text x="1110.0" y="441.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#503669" text-anchor="middle">DeviceManager-owned</text>
 <rect x="970.0" y="460.0" width="280.0" height="20.0" rx="16.0" ry="16.0" fill="#ECE5F3" stroke="#503669" stroke-width="1.0"/>
-<text x="1110.0" y="471.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#503669" text-anchor="middle">BLOCKED — U-03 / U-04</text>
+<text x="1110.0" y="471.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#503669" text-anchor="middle">BLOCKED</text>
 <g opacity="0.16"><rect x="632.5" y="563.0" width="640.0" height="100.0" rx="4" ry="4" fill="#1A1A1A" stroke="none" stroke-width="0"/></g>
 <g opacity="0.1"><rect x="631.2" y="561.6" width="640.0" height="100.0" rx="4" ry="4" fill="#1A1A1A" stroke="none" stroke-width="0"/></g>
 <rect x="630.0" y="560.0" width="640.0" height="100.0" rx="4" ry="4" fill="#FFFFFF" stroke="#503669" stroke-width="1.5" stroke-dasharray="6 4"/>
@@ -148,7 +148,7 @@
 <rect x="640.0" y="610.0" width="620.0" height="20.0" rx="16.0" ry="16.0" fill="#ECE5F3" stroke="#503669" stroke-width="1.0"/>
 <text x="950.0" y="621.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#503669" text-anchor="middle">omniORB dispatch threads → bounded request queue</text>
 <rect x="640.0" y="640.0" width="620.0" height="20.0" rx="16.0" ry="16.0" fill="#ECE5F3" stroke="#503669" stroke-width="1.0"/>
-<text x="950.0" y="651.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#503669" text-anchor="middle">drained by hh_node_tick() — keeps the no-locks invariant · U-11 / U-12</text>
+<text x="950.0" y="651.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#503669" text-anchor="middle">drained by hh_node_tick() — keeps the no-locks invariant</text>
 <g opacity="0.16"><rect x="62.5" y="703.0" width="250.0" height="140.0" rx="4" ry="4" fill="#1A1A1A" stroke="none" stroke-width="0"/></g>
 <g opacity="0.1"><rect x="61.2" y="701.6" width="250.0" height="140.0" rx="4" ry="4" fill="#1A1A1A" stroke="none" stroke-width="0"/></g>
 <rect x="60.0" y="700.0" width="250.0" height="140.0" rx="4" ry="4" fill="#FFFFFF" stroke="#1B2E4A" stroke-width="1.5"/>
@@ -178,7 +178,7 @@
 <rect x="360.0" y="750.0" width="230.0" height="20.0" rx="16.0" ry="16.0" fill="#E7ECF3" stroke="#1B2E4A" stroke-width="1.0"/>
 <text x="475.0" y="761.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#2A4674" text-anchor="middle">C API + CLI</text>
 <rect x="360.0" y="780.0" width="230.0" height="20.0" rx="16.0" ry="16.0" fill="#E7ECF3" stroke="#1B2E4A" stroke-width="1.0"/>
-<text x="475.0" y="791.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#2A4674" text-anchor="middle">ASCII key=value today · U-01</text>
+<text x="475.0" y="791.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#2A4674" text-anchor="middle">ASCII key=value today</text>
 <g opacity="0.16"><rect x="632.5" y="703.0" width="300.0" height="140.0" rx="4" ry="4" fill="#1A1A1A" stroke="none" stroke-width="0"/></g>
 <g opacity="0.1"><rect x="631.2" y="701.6" width="300.0" height="140.0" rx="4" ry="4" fill="#1A1A1A" stroke="none" stroke-width="0"/></g>
 <rect x="630.0" y="700.0" width="300.0" height="140.0" rx="4" ry="4" fill="#FFFFFF" stroke="#1B2E4A" stroke-width="1.5"/>
@@ -208,7 +208,7 @@
 <rect x="1310.0" y="750.0" width="270.0" height="20.0" rx="16.0" ry="16.0" fill="#DDEBEE" stroke="#1F4E5B" stroke-width="1.0"/>
 <text x="1445.0" y="761.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1F4E5B" text-anchor="middle">/dev/ptpN (PHC) + time regs</text>
 <rect x="1310.0" y="780.0" width="270.0" height="20.0" rx="16.0" ry="16.0" fill="#DDEBEE" stroke="#1F4E5B" stroke-width="1.0"/>
-<text x="1445.0" y="791.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1F4E5B" text-anchor="middle">Time plane absent — U-07</text>
+<text x="1445.0" y="791.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1F4E5B" text-anchor="middle">Time plane absent</text>
 <g opacity="0.16"><rect x="962.5" y="703.0" width="300.0" height="140.0" rx="4" ry="4" fill="#1A1A1A" stroke="none" stroke-width="0"/></g>
 <g opacity="0.1"><rect x="961.2" y="701.6" width="300.0" height="140.0" rx="4" ry="4" fill="#1A1A1A" stroke="none" stroke-width="0"/></g>
 <rect x="960.0" y="700.0" width="300.0" height="140.0" rx="4" ry="4" fill="#FFFFFF" stroke="#855E1F" stroke-width="1.5"/>
@@ -320,7 +320,7 @@
 <rect x="1210.0" y="1110.0" width="400.0" height="30.0" rx="0" ry="0" fill="#FFFFFF" stroke="#BFBFBF" stroke-width="1.0"/>
 <text x="1222.0" y="1126.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">CLASSIFICATION «set per programme»</text>
 <rect x="40.0" y="1145.0" width="1570.0" height="20.0" rx="0" ry="0" fill="#F7E3E2" stroke="#B83732" stroke-width="1.0"/>
-<text x="825.0" y="1156.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="italic" fill="#912B27" text-anchor="middle">CONCEPT STAGE · Blocks marked TO BUILD / BLOCKED do not exist. BLOCKED items await the contracts recorded in unknown.md (U-01, U-03, U-04, U-07, U-09, U-11, U-12).</text>
+<text x="825.0" y="1156.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="italic" fill="#912B27" text-anchor="middle">CONCEPT STAGE · Blocks marked TO BUILD / BLOCKED do not exist. BLOCKED items await the contracts recorded in unknown.md.</text>
 <rect x="130.0" y="1055.0" width="30.0" height="10.0" rx="0" ry="0" fill="#B83732" stroke="none" stroke-width="1.0"/>
 <rect x="490.0" y="1055.0" width="30.0" height="10.0" rx="0" ry="0" fill="#6E4D8F" stroke="none" stroke-width="1.0"/>
 <rect x="850.0" y="1055.0" width="30.0" height="10.0" rx="0" ry="0" fill="#855E1F" stroke="none" stroke-width="1.0"/>
@@ -370,7 +370,7 @@
 <text x="566.0" y="81.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#4D4E4C" text-anchor="start">Control plane (REDHAWK CF / CORBA → librc → radiod) · Data plane (PDU-over-DMA) · Time plane (1PPS / PHC)</text>
 <text x="66.0" y="125.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="italic" fill="#2A4674" text-anchor="start">PROCESSING SYSTEM — PetaLinux, dual Cortex-A9 (single PL owner: radiod)</text>
 <text x="1264.0" y="361.8" font-family="Liberation Sans, Arial, sans-serif" font-size="10" font-weight="bold" font-style="italic" fill="#503669" text-anchor="end">SCA 2.2.2 / REDHAWK CF — NEW LAYER</text>
-<text x="1604.0" y="851.8" font-family="Liberation Sans, Arial, sans-serif" font-size="10" font-weight="normal" font-style="italic" fill="#2C5A45" text-anchor="end">PL (FPGA FABRIC) + RF/HW — contracts undefined (U-03/U-04)</text>
+<text x="1604.0" y="851.8" font-family="Liberation Sans, Arial, sans-serif" font-size="10" font-weight="normal" font-style="italic" fill="#2C5A45" text-anchor="end">PL (FPGA FABRIC) + RF/HW — contracts undefined</text>
 <text x="66.0" y="1061.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="bold" font-style="normal" fill="#1A1A1A" text-anchor="start">LEGEND</text>
 <text x="176.0" y="1061.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">Control — rc_* / ICD-2</text>
 <text x="536.0" y="1061.6" font-family="Liberation Sans, Arial, sans-serif" font-size="9" font-weight="normal" font-style="normal" fill="#1A1A1A" text-anchor="start">CORBA / GIOP (NEW)</text>

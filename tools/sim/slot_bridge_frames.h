@@ -6,7 +6,7 @@
  * Address mapping is the one of MAC frame specification v2 section 4.5: the
  * Linux link address of on-air address hhll is 02-00-00-00-hh-ll.
  * Which frame kind and class an IP packet gets is not decided for the project
- * (unknown.md U-24); this tool sends OLSRv2 packets (UDP port 269 or IP
+ *; this tool sends OLSRv2 packets (UDP port 269 or IP
  * protocol 138) as routing control and everything else as data.
  */
 #ifndef HH_SLOT_BRIDGE_FRAMES_H

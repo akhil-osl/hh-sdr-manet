@@ -12,7 +12,7 @@ and networking portion of the HH-SDR software-defined radio architecture.
 > adapter `hh_netif` (`src/netif/`) between the Linux interface and the
 > radio abstraction. The self-healing distance-vector stack described below
 > is kept as the legacy reference and simulator workload. See
-> ARCHITECTURE.md, "OLSRv2: who owns routing", and `unknown.md` U-09, U-24.
+> ARCHITECTURE.md, "OLSRv2: who owns routing", and `unknown.md`.
 
 ---
 

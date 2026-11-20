@@ -554,19 +554,19 @@ How to read it:
 | Interface | Between | Carries | Status |
 |---|---|---|---|
 | I2S | Audio codec chip and `audio_pl` | Raw audio | Target design only |
-| PCM stream | `audio_pl` and the voice app | Cleaned 8 kHz audio | How it reaches Linux is open (U-13) |
+| PCM stream | `audio_pl` and the voice app | Cleaned 8 kHz audio | How it reaches Linux is open |
 | Sockets (UDP, RTP) | Applications and Linux | Voice, video, data packets | Standard Linux |
 | Netlink | OLSRd2 and Linux | Routes | Standard, works in the Docker mesh (F01-AK-2) and on the board (F01-AK-5) |
-| `manet0` | Linux and `hh_netif` | IP packets | Not built (U-24) |
+| `manet0` | Linux and `hh_netif` | IP packets | Not built |
 | `hh_netif` API | `manet0` binding and the radio side | Bytes, next hop, per-frame metrics | Built, tested |
 | `hh_mac` network side | Network layer and `hh_mac` | Send, receive callback, status, link metrics | Built, tested (this task) |
-| `hh_mac` logic side | `hh_mac` and MAC logic | Next frame, received frame, state | Built, tested; real binding not defined (U-21) |
-| ICD-1 (DMA) | Processor and `mac_pl` | Frames | Not specified (U-06) |
+| `hh_mac` logic side | `hh_mac` and MAC logic | Next frame, received frame, state | Built, tested; real binding not defined |
+| ICD-1 (DMA) | Processor and `mac_pl` | Frames | Not specified |
 | `hh_radio_ops_t` | Software and the radio | 8 functions: open, close, transmit, receive callback, status, metrics, channel, poll | Built; mock radio only |
-| ICD-2 (control socket) | `librc` and `radiod` | Commands and replies | ASCII protocol works; ICD-2 not specified (U-01) |
-| OpenCPI ACI | `radiod` and the FPGA workers | Configuration | Works on the development host; not on the board (U-17, U-19) |
-| MANET STROBE | `mac_pl` and the RF state machine | Transmit or receive, per slot | Not specified (U-08) |
-| ICD-3 (time) | PL time base and clock driver | Frame, slot, hop time | Not specified (U-07) |
+| ICD-2 (control socket) | `librc` and `radiod` | Commands and replies | ASCII protocol works; ICD-2 not specified |
+| OpenCPI ACI | `radiod` and the FPGA workers | Configuration | Works on the development host; not on the board |
+| MANET STROBE | `mac_pl` and the RF state machine | Transmit or receive, per slot | Not specified |
+| ICD-3 (time) | PL time base and clock driver | Frame, slot, hop time | Not specified |
 
 ### 13.4 Where the data comes from
 
@@ -582,9 +582,9 @@ How to read it:
 | RSSI, SNR | `mac_pl`, measured per burst | `hh_mac` per-frame metrics and link report | `hh_mac_on_rx()` |
 | PER | `hh_mac` (from counts) | Link report | Definition still TODO |
 | MAC state | `mac_pl` | `hh_mac`, status | `hh_mac_set_state()` |
-| Link quality for routing | `hh_mac_link_metrics()` | OLSRd2 | Not decided (U-24) |
+| Link quality for routing | `hh_mac_link_metrics()` | OLSRd2 | Not decided |
 | Radio status, faults | Radio | Operator | `radiod`, `librc`, `radioctl status` |
-| Time | GNSS 1PPS | PL time base, clock driver, MAC slots | ICD-3 (U-07) |
+| Time | GNSS 1PPS | PL time base, clock driver, MAC slots | ICD-3 |
 
 ### 13.5 A voice call, end to end
 
@@ -619,7 +619,7 @@ sequenceDiagram
 The lower half is the receiving node. On a relay node the packet goes up to
 Linux, is forwarded with the next route, and comes back down the same stack.
 The playback path from the voice app to the speaker is not described in the
-target drawing (U-13).
+target drawing.
 
 **Priority today.** The given order for user traffic is audio, then video,
 then data. `hh_mac` has five classes, control, emergency, voice, video and
@@ -648,7 +648,7 @@ rule). Frame send and per-frame metrics are deliberately not in its protocol.
 | OLSRd2 | Runs in the Docker mesh (F01-AK-2) and on the Zynq reference board (F01-AK-5) |
 | `hh_netif` | Built and tested |
 | `hh_mac` | Built and tested (this task); not joined to either side |
-| `manet0` binding | Not built (U-24) |
+| `manet0` binding | Not built |
 | Voice app, vocoder | Not in this repository; vocoder and rate open (OI-1) |
 | Video | Not defined (OI-5) |
 | FPGA blocks, DMA, time plane | Not in this repository |

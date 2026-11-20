@@ -12,7 +12,7 @@
 #
 # Only captures in the private link types of wireshark/hh_manet.lua decode as
 # MANET frames today (DLT_USER0 beacons, DLT_USER1 routing updates). On the
-# radio, MANET frames have no defined capture point yet (unknown.md U-16);
+# radio, MANET frames have no defined capture point yet;
 # frames of any other kind are counted as "not_hh", not guessed at.
 
 set -u

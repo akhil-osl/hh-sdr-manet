@@ -132,7 +132,7 @@ setsockopt(c.fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
 **No async events.** `radiod` only ever replies to requests — it never pushes.
 State changes and faults must be polled with `status`. Asynchronous delivery
 needs a wire framing for unsolicited messages, which the protocol does not have
-(see [`../unknown.md`](../unknown.md), U-01).
+(the protocol is not specified).
 
 **Not thread-safe.** One `hh_rc_client_t` per thread; do not share a connection
 across threads.
@@ -147,7 +147,7 @@ process is short-lived anyway.
 ## About the name `rc_*`
 
 The architecture drawing shows applications calling an **`rc_* API`**. Those
-exact signatures are **not specified anywhere** (U-02), so this library keeps
+exact signatures are **not specified anywhere**, so this library keeps
 its existing `hh_rc_client_*` names rather than inventing `rc_*` ones to match a
 picture.
 

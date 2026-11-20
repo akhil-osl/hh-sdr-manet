@@ -23,20 +23,20 @@
  *   - Name any worker, property or application. All of them come from
  *     configuration, so nothing about a particular waveform is compiled in.
  *   - Map a channel index to a frequency. set_channel returns
- *     HH_ERR_UNSUPPORTED: the channel plan is undefined (unknown.md U-14).
+ *     HH_ERR_UNSUPPORTED: the channel plan is undefined.
  *   - Carry frames. transmit returns HH_ERR_NOT_IMPLEMENTED: whether the data
- *     plane runs through radiod's process is undecided (unknown.md U-15).
+ *     plane runs through radiod's process is undecided.
  *   - Report frame or error counters. No application property is defined as
  *     their source, so they stay zero rather than being guessed.
  *   - Run board bring-up (ad9361_init, a separate radio-setup application).
- *     Whether radiod owns those steps is an open question (unknown.md U-19).
+ *     Whether radiod owns those steps is an open question.
  *
  * THREADS AND ALLOCATION
  *   radiod calls every function here from its single control thread. The
  *   OpenCPI runtime, however, runs its own container threads inside the
  *   process once an application exists, and allocates on the heap during
  *   open/close. Both are properties of the OpenCPI library, not of radiod's
- *   control path, and are recorded against unknown.md U-12.
+ *   control path.
  *
  * Only this header is plain C and always available. The implementation is
  * C++ (the OpenCPI ACI has no C binding) and is built only when the project
@@ -90,7 +90,7 @@ typedef struct {
 
     bool             finished;    /* application ended on its own */
 
-    hh_radio_rx_fn   rx_fn;       /* stored, never invoked: no frames (U-15) */
+    hh_radio_rx_fn   rx_fn;       /* stored, never invoked: no frames */
     void            *rx_ctx;
 
     /* Text of the most recent OpenCPI error, for logs and tests. */

@@ -10,14 +10,12 @@ and the test lead · **Target architecture:** OSL-628-BD-101 Rev 00
 **Governing rule.** Nothing unspecified is invented (see [`../CLAUDE.md`](../CLAUDE.md) §2).
 This document names no fault codes, thresholds, register maps, TLV IDs or
 footprint figures that are not in a cited source. Where something is unknown it
-says so and cites the gap in [`../unknown.md`](../unknown.md) (U-01 … U-19).
+says so and names the gap.
 
 **Baseline note.** This was written against the working tree of 2026-09-28,
 which contains uncommitted work: a radiod OpenCPI backend
 (`radiod/src/backends/ocpi_backend.cpp`, built with `-DHH_WITH_OPENCPI=ON`,
-host-tested), U-03/U-04/U-11 moved to PARTIAL, and new entries U-17 (which
-OpenCPI project is the baseline), U-18 (waveform/MAC gap) and U-19 (board
-bring-up vs single owner). If that work changes before it is committed, §2.1,
+host-tested). If that work changes before it is committed, §2.1,
 §4 and §8.3 need re-checking.
 Every statement is labelled with where it comes from:
 
@@ -32,9 +30,8 @@ Every statement is labelled with where it comes from:
 A caution on **[OCPI]**. The OpenCPI project is a QPSK/PRBS bring-up waveform on
 the same board class. It is **not** the HH-SDR MANET waveform; the HH-SDR worker
 set (`waveform_ctrl`, `drc`, `mac_ps`, `ad9361_config_proxy`, `telemetry`) is
-still unspecified (U-03), which project is the integration baseline is open
-(U-17), and the QPSK chain has no MAC, no CRC and no per-frame RSSI/SNR
-(U-18). Its counters and methods are cited here as proven patterns and as
+still unspecified, which project is the integration baseline is open, and the
+QPSK chain has no MAC, no CRC and no per-frame RSSI/SNR. Its counters and methods are cited here as proven patterns and as
 board facts, not as the HH-SDR contract.
 
 ---
@@ -65,7 +62,7 @@ decision (§9, Q6).
 
 Waveform and DSP verification (BER curves, spectrum masks) are hardware-team
 work in the OpenCPI project; this document only covers how their results would
-reach BIT and evidence records. RF safety interlocks are PL work (U-08); this
+reach BIT and evidence records. RF safety interlocks are PL work (RF safe-state contract); this
 document only records what software must do when it cannot guarantee them.
 
 ---
@@ -77,15 +74,15 @@ document only records what software must do when it cannot guarantee them.
 | Item | Location | What it gives | Limits |
 |---|---|---|---|
 | ATP/BIT scripts | [`tools/atp/`](../tools/atp/README.md) | `atp-iperf3.sh`, `atp-mgen.sh`, `atp-capture.sh`, `atp-decode.sh`, `atp-radioctl.sh` (`health` = read-only BIT, `lifecycle` = ATP) | Validated on network namespaces and the mock backend only |
-| Evidence schema | `tools/atp/README.md` "Evidence records" | JSON `hh-atp-evidence/1`: `check`, `result`, `reason`, UTC start/finish, `time_source`, `host`, `params`, `metrics`, `thresholds`, `artifacts` | `time_source` is always `"system"` (U-07) |
+| Evidence schema | `tools/atp/README.md` "Evidence records" | JSON `hh-atp-evidence/1`: `check`, `result`, `reason`, UTC start/finish, `time_source`, `host`, `params`, `metrics`, `thresholds`, `artifacts` | `time_source` is always `"system"` (time register map) |
 | Five results | same | `pass` 0 · `fail` 1 · `error` 3 · `blocked` 4 · `unjudged` 5 (exit 2 = usage) | Only `pass` is a pass |
 | Script self-tests | `tools/atp/selftest/`, `tools/atp/wireshark/check-dissector.sh` | Prove scripts fail on an impaired link and report `blocked`/`unjudged`/`error` honestly | `netns-selftest.sh` not in ctest (moves real traffic) |
-| MANET dissector | `tools/atp/wireshark/hh_manet.lua` | Decodes beacon and routing-update payloads, checked against the C codec | No on-radio capture point (U-16) |
+| MANET dissector | `tools/atp/wireshark/hh_manet.lua` | Decodes beacon and routing-update payloads, checked against the C codec | No on-radio capture point (capture point for MANET frames) |
 | radiod state machine | [`radiod/README.md`](../radiod/README.md) | 7 states incl. `faulted`; automatic `faulted` on failed `open` | — |
-| radiod fault registry | `radiod/include/hhsdr/radiod/events.h` | Per kind: `active`, `count`, `first_seen`, `last_seen`, `cleared_at`; `generation`, `asserted_total`, `cleared_total`. Kinds: `none`, `tx_failure`, `rx_silence`, `hw_fault`, `backend_io` | **In-process only; not on the wire** (U-01, U-05). No severity, no hardware fault list (U-05) |
+| radiod fault registry | `radiod/include/hhsdr/radiod/events.h` | Per kind: `active`, `count`, `first_seen`, `last_seen`, `cleared_at`; `generation`, `asserted_total`, `cleared_total`. Kinds: `none`, `tx_failure`, `rx_silence`, `hw_fault`, `backend_io` | **In-process only; not on the wire** (ICD-2 wire format, fault taxonomy). No severity, no hardware fault list (fault taxonomy) |
 | `radioctl status` / `stats` | [`radioctl/README.md`](../radioctl/README.md) | `state`, `operational`, `channel`, `frequency_hz`, `waveform_id`; `frames_tx/rx`, `tx_errors`, `rx_errors`, `requests_total`, `requests_rejected` | Counters cumulative since radiod start; no faults command; no timeout |
 | radioctl exit codes | same | 0 ok · 2 usage · 3 transport (radiod unreachable) · 4 rejected | 3 vs 4 is exactly the "radio gone" vs "wrong state" split BIT needs |
-| radiod OpenCPI backend (uncommitted, host-tested) | `radiod/include/hhsdr/radiod/ocpi_backend.h`, `radiod/src/backends/ocpi_backend.cpp` | Owns one OpenCPI application via the ACI: create → initialize → setProperty → start; `poll` notices the app finishing; `get_status.operational` = app created, started, not finished. Application path and property values come from configuration | **Reads no status properties**; frame/error counters stay zero because no property is defined as their source. Board bring-up (`ad9361_init`, radio-setup app) not owned (U-19). Board operation waits on U-17, U-19 |
+| radiod OpenCPI backend (uncommitted, host-tested) | `radiod/include/hhsdr/radiod/ocpi_backend.h`, `radiod/src/backends/ocpi_backend.cpp` | Owns one OpenCPI application via the ACI: create → initialize → setProperty → start; `poll` notices the app finishing; `get_status.operational` = app created, started, not finished. Application path and property values come from configuration | **Reads no status properties**; frame/error counters stay zero because no property is defined as their source. Board bring-up (`ad9361_init`, radio-setup app) not owned (bring-up ownership). Board operation waits on integration baseline, bring-up ownership |
 | Fault injection | `radioctl inject-fault <kind>` / `clear-fault` | Lets a BIT or ATP script prove its own detection path | `clear-fault` clears all kinds |
 | Structured log | [`include/hhsdr/core/log.h`](../include/hhsdr/core/log.h), `src/core/log.c` | `lvl=… comp=… event=… key=value…`, one line, ≤ 512 bytes, pluggable sink | **No timestamp and no sequence number in the record**; default sink is stderr |
 | MANET telemetry | [`include/hhsdr/manet/telemetry.h`](../include/hhsdr/manet/telemetry.h) | `hh_node_status_t`: neighbours, routes, partition, beacon counts, failures, recoveries, forwarder drops, `events_dropped`, radio availability | Only dumped at `hh-manet` exit (`src/main.c:117`); `hh-manet` exits at start-up without a hardware backend, so none of this is observable on the target today |
@@ -114,7 +111,7 @@ Methods and facts established there:
 | **Producer word count == consumer word count is the only trustworthy data-flow proof.** In-fabric BER and spectrum both false-pass when the source starves (the last word repeats and is whitened). | `DMA-PORTING-GUIDE.md` §7; CLAUDE.md §15A | A data-path BIT must compare counts first and only then trust BER. |
 | Loopback BER cannot judge TX: LVDS bit-map errors cancel end-to-end (BER 1.8×10⁻⁴ measured on white-noise output). | CLAUDE.md §9, trap 1 | RF-path BIT cannot be a simple loopback BER. |
 | The automated spectrum shoulder metric false-passes an aliased emission. | CLAUDE.md §9, trap 2 | Any automated RF limit needs a check that its input is valid. |
-| ACI oracle: `applications/dma_stream/dma_stream.cc` reads `dbg_in_words`, `dbg_in_underrun`, `dbg_out_dropped`, `dbg_out_words`, `overflow`, `in_sync`, `bit_count`, `err_count`, `bytesRead`, `bytesWritten` every 10 s via `OA::Application::getProperty` | source file | The radiod OpenCPI backend already follows its open sequence; the status-read half is the part not yet adopted. C++ is now allowed in that backend only (U-11). |
+| ACI oracle: `applications/dma_stream/dma_stream.cc` reads `dbg_in_words`, `dbg_in_underrun`, `dbg_out_dropped`, `dbg_out_words`, `overflow`, `in_sync`, `bit_count`, `err_count`, `bytesRead`, `bytesWritten` every 10 s via `OA::Application::getProperty` | source file | The radiod OpenCPI backend already follows its open sequence; the status-read half is the part not yet adopted. C++ is now allowed in that backend only (C++ boundary). |
 | `ocpihdl` segfaults after a DMA app has run; on an unclocked fabric `ocpihdl search`/`ocpirun` is a **hard CPU hang**. | CLAUDE.md trap 31 | BIT must never probe the PL from a side process; reads go through the one ACI owner. |
 | `ad9361_init` must run before anything touches the PL. `ad9361_proxy` must not be in a DMA app (its re-init stops the fabric clock). | CLAUDE.md traps 30–31 | PBIT ordering is fixed; AD9361 queries during service must go through whoever owns the AD9361. |
 | **Killing the application does not stop the RF carrier** — the PL free-runs; carrier off needs a bitstream reload or power-cycle. | `DMA-PORTING-GUIDE.md` §8 item 4 | Software death is not a safe state (§9, Q4). |
@@ -163,7 +160,7 @@ governing BIT standard has been named for HH-SDR (§9, Q1).
 
 | Metric | Meaning | How it would be computed here |
 |---|---|---|
-| **FD%** (fault detection) | Share of failures (normally weighted by failure rate) that BIT detects | Needs a failure-mode list with rates (an FMECA). None exists — **U-05** covers the fault list; failure rates are not in any repository |
+| **FD%** (fault detection) | Share of failures (normally weighted by failure rate) that BIT detects | Needs a failure-mode list with rates (an FMECA). None exists — **fault taxonomy** covers the fault list; failure rates are not in any repository |
 | **FI%** (fault isolation) | Share of detected failures isolated to ≤ N replaceable units | Needs the replaceable-unit breakdown. Not defined anywhere in either repository |
 | **FAR** (false alarm rate) | BIT failure indications with no confirmed fault, per operating hour or per test | Measurable once BIT runs on hardware; needs a logging and confirmation process |
 | **Detection latency** | Time from fault onset to BIT report | Measurable in simulation now (virtual clock) and on hardware later |
@@ -200,21 +197,21 @@ run the check on the radio.
 - **B** = available on the board now by shell, read-only, outside radiod
 - **C** = needs the radiod OpenCPI backend on the board, extended to read
   status properties. The backend exists (host-tested) but reads none today;
-  board operation waits on U-17 and U-19. Property names would come from
+  board operation is not built. Property names would come from
   configuration, as the backend already does for writes — the HH-SDR names
-  themselves are U-03
-- **D** = needs a hardware/interface contract (U-xx named)
+  themselves are not specified
+- **D** = needs a hardware/interface contract (named in the row)
 
 ### 4.1 Platform and configuration (PBIT)
 
 | # | Test | Type | Detects | Data source | Status |
 |---|---|---|---|---|---|
 | P1 | PL configured | PBIT, CBIT | Bitstream not loaded / FPGA manager error | `/sys/class/fpga_manager/fpga0/state` = `operating` [OCPI §8] | B |
-| P2 | Bitstream ↔ artifact identity | PBIT | Mismatched builds on the two partitions (UUID mismatch) | md5 of `*.bin` vs `*.bitz`, or OpenCPI UUID [OCPI §8] | B (check method); the HH-SDR artifact names are U-03 |
+| P2 | Bitstream ↔ artifact identity | PBIT | Mismatched builds on the two partitions (UUID mismatch) | md5 of `*.bin` vs `*.bitz`, or OpenCPI UUID [OCPI §8] | B (check method); the HH-SDR artifact names are OpenCPI app and worker names |
 | P3 | OpenCPI driver loaded | PBIT | Kernel driver absent | `ocpidriver status` [OCPI §8] | B — confirm it does not touch the PL before `ad9361_init` |
 | P4 | DMA memory reservation active | PBIT | Wrong dtb; DMA allocation will fail | `MemTotal` vs the value for the deployed dtb (119540 kB on the OpenCPI image) | B; the expected value is image-specific |
 | P5 | Kernel health | PBIT, CBIT | Oops / bad-page after driver load | `dmesg` count of `oops`/`bad page` [OCPI `board_dma.sh`] | B |
-| P6 | AD9361 initialised | PBIT | SPI/init failure | `ad9361_proxy.init_done`; `ad9361_init` exit status | C (property read via ACI); who runs `ad9361_init` is U-19; HH-SDR worker name is U-03 |
+| P6 | AD9361 initialised | PBIT | SPI/init failure | `ad9361_proxy.init_done`; `ad9361_init` exit status | C (property read via ACI); who runs `ad9361_init` is bring-up ownership; HH-SDR worker name is OpenCPI app and worker names |
 | P7 | radiod up and lifecycle legal | PBIT | Daemon not running; start failed → `faulted` | `radioctl status` exit 0/3, `state`, `operational` | A (mock); unchanged on hardware |
 | P8 | radiod configuration valid | PBIT | Bad config key | radiod exits 1 with line number | A |
 | P9 | Software self-check | PBIT | Component lifecycle wrong | SCA `runTest(1)` per component | A (in-process only; no remote caller) |
@@ -224,22 +221,22 @@ run the check on the radio.
 
 | # | Test | Type | Detects | Data source | Status |
 |---|---|---|---|---|---|
-| R1 | Data-flow oracle | CBIT | PS starvation, PL drops, stalled chain | producer count == consumer count; `dbg_in_underrun` = 0; `overflow` false [OCPI guide §7] | C for the OpenCPI QPSK app; the HH-SDR MAC/DMA counters are **U-03, U-06** |
-| R2 | RX acquisition | CBIT | Loss of sync | `qpsk_rx.in_sync` [OCPI] | C (QPSK only); HH-SDR sync indicator U-03 |
-| R3 | In-fabric BER | IBIT | Demod/descrambler faults | `bit_count`, `err_count` — **only after R1 passes** | C (QPSK PRBS test mode only); no PRBS mode is defined for the MANET waveform (U-03) |
-| R4 | App liveness | CBIT | ACI application dead while PL free-runs | a counter that stops when the process dies (`qpsk_ctrl.poll_count` pattern) | C; not present in the DMA app; HH-SDR equivalent U-03 |
-| R5 | radiod-reported radio health | CBIT | `operational=0`, rising error counters | `radioctl status`/`stats` | A (mock); meaning on hardware depends on the backend (U-03, U-04) |
-| R6 | Fault registry | CBIT | Latched `hw_fault`, `backend_io`, `tx_failure`, `rx_silence` | `hh_radiod_faults()` | A in-process; **over the wire U-01, U-05** |
-| R7 | AD9361 temperature | CBIT | Over-temperature | `ad9361_get_temperature` (no-OS) [R8] | C + a new proxy/worker property (U-03); limits: none specified |
-| R8 | AD9361 RSSI | CBIT | Dead RX, blocked antenna (inference only) | `ad9361_get_rx_rssi` [R8] | C + new property (U-03); interpretation needs U-05 |
+| R1 | Data-flow oracle | CBIT | PS starvation, PL drops, stalled chain | producer count == consumer count; `dbg_in_underrun` = 0; `overflow` false [OCPI guide §7] | C for the OpenCPI QPSK app; the HH-SDR MAC/DMA counters are **OpenCPI app and worker names, ICD-1 descriptor layout** |
+| R2 | RX acquisition | CBIT | Loss of sync | `qpsk_rx.in_sync` [OCPI] | C (QPSK only); HH-SDR sync indicator OpenCPI app and worker names |
+| R3 | In-fabric BER | IBIT | Demod/descrambler faults | `bit_count`, `err_count` — **only after R1 passes** | C (QPSK PRBS test mode only); no PRBS mode is defined for the MANET waveform (OpenCPI app and worker names) |
+| R4 | App liveness | CBIT | ACI application dead while PL free-runs | a counter that stops when the process dies (`qpsk_ctrl.poll_count` pattern) | C; not present in the DMA app; HH-SDR equivalent OpenCPI app and worker names |
+| R5 | radiod-reported radio health | CBIT | `operational=0`, rising error counters | `radioctl status`/`stats` | A (mock); meaning on hardware depends on the backend (OpenCPI app and worker names, ACI lifecycle) |
+| R6 | Fault registry | CBIT | Latched `hw_fault`, `backend_io`, `tx_failure`, `rx_silence` | `hh_radiod_faults()` | A in-process; **over the wire ICD-2 wire format, fault taxonomy** |
+| R7 | AD9361 temperature | CBIT | Over-temperature | `ad9361_get_temperature` (no-OS) [R8] | C + a new proxy/worker property (OpenCPI app and worker names); limits: none specified |
+| R8 | AD9361 RSSI | CBIT | Dead RX, blocked antenna (inference only) | `ad9361_get_rx_rssi` [R8] | C + new property (OpenCPI app and worker names); interpretation needs fault taxonomy |
 | R9 | AD9361 BIST tone / PRBS / loopback | IBIT | Isolates analog chain vs digital port | no-OS `ad9361_bist_tone`, `ad9361_bist_prbs`, `ad9361_bist_loopback` [R8]; UG-570 BIST [R9]; proven via raw override in `board_bist.txt` | C, out of service only; must not run concurrently with traffic. Pass criteria are **not** loopback BER (trap 1) |
 | R10 | LO / gain readback | PBIT | Requested vs applied mismatch | no-OS `ad9361_get_rx_lo_freq`, `ad9361_get_tx_attenuation` [R8] | C + new property; note the proxy's properties report *requested* values only [OCPI §6] |
 | R11 | Die temperature and supply rails | CBIT | Over-temperature, rail out of range | Zynq XADC via Linux IIO (`in_temp0_raw`, `in_voltage0_vccint_raw`, …) [R10], [R11] | B if the kernel driver is built (DT node present; driver not verified). Limits from the device datasheet, not from this document |
 | R12 | Configuration memory integrity | CBIT | SEU in PL configuration | 7-series readback CRC (`POST_CRC`) or the SEM IP [R12] | D: a PL design decision (E1–E4); not in any current bitstream |
-| R13 | RF state / safe state | CBIT | TX when it should not | `rf_ctrl_fsm` `FAULT`/`SAFE` states | D: **U-08** |
-| R14 | Time plane lock / holdover | CBIT | GNSS/1PPS loss | PHC, 1PPS status | D: **U-07** |
-| R15 | Hop timing | CBIT | Missed hops | `fh_controller` status | D: **U-14** |
-| R16 | Audio path | CBIT | Codec failure | `audio_pl` | D: **U-13** |
+| R13 | RF state / safe state | CBIT | TX when it should not | `rf_ctrl_fsm` `FAULT`/`SAFE` states | D: **RF safe-state contract** |
+| R14 | Time plane lock / holdover | CBIT | GNSS/1PPS loss | PHC, 1PPS status | D: **time register map** |
+| R15 | Hop timing | CBIT | Missed hops | `fh_controller` status | D: **frequency-hopping control** |
+| R16 | Audio path | CBIT | Codec failure | `audio_pl` | D: **audio path ownership** |
 | R17 | Hardware watchdog | CBIT | PS software hang | Cadence WDT in DT (`timeout-sec = 10`), BusyBox `watchdog` applet | B to enable; **what a watchdog reset does to the RF carrier is not known** (§9, Q4) |
 
 The ILA is deliberately absent from this table. It is a netlist-inserted
@@ -250,13 +247,13 @@ debug instrument (`ILA_EN` must be 0 inside OpenCPI; CLAUDE.md trap 3 and
 
 | # | Test | Type | Detects | Data source | Status |
 |---|---|---|---|---|---|
-| N1 | Neighbour presence | CBIT | Isolation, radio deaf | `hh_node_status_t.neighbor_count`, `neighbor_ups/downs` | A in sim; on target needs `hh-manet` to run (hardware backend, U-15) and a periodic export (§8) |
+| N1 | Neighbour presence | CBIT | Isolation, radio deaf | `hh_node_status_t.neighbor_count`, `neighbor_ups/downs` | A in sim; on target needs `hh-manet` to run (hardware backend, control and data split) and a periodic export (§8) |
 | N2 | Partition | CBIT | Network split | `partitioned`, `reachable_nodes` | same as N1 |
 | N3 | Beacon health | CBIT | Malformed/duplicate floods | `beacons_rx_malformed`, `beacons_rx_duplicate` | same as N1 |
 | N4 | Self-healing activity | CBIT | Repeated failures/recoveries | `failures_confirmed`, `recoveries_started/completed` | same as N1 |
 | N5 | Internal overload | CBIT | Event bus overflow | `events_dropped` | same as N1 |
-| N6 | End-to-end throughput / loss / latency | IBIT, ATP | Degraded mesh | `atp-iperf3.sh`, `atp-mgen.sh` | A (netns); on radio needs `manet0` (**U-06**); latency needs sync (**U-07**) |
-| N7 | Beacon sequence continuity | ATP | Lost beacons at a capture point | `atp-decode.sh` | A on generated pcaps; on radio **U-16** |
+| N6 | End-to-end throughput / loss / latency | IBIT, ATP | Degraded mesh | `atp-iperf3.sh`, `atp-mgen.sh` | A (netns); on radio needs `manet0` (**ICD-1 descriptor layout**); latency needs sync (**time register map**) |
+| N7 | Beacon sequence continuity | ATP | Lost beacons at a capture point | `atp-decode.sh` | A on generated pcaps; on radio **capture point for MANET frames** |
 
 ---
 
@@ -297,9 +294,9 @@ Gaps found by this research:
 | Gap | Detail | Proposed handling |
 |---|---|---|
 | Board image lacks `timeout`, `jq`, `crond` and the traffic tools | §2.3 | Decision §9, Q8: add BusyBox `timeout`/`crond` applets and `jq` to the image, or provide a small C BIT runner that writes the same JSON |
-| `time_source` is always `system`; board has no RTC | §2.3, U-07 | Add monotonic time and boot identity to evidence (§8.4) |
+| `time_source` is always `system`; board has no RTC | §2.3, time register map | Add monotonic time and boot identity to evidence (§8.4) |
 | No evidence for PL/OpenCPI checks | R1–R10 | Same schema, new `check` names, produced through radiod (§8) |
-| Fault registry unreadable from scripts | U-01, U-05 | `blocked` until a `faults` response is specified |
+| Fault registry unreadable from scripts | ICD-2 wire format, fault taxonomy | `blocked` until a `faults` response is specified |
 
 ---
 
@@ -314,29 +311,29 @@ same method as [`CF-RAM-MEASUREMENT.md`](CF-RAM-MEASUREMENT.md).
 |---|---|---|---|---|---|---|
 | **Custom key=value exporter** (extend `hh_telemetry_*`, radiod `status`/`stats`) | The repo's own format | Unmeasured; no new process if built into existing daemons | Only what is sent; can be batched and rate-limited | Yes — C11, libc only | Zero dependencies; tests already parse it; same format as logs | Not a standard; an NMS must be written for it |
 | **syslog forwarding** (RFC 5424 / RFC 5426 UDP) [R17] | BusyBox `syslogd -R host:port -L` | Already in image | Every forwarded line costs air time; UDP, no delivery guarantee | Yes (in image) | No new software | Log lines are not metrics; loss under congestion is silent |
-| **SNMP** (with IF-MIB [R18], NHDP-MIB RFC 6779 [R19], OLSRv2-MIB RFC 7184 [R20]) | Standard management; the MANET MIBs exist only for NHDP/OLSRv2 | Unmeasured (e.g. Net-SNMP agent) | Poll-driven; each walk costs air time | Needs an agent added to the image | Standard MIBs for OLSRv2 state and counters, incl. threshold notifications | MIBs only useful if U-09 chooses OLSRv2; SNMPv3 security must be configured |
+| **SNMP** (with IF-MIB [R18], NHDP-MIB RFC 6779 [R19], OLSRv2-MIB RFC 7184 [R20]) | Standard management; the MANET MIBs exist only for NHDP/OLSRv2 | Unmeasured (e.g. Net-SNMP agent) | Poll-driven; each walk costs air time | Needs an agent added to the image | Standard MIBs for OLSRv2 state and counters, incl. threshold notifications | MIBs only useful if routing choice chooses OLSRv2; SNMPv3 security must be configured |
 | **NETCONF/YANG** (RFC 6241, RFC 7950) [R21] | Model-driven config and state over SSH | Unmeasured; typically a larger stack | Session-oriented, XML | Needs a server added | Transactional config; model-driven | Heaviest option; no MANET YANG model identified by this research |
 | **Prometheus `node_exporter`** [R22] | HTTP `/metrics` endpoint, pulled by a server | Unmeasured on target; Go binary, ARMv7 builds published | Pull scrape over the mesh on every interval | Binary drop-in; no package in image | Standard ecosystem | Pull model is a poor fit for a bandwidth-limited mesh; host metrics only, not radio |
 | **collectd / telegraf** [R23], [R24] | Push agents with plug-ins | Unmeasured on target | Configurable push | Would need adding (Yocto recipes exist for collectd) | Rich plug-in sets | Extra daemons in ~117 MB; most plug-ins irrelevant |
-| **DLEP** (RFC 8175) [R25] | Radio↔router protocol: Destination Up/Down/Update, Current/Maximum Data Rate, Latency, Resources, Relative Link Quality (§13.12–13.19) | Unmeasured | Local link only (radio to attached router), not over the air | Would need an implementation | Standard way to give a router per-neighbour link metrics | Only relevant if a separate router consumes radio metrics — see U-09 |
+| **DLEP** (RFC 8175) [R25] | Radio↔router protocol: Destination Up/Down/Update, Current/Maximum Data Rate, Latency, Resources, Relative Link Quality (§13.12–13.19) | Unmeasured | Local link only (radio to attached router), not over the air | Would need an implementation | Standard way to give a router per-neighbour link metrics | Only relevant if a separate router consumes radio metrics — see routing choice |
 
-### 6.1 Relevance to U-09 (OLSRv2 vs the existing stack)
+### 6.1 Relevance to the routing choice (OLSRv2 vs the existing stack)
 
 - If **OLSRv2** is adopted, the standard observability comes with it: RFC 7184
   and RFC 6779 MIBs, OLSRv2 on UDP port 269 (RFC 5498) capturable on any IP
-  interface with Wireshark's RFC 5444 dissector (U-16 note). The radio's link
+  interface with Wireshark's RFC 5444 dissector (capture point for MANET frames note). The radio's link
   metrics would reach the router either through librc (as the drawing says) or
-  through DLEP. Choosing between those two is part of U-09.
+  through DLEP. Choosing between those two is part of the routing choice.
 - If the **custom stack** stays, none of these MIBs apply. `hh_node_status_t`
   is then the observability model, and exporting it is our own work (§8).
 
 This research does not recommend one routing choice over the other; it records
-that the observability cost differs and should be weighed in the U-09 decision.
+that the observability cost differs and should be weighed in the routing choice.
 
 ### 6.2 Flow and packet evidence
 
-`atp-capture.sh` captures on `manet0` once it exists (U-06). MANET control
-frames have no capture point (U-16). Capture on the radio costs CPU and RAM on
+`atp-capture.sh` captures on `manet0` once it exists (ICD-1 descriptor layout). MANET control
+frames have no capture point (capture point for MANET frames). Capture on the radio costs CPU and RAM on
 the node, and the pcap then has to leave the node — over the mesh (air time)
 or by maintenance download. Recommendation: capture on the radio only for
 IBIT/ATP runs, with a bounded duration and size, never as CBIT.
@@ -380,14 +377,14 @@ opt-in, WARN+ only, and rate-limited.
 
 ### 7.4 Time-stamping without a time plane
 
-- There is no PHC and no 1PPS (U-07), and the device tree shows no RTC. The
+- There is no PHC and no 1PPS (time register map), and the device tree shows no RTC. The
   wall clock at boot is whatever the kernel starts with, unless set by
   network time or an operator.
 - Therefore: every record and every evidence file carries **boot identity +
   monotonic time + sequence**, and wall-clock UTC is recorded as "as reported
   by the system", as `time_source: "system"` already does.
 - Cross-node ordering (e.g. one-way latency, correlating a link failure seen by
-  two nodes) stays `blocked` until U-07 is closed, exactly as `atp-mgen.sh`
+  two nodes) stays `blocked` until time register map is closed, exactly as `atp-mgen.sh`
   already reports.
 
 ---
@@ -419,22 +416,22 @@ opt-in, WARN+ only, and rate-limited.
 | Structured-log upgrade | `seq=` and `mono_ms=` fields; syslog sink option (§7.2). Tests continue to assert on records |
 | Periodic MANET status | Emit `hh_telemetry_format_status()` as a log record at a configured interval, not only at exit (N1–N5 become observable in sim and later on target). The interval is configuration, not a spec value |
 | SCA `runTest` mapping | Keep test id 1 as the software self-check; unknown ids stay `UnknownTest`. Map `runTest` results into evidence records in-process. No new test ids are invented |
-| Fault registry | Keep in-process; mark any BIT that needs it over the wire as `blocked` (U-01, U-05) |
+| Fault registry | Keep in-process; mark any BIT that needs it over the wire as `blocked` (ICD-2 wire format, fault taxonomy) |
 | Self-tests | For each new check, a test that forces `fail` (fault injection via `inject-fault`, impaired netns) |
 
 ### 8.3 Phase v2 — on the board, via the radiod ACI backend
 
-The ACI sequence (U-04) and the C++ boundary (U-11) are now resolved enough
-for a host-tested backend to exist. On-board work starts when U-17 (baseline
-project) and U-19 (bring-up ownership) are decided. U-12 remains relevant:
-the OpenCPI runtime runs its own container threads inside radiod's process.
+The ACI sequence and the C++ boundary are now resolved enough for a
+host-tested backend to exist. On-board work starts when the baseline project and
+the bring-up ownership are fixed. The threading model remains relevant: the
+OpenCPI runtime runs its own container threads inside radiod's process.
 
 | Work | Detail |
 |---|---|
 | Platform PBIT script | P1–P5, P10 as a POSIX `sh` script run at boot **before** radiod starts PL work, in the order the OpenCPI project proved: FPGA state → driver → `ad9361_init` → application. Writes evidence. Never touches the PL before `ad9361_init` |
-| radiod OpenCPI backend: status reads | Extend the existing backend to read configured worker status properties in-process (`getProperty`), as `dma_stream.cc` does, and maps them to `hh_radio_status_t` (`operational`, counters) and to fault-registry kinds that already exist (`hw_fault`, `backend_io`, `rx_silence`, `tx_failure`). Which property maps to which kind is a U-05 decision, recorded when made |
-| Data-flow oracle as CBIT | R1 implemented inside radiod on the real HH-SDR counters, once U-03/U-06 name them |
-| AD9361 health | R7, R8, R10 need new read-only properties on the AD9361 proxy worker (E1–E4, U-03). Until then `blocked` |
+| radiod OpenCPI backend: status reads | Extend the existing backend to read configured worker status properties in-process (`getProperty`), as `dma_stream.cc` does, and maps them to `hh_radio_status_t` (`operational`, counters) and to fault-registry kinds that already exist (`hw_fault`, `backend_io`, `rx_silence`, `tx_failure`). Which property maps to which kind is a fault taxonomy decision, recorded when made |
+| Data-flow oracle as CBIT | R1 implemented inside radiod on the real HH-SDR counters, once OpenCPI app and worker names/ICD-1 descriptor layout name them |
+| AD9361 health | R7, R8, R10 need new read-only properties on the AD9361 proxy worker (E1–E4, OpenCPI app and worker names). Until then `blocked` |
 | XADC | R11 via IIO sysfs, read by a platform script or radiod; verify the kernel driver first |
 | IBIT | R9 (AD9361 BIST) and the lifecycle check as an operator-initiated test from `stopped`, never while `running` |
 | Image changes | Per §9, Q8/Q9: `timeout` + `crond` applets (or init-script loop), `jq` or a C evidence writer, persistent log partition, syslog sink |
@@ -444,13 +441,13 @@ the OpenCPI runtime runs its own container threads inside radiod's process.
 
 | Unblocks | Adds |
 |---|---|
-| U-01 + U-05 | `faults` response / async fault events; BIT reads the registry over the wire; severity and latching per the agreed taxonomy |
-| U-06 | `manet0` counters (`ip -s link`), on-radio iperf3/MGEN ATP |
-| U-07 | `time_source: "phc"`; one-way latency; cross-node event ordering; time-plane lock as CBIT (R14) |
-| U-08 | RF safe-state BIT (R13); defined carrier-off action |
-| U-09 | Either OLSRv2 MIBs/DLEP, or the custom telemetry as the management model |
-| U-14, U-13 | Hop-timing and audio BIT (R15, R16) |
-| U-16 | On-radio capture of MANET frames; beacon continuity (N7) |
+| ICD-2 wire format + fault taxonomy | `faults` response / async fault events; BIT reads the registry over the wire; severity and latching per the agreed taxonomy |
+| ICD-1 descriptor layout | `manet0` counters (`ip -s link`), on-radio iperf3/MGEN ATP |
+| time register map | `time_source: "phc"`; one-way latency; cross-node event ordering; time-plane lock as CBIT (R14) |
+| RF safe-state contract | RF safe-state BIT (R13); defined carrier-off action |
+| routing choice | Either OLSRv2 MIBs/DLEP, or the custom telemetry as the management model |
+| frequency-hopping control, audio path ownership | Hop-timing and audio BIT (R15, R16) |
+| capture point for MANET frames | On-radio capture of MANET frames; beacon continuity (N7) |
 
 ### 8.5 How BIT results reuse the evidence schema and exit codes
 
@@ -492,21 +489,22 @@ never as GO.
 | Q1 | Which BIT standard or customer specification governs (MIL-HDBK-2165 tailoring, customer SOW, other)? | Sets vocabulary, required analyses, and whether FD/FI must be predicted | System architect / customer |
 | Q2 | Required FD%, FI% (to how many units), and maximum false-alarm rate? | Drives the size of the BIT inventory and the need for an FMECA | System architect + test lead |
 | Q3 | RF BIT scope: is IBIT with AD9361 BIST/loopback required? Is on-air RF self-test permitted, or only into a load? | Determines whether R9 is built and its safety conditions | E1–E4 + system architect |
-| Q4 | Carrier-off safety action when software dies. Killing the app does not stop the carrier; what does a watchdog reset do to the PL? Who guarantees RF off? | Safety; also blocks enabling the watchdog (R17). Related to U-08; the radiod `stop` side is recorded under U-04/U-19 | E1–E4 (PL) + system architect |
+| Q4 | Carrier-off safety action when software dies. Killing the app does not stop the carrier; what does a watchdog reset do to the PL? Who guarantees RF off? | Safety; also blocks enabling the watchdog (R17). Related to RF safe-state contract; the radiod `stop` side is recorded under ACI lifecycle/bring-up ownership | E1–E4 (PL) + system architect |
 | Q5 | Telemetry/management bandwidth budget over the mesh (bytes/s per node, priority vs user traffic)? | Decides whether any remote logging or NMS polling is allowed | System architect + E6 |
 | Q6 | Allowed management protocols over the mesh: none, syslog, SNMP, NETCONF, custom? Is there an NMS at all? | Selects §6 option; security accreditation | System architect / customer |
 | Q7 | Log retention: how much persistent storage, which levels, how long; post-mission download method; any data-handling restrictions on logs? | Sizing of the persistent log; flash wear | E5 (BSP) + customer |
 | Q8 | Production vs development image content: may the production image carry `jq`, BusyBox `timeout`/`crond`, tcpdump, iperf3? | `tools/atp` cannot run on the current image; §5.2 | E5 + test lead |
 | Q9 | Init system for the HH-SDR image: BusyBox sysvinit (as on the board now) or systemd (as `DEPLOYMENT-ARCHITECTURE.md` assumes)? | Service supervision, log capture, BIT scheduling | E5 |
-| Q10 | Evidence schema revision: add boot identity and monotonic time (`hh-atp-evidence/2`) or keep `/1` with extra `params` fields? | Evidence ordering without U-07 | Test lead |
-| Q11 | Mapping of hardware status to fault kinds, severity and latching | Needed to turn worker counters into registry entries | Architect + E1–E4 (**U-05**) |
+| Q10 | Evidence schema revision: add boot identity and monotonic time (`hh-atp-evidence/2`) or keep `/1` with extra `params` fields? | Evidence ordering without time register map | Test lead |
+| Q11 | Mapping of hardware status to fault kinds, severity and latching | Needed to turn worker counters into registry entries | Architect + E1–E4 (**fault taxonomy**) |
 | Q12 | Operator HMI: what BIT indication is shown and where? | GO/NO-GO presentation | System architect |
 
 One finding of this research may warrant a new `unknown.md` entry (not added
 here, since this task writes only this file): the **board image content for
 test and logging tools, the init system and log persistence** (Q7–Q9).
-The carrier-off behaviour (Q4) is already partly recorded under U-04 and U-19;
-the watchdog/process-death case is not, and may belong under U-08.
+The carrier-off behaviour (Q4) is already partly recorded under the ACI lifecycle and the bring-up ownership;
+the watchdog/process-death case is not, and may belong under the RF safe-state
+contract.
 
 ---
 

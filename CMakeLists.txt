@@ -73,8 +73,8 @@ add_library(hhsdr_core STATIC
   #
   # Severing this link is what fully enforces the architecture's single-owner
   # rule, and it is deliberately NOT done here — it changes hh-manet's startup
-  # behaviour and is blocked on unknown.md U-15 (the control/data split of
-  # hh_radio_ops_t).
+  # behaviour and is blocked on the control/data split of
+  # hh_radio_ops_t.
   radiod/src/backends/hw_adapter.c
   src/manet/discovery.c
   src/manet/neighbor.c

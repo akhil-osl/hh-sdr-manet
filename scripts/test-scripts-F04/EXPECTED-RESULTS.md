@@ -17,7 +17,7 @@ Slot capacity (256 bytes in the real OLSRd2 run) is a placeholder, so every shar
 | Routing version | 0.15.1 in the simulation; the target version must be recorded and compared | MEASURED for 0.15.1, target version NOT TRACED |
 | Interface state | up | DERIVED, link must be up before routing starts |
 | Peer answers ping | at least 1 reply of 3 | DERIVED from route formation below |
-| MTU in use | NOT TRACED. The simulation fixture carried OLSRd2 packets of 58 to 103 bytes or more, all within a 229-byte limit at 256-byte slot capacity. The target MTU is not defined (unknown.md U-24, U-28) | NOT TRACED |
+| MTU in use | NOT TRACED. The simulation fixture carried OLSRd2 packets of 58 to 103 bytes or more, all within a 229-byte limit at 256-byte slot capacity. The target MTU is not defined (unknown.md U-02) | NOT TRACED |
 
 ## Step 2: route discovery (02-route-discovery.sh)
 
@@ -62,4 +62,4 @@ The simulation also measured route repair after a link cut: routes deleted 20.4 
 
 - A 2-node simulation run (one hop), to replace the DERIVED round trip and route time with MEASURED values.
 - A simulation run that records link metrics with valid flags and counts control packets per node per second.
-- A defined MTU and slot capacity for the target (unknown.md U-24, U-28).
+- A defined MTU and slot capacity for the target (unknown.md U-02).

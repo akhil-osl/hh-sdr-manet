@@ -5,7 +5,7 @@ network layer, the slot scheduler with its PDU codec, network entry, and the
 slot allocator with its traffic classes.
 
 Everything here runs in the host simulation. The binding to the logic, burst
-timing and the radio are not defined yet (U-21, U-22, U-28), so nothing here is
+timing and the radio are not defined yet (U-02), so nothing here is
 a hardware contract.
 
 ## MAC service (`mac.c`)
@@ -29,7 +29,7 @@ On each own slot the scheduler takes queued frames from the MAC, packs them into
 one PDU v2 (control block plus messages) and hands it to a transmit function.
 Received PDUs are decoded and passed up. Time comes only from the injected
 clock. A frame is 20 slots of 1 ms by default, 50 frames make a superframe.
-Capacity of a slot is a placeholder (U-22, U-28).
+Capacity of a slot is a placeholder (U-02).
 
 Details: [docs/SLOT-ENGINE-SPEC.md](../../docs/SLOT-ENGINE-SPEC.md).
 
@@ -78,8 +78,9 @@ the slots it has.
 
 **Classes.** Three allocation classes: voice, video, data. Control and emergency
 stay outside the sharing. `hh_mac_class_from_dscp` maps an IP DSCP to a class:
-EF (46) is voice; AF41, AF42, AF43 (34, 36, 38) are video; every other value is
-data. It never returns control or emergency.
+EF (46) is voice; CS3, AF31 to AF33, CS4 and AF41 to AF43 (24, 26, 28, 30, 32, 34,
+36, 38) are video; every other value, call signalling CS5 included, is data. It
+never returns control or emergency.
 
 **Voice admission.** `hh_slot_voice_admit` asks, read-only, whether a new voice
 flow fits the reserve, using the same table and rule as the allocator. The call
@@ -120,7 +121,6 @@ Run them with `ctest --test-dir build --output-on-failure`.
 ### Known limits
 
 - No smoothing of demand and no rule keeping slot positions stable between maps.
-- Demand counts messages, not calls; a voice flow count or flow age needs a change
-  to the frame specification (U-31).
+- Demand counts messages, not calls, so two calls started in the same frame can both be admitted.
 - A member that leaves stays in the tables until its report goes stale.
-- Open values and decisions: U-31, U-32, U-33 in `unknown.md`.
+- Open values and decisions: U-05 and U-06 in `unknown.md`.

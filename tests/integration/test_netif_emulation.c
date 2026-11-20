@@ -12,7 +12,7 @@
 #define B 2u
 #define C 3u
 
-/* Fixture choice; the real kind is undecided (U-24). */
+/* Fixture choice; the real kind is undecided. */
 #define KIND HH_FRAME_DATA
 
 typedef struct node {

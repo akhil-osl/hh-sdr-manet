@@ -232,7 +232,7 @@ They run in real time with libcoap's minimum timeout of 1 s, about 6 s in all. R
 
 Each destination and class has its own CoAP session and so its own socket, marked once with the class DSCP, so a retransmission keeps its class. A received stream is therefore one source IP and port, and Message IDs are counted per stream.
 
-CoAP allows one outstanding message per session (NSTART 1). A second voice message waits for the ACK of the first, while the first message of each other class can already be on the wire. The values above are placeholders until the unknown entry U-27 is settled.
+CoAP allows one outstanding message per session (NSTART 1). A second voice message waits for the ACK of the first, while the first message of each other class can already be on the wire. The values above are placeholders until the unknown entry U-01 is settled.
 
 ## Voice call setup
 

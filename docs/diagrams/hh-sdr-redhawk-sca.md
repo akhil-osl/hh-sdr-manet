@@ -22,7 +22,7 @@ flowchart TB
 
         subgraph L1["Applications &amp; routing"]
             APP["APPLICATIONS<br/><i>Voice (MELPe) · Data / C2 / HMI</i><br/><b>BUILT</b>"]
-            MANET["MANET ROUTING<br/><i>hh_node_t · DV self-healing</i><br/><i>OLSRv2 deferred — U-09</i><br/><b>BUILT</b>"]
+            MANET["MANET ROUTING<br/><i>hh_node_t · DV self-healing</i><br/><i>OLSRv2 deferred</i><br/><b>BUILT</b>"]
             TEST["TEST AUTOMATION<br/><i>ATP / BIT · radioctl CLI</i><br/><b>BUILT</b>"]
         end
 
@@ -30,25 +30,25 @@ flowchart TB
             CF["REDHAWK CORE FRAMEWORK<br/><i>DomainManager · DeviceManager</i><br/><i>ApplicationFactory · omniORB</i><br/><b>TO BUILD</b>"]
             PROFILE["DOMAIN PROFILE ($SDRROOT)<br/><i>SPD · SCD · PRF · SAD · DCD</i><br/><i>PRF = 23 props from resource.c</i><br/><b>TO BUILD</b>"]
             RES["MANET_Node — CF::Resource<br/><i>C++ servant : Resource_impl</i><br/><i>LifeCycle · PropertySet · Port</i><br/><b>TO BUILD</b>"]
-            DEV["Radio — CF::Device<br/><i>DeviceManager-owned</i><br/><b>BLOCKED — U-03 / U-04</b>"]
-            ORB["ORB THREAD → CONTROL-LOOP BOUNDARY<br/><i>omniORB dispatch threads → bounded request queue</i><br/><i>drained by hh_node_tick() — keeps the no-locks invariant</i><br/><b>TO BUILD — U-11 / U-12</b>"]
+            DEV["Radio — CF::Device<br/><i>DeviceManager-owned</i><br/><b>BLOCKED</b>"]
+            ORB["ORB THREAD → CONTROL-LOOP BOUNDARY<br/><i>omniORB dispatch threads → bounded request queue</i><br/><i>drained by hh_node_tick() — keeps the no-locks invariant</i><br/><b>TO BUILD</b>"]
         end
 
         subgraph L3["Existing C control plane"]
             IP["LINUX IP STACK<br/><i>skb priority / DSCP → bearer class</i><br/><b>BUILT</b>"]
-            LIBRC["librc / radioctl<br/><i>C API + CLI</i><br/><i>ASCII key=value today — U-01</i><br/><b>BUILT</b>"]
+            LIBRC["librc / radioctl<br/><i>C API + CLI</i><br/><i>ASCII key=value today</i><br/><b>BUILT</b>"]
             RADIOD["radiod — PL OWNER<br/><i>Only process that opens OpenCPI</i><br/><i>Lifecycle · events · fault registry</i><br/><b>BUILT</b>"]
             MANET0["manet0 net_device<br/><i>pdu_dma rings · TLAST</i><br/><b>BUILT</b>"]
-            CLOCK["RADIO CLOCK DRIVER<br/><i>/dev/ptpN (PHC) + time regs</i><br/><i>Time plane absent — U-07</i><br/><b>TO BUILD</b>"]
+            CLOCK["RADIO CLOCK DRIVER<br/><i>/dev/ptpN (PHC) + time regs</i><br/><i>Time plane absent</i><br/><b>TO BUILD</b>"]
         end
     end
 
     subgraph PL["PL (FPGA FABRIC) + RF/HW — contracts undefined"]
         SEAM["hh_radio_ops_t (8 fns)<br/><i>The ONE hardware seam</i><br/><i>hw_adapter → NOT_IMPLEMENTED</i><br/><b>BUILT</b>"]
-        RCC["RCC WORKERS (PS)<br/><i>waveform_ctrl · drc · mac_ps</i><br/><i>ad9361_config_proxy · telemetry</i><br/><b>BLOCKED — U-03</b>"]
+        RCC["RCC WORKERS (PS)<br/><i>waveform_ctrl · drc · mac_ps</i><br/><i>ad9361_config_proxy · telemetry</i><br/><b>BLOCKED</b>"]
         FABRIC["PL FABRIC (FPGA)<br/><i>mac_pl · modem · fh_controller</i><br/><i>pdu_dma · rf_ctrl_fsm · time base</i><br/><b>BLOCKED</b>"]
         RFIC["AD9361 RFIC + RF FRONT-END<br/><i>LVDS DDR 122.88 MHz · SPI</i><br/><b>BLOCKED</b>"]
-        TIMEBASE["GNSS 1PPS / PL TIME BASE<br/><i>frame / slot / hop / ns</i><br/><b>BLOCKED — U-07</b>"]
+        TIMEBASE["GNSS 1PPS / PL TIME BASE<br/><i>frame / slot / hop / ns</i><br/><b>BLOCKED</b>"]
     end
 
     %% control plane
@@ -111,7 +111,7 @@ call into `hh_node_*` still happens on one thread and the invariant holds. The
 one lock lives in the servant, at the boundary, not inside the MANET stack.
 
 **`Radio — CF::Device` is BLOCKED, not TO BUILD.** A Device wrapping real
-hardware needs the PL contract (U-03/U-04). A Device wrapping the *mock* is
+hardware needs the PL contract. A Device wrapping the *mock* is
 legitimate and would exercise the DCD/DeviceManager path without inventing a
 register map.
 

@@ -120,9 +120,9 @@ hh_status_t ocpi_transmit(void *self, const hh_frame_t *frame)
 {
     (void)self; (void)frame;
     /* Frames are data plane. Whether they enter the OpenCPI application
-     * through radiod's process is the undecided U-15, so this refuses rather
+     * through radiod's process is undecided, so this refuses rather
      * than choosing a port. */
-    HH_LOGW(COMP, "not_implemented", "op=transmit reason=\"data plane undecided, unknown.md U-15\"");
+    HH_LOGW(COMP, "not_implemented", "op=transmit reason=\"data plane undecided\"");
     return HH_ERR_NOT_IMPLEMENTED;
 }
 
@@ -155,7 +155,7 @@ hh_status_t ocpi_get_link_metrics(void *self, hh_node_id_t neighbor, hh_link_sam
 hh_status_t ocpi_set_channel(void *self, uint32_t channel)
 {
     (void)self;
-    HH_LOGW(COMP, "unsupported", "op=set_channel channel=%u reason=\"channel plan undefined, unknown.md U-14\"",
+    HH_LOGW(COMP, "unsupported", "op=set_channel channel=%u reason=\"channel plan undefined\"",
             (unsigned)channel);
     return HH_ERR_UNSUPPORTED;
 }

@@ -29,7 +29,7 @@ it differs from ICD-2 in every structural respect:
 | transaction/request IDs | none — strictly one request in flight |
 | asynchronous events | none — exactly one response per request |
 
-**No ICD-2 specification exists** (see [`../unknown.md`](../unknown.md), U-01), so
+**No ICD-2 specification exists**, so
 inventing a TLV layout would mean inventing the contract. The existing ASCII
 protocol was a deliberate choice: it reuses the project's `key = value`
 configuration and telemetry conventions instead of adding a serialization
@@ -183,7 +183,7 @@ version negotiation to soften that — which is precisely why ICD-2 asks for one
 | Constant | Value | Meaning |
 |---|---|---|
 | `HH_RC_MAX_LINE` | 512 | max bytes per line, including `\n` |
-| `HH_RC_DEFAULT_SOCK_PATH` | `/tmp/hh-radiod.sock` | default socket (see U-10) |
+| `HH_RC_DEFAULT_SOCK_PATH` | `/tmp/hh-radiod.sock` | default socket |
 
 ---
 

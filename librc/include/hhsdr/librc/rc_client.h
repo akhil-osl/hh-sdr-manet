@@ -16,7 +16,7 @@
  * daemon's internals part of every caller's build.
  *
  * NAMING: the architecture drawing shows applications calling an "rc_* API".
- * Those exact signatures are not specified anywhere (see unknown.md, U-02), so
+ * Those exact signatures are not specified anywhere, so
  * the existing hh_rc_client_* API is kept rather than inventing rc_* names. If
  * the specified API differs, it can be layered over this one without changing
  * radiod.
