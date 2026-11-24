@@ -26,6 +26,13 @@ void hh_slot_config_default(hh_slot_config_t *cfg, hh_node_id_t node_id, uint16_
 /* Returns the slot bitmap length L in bytes for the configured frame. */
 static uint16_t bitmap_bytes(const hh_slot_config_t *c) { return (uint16_t)((c->slots_per_frame + 7u) / 8u); }
 
+/* Encodes a PDU for the transmit function, with or without the CRC-32 as configured. */
+static hh_status_t encode_pdu(hh_slot_t *s, const hh_pdu_t *p, size_t *len)
+{
+    return s->cfg.logic_adds_crc ? hh_pdu_encode_nocrc(p, s->buf, sizeof s->buf, len)
+                                 : hh_pdu_encode(p, s->buf, sizeof s->buf, len);
+}
+
 /* Validates the configuration, resets the scheduler and limits the MAC payload to what one PDU carries. */
 hh_status_t hh_slot_init(hh_slot_t *s, const hh_slot_config_t *cfg, const hh_clock_t *clock,
                          hh_mac_t *mac, hh_slot_tx_fn tx, void *tx_ctx)
@@ -231,7 +238,7 @@ static void send_request(hh_slot_t *s, const hh_slot_pos_t *pos)
     p->n_msg = 1;   /* a joining radio owns no slot: the bitmap is empty */
     p->msg[0] = (hh_pdu_msg_t){ .proto = HH_PDU_PROTO_COMMAND, .dst = HH_PDU_ADDR_BROADCAST, .cls = 0,
                                 .data = body, .len = (uint16_t)blen };
-    if (hh_pdu_encode(p, s->buf, sizeof s->buf, &len) != HH_OK || !s->tx(s->tx_ctx, pos, s->buf, len)) {
+    if (encode_pdu(s, p, &len) != HH_OK || !s->tx(s->tx_ctx, pos, s->buf, len)) {
         s->st.tx_failed++;
         return;
     }
@@ -326,7 +333,7 @@ static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
     p->more_data = queue_left(s->mac, left);
     offered_load(s, left, p->qreport);   /* demand: what the node offers per frame, whichever slot reports it */
 
-    if (hh_pdu_encode(p, s->buf, sizeof s->buf, &len) != HH_OK) {
+    if (encode_pdu(s, p, &len) != HH_OK) {
         s->st.tx_failed++;
         return;
     }
@@ -492,7 +499,7 @@ void hh_slot_receive(hh_slot_t *s, const hh_slot_pos_t *pos, const uint8_t *pdu,
 
     if (!s || !pos || !pdu) return;
     p = &s->pdu;
-    rc = hh_pdu_decode(pdu, len, p);
+    rc = s->cfg.logic_adds_crc ? hh_pdu_decode_nocrc(pdu, len, p) : hh_pdu_decode(pdu, len, p);
     if (rc == HH_ERR_UNSUPPORTED) { s->st.rx_unsupported++; return; }
     if (rc != HH_OK) { s->st.rx_bad++; return; }
     if (p->net_id != s->cfg.net_id) { s->st.rx_wrong_net++; return; }

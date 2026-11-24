@@ -106,9 +106,21 @@ size_t hh_pdu_overhead(const hh_pdu_t *p);
 /* Bytes one message takes, sub-header and fragment header included. */
 size_t hh_pdu_msg_size(const hh_pdu_msg_t *m);
 
+/* Bytes of the CRC-32 at the end of a PDU on air. */
+#define HH_PDU_CRC_LEN 4u
+
+/* Encodes the PDU with its CRC-32 appended. */
 hh_status_t hh_pdu_encode(const hh_pdu_t *p, uint8_t *buf, size_t cap, size_t *out_len);
+
+/* Encodes the PDU without the CRC-32, for a PL that appends it. The result is
+ * HH_PDU_CRC_LEN bytes shorter than hh_pdu_size. */
+hh_status_t hh_pdu_encode_nocrc(const hh_pdu_t *p, uint8_t *buf, size_t cap, size_t *out_len);
 
 /* Checks the CRC and every length. HH_ERR_UNSUPPORTED for security or elements. */
 hh_status_t hh_pdu_decode(const uint8_t *buf, size_t len, hh_pdu_t *p);
+
+/* Same for a PDU that has no CRC-32, because the PL checked and removed it.
+ * Checks every length only. */
+hh_status_t hh_pdu_decode_nocrc(const uint8_t *buf, size_t len, hh_pdu_t *p);
 
 #endif /* HHSDR_MAC_PDU_H */

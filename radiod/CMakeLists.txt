@@ -29,7 +29,7 @@ target_include_directories(hhsdr_radiod PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(hhsdr_radiod PUBLIC hhsdr_core_base hhsdr_protocol)
+target_link_libraries(hhsdr_radiod PUBLIC hhsdr_core_base hhsdr_protocol hhsdr_ring_shm)
 
 # ---------------------------------------------------------------------------
 # OpenCPI backend (C++, optional).
@@ -101,6 +101,11 @@ if(HH_BUILD_TESTS)
   target_link_libraries(test_radiod_config PRIVATE hhsdr_radiod)
   target_include_directories(test_radiod_config PRIVATE ${CMAKE_SOURCE_DIR}/tests)
   add_test(NAME test_radiod_config COMMAND test_radiod_config)
+
+  add_executable(test_radiod_rings tests/test_radiod_rings.c)
+  target_link_libraries(test_radiod_rings PRIVATE hhsdr_radiod)
+  target_include_directories(test_radiod_rings PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+  add_test(NAME test_radiod_rings COMMAND test_radiod_rings)
 
   add_executable(test_radiod_faults tests/test_radiod_faults.c)
   target_link_libraries(test_radiod_faults PRIVATE hhsdr_radiod)

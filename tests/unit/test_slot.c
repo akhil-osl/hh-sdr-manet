@@ -535,6 +535,42 @@ static void test_alloc_clash_lower_id_keeps_slot(void)
     HH_ASSERT_EQ_INT(slot_b.st.alloc_clashes, 1);
 }
 
+/* With logic_adds_crc the scheduler sends and accepts PDUs without the CRC-32. */
+static void test_logic_adds_crc(void)
+{
+    hh_pdu_t p;
+    size_t with_crc;
+
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 128, a_tx, NULL));
+    run_ms(&slot_a, 1);                                   /* a control-only PDU, CRC-32 included */
+    HH_ASSERT_EQ_INT(n_sent, 1);
+    with_crc = sent[0].len;
+    HH_ASSERT_OK(hh_pdu_decode(sent[0].bytes, sent[0].len, &p));
+
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 128, a_tx, NULL));
+    slot_a.cfg.logic_adds_crc = true;
+    HH_ASSERT_OK(setup_node(&slot_b, &mac_b, B, NET, 1u << 7, 128, b_tx, b_receiver));
+    slot_b.cfg.logic_adds_crc = true;
+    forward_to_b = true;
+    send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, B, 20);
+    run_ms(&slot_a, 1);
+    HH_ASSERT_EQ_INT(n_sent, 1);
+    HH_ASSERT_OK(hh_pdu_decode_nocrc(sent[0].bytes, sent[0].len, &p));
+    HH_ASSERT_ERR(hh_pdu_decode(sent[0].bytes, sent[0].len, &p), HH_ERR_INVAL);
+    HH_ASSERT_EQ_INT(slot_b.st.rx_pdus, 1);               /* B accepted it without a CRC-32 */
+    HH_ASSERT_EQ_INT(n_got, 1);
+    HH_ASSERT_EQ_INT(got[0].len, 20);
+
+    /* The same capacity applies: the PL frame is the PDU plus the CRC-32. */
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 128, a_tx, NULL));
+    slot_a.cfg.logic_adds_crc = true;
+    run_ms(&slot_a, 1);
+    HH_ASSERT_EQ_INT(sent[0].len + HH_PDU_CRC_LEN, with_crc);
+}
+
 /* Wrong net and corrupted PDUs are dropped and counted. */
 static void test_receive_drops(void)
 {
@@ -582,5 +618,6 @@ HH_TEST_MAIN_BEGIN("slot")
     HH_RUN(test_alloc_enable);
     HH_RUN(test_voice_admit_query);
     HH_RUN(test_alloc_clash_lower_id_keeps_slot);
+    HH_RUN(test_logic_adds_crc);
     HH_RUN(test_receive_drops);
 HH_TEST_MAIN_END()

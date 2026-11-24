@@ -112,6 +112,48 @@ static void check_encode(void (*build)(hh_pdu_t *), const uint8_t *want, size_t 
     HH_ASSERT_EQ_INT(hh_pdu_size(&p), want_len);
 }
 
+/* The CRC-free form is the spec bytes without the last four, and decodes to the same PDU. */
+static void check_nocrc(void (*build)(hh_pdu_t *), const uint8_t *want, size_t want_len)
+{
+    hh_pdu_t p, q;
+    uint8_t buf[256];
+    size_t n = 0;
+    build(&p);
+    HH_ASSERT_OK(hh_pdu_encode_nocrc(&p, buf, sizeof buf, &n));
+    HH_ASSERT_EQ_INT(n, want_len - HH_PDU_CRC_LEN);
+    HH_ASSERT(memcmp(buf, want, n) == 0);
+    HH_ASSERT_OK(hh_pdu_decode_nocrc(buf, n, &q));
+    HH_ASSERT_EQ_INT(q.src, p.src);
+    HH_ASSERT_EQ_INT(q.n_msg, p.n_msg);
+    HH_ASSERT_ERR(hh_pdu_decode(buf, n, &q), HH_ERR_INVAL);        /* no CRC-32 to check */
+}
+
+/* Encoding and decoding without the CRC-32, for a PL that owns it. */
+static void test_nocrc_forms(void)
+{
+    hh_pdu_t p, q;
+    uint8_t buf[256];
+    size_t n = 0;
+
+    check_nocrc(build_a, vec_a, sizeof vec_a);
+    check_nocrc(build_b, vec_b, sizeof vec_b);
+    check_nocrc(build_c, vec_c, sizeof vec_c);
+    check_nocrc(build_d, vec_d, sizeof vec_d);
+    check_nocrc(build_e, vec_e, sizeof vec_e);
+
+    build_a(&p);
+    HH_ASSERT_OK(hh_pdu_encode_nocrc(&p, buf, sizeof buf, &n));
+    HH_ASSERT_OK(hh_pdu_decode_nocrc(buf, n, &q));
+    HH_ASSERT_EQ_INT(q.msg[0].len, 5);
+    HH_ASSERT(memcmp(q.msg[0].data, "HELLO", 5) == 0);
+
+    HH_ASSERT_ERR(hh_pdu_encode_nocrc(&p, buf, n - 1, &n), HH_ERR_NOMEM);   /* one byte short */
+    HH_ASSERT_ERR(hh_pdu_decode_nocrc(buf, 14, &q), HH_ERR_INVAL);          /* shorter than header and control block */
+    HH_ASSERT_ERR(hh_pdu_decode_nocrc(buf, HH_PDU_MAX_LEN, &q), HH_ERR_INVAL);   /* the CRC-32 would not fit */
+    HH_ASSERT_ERR(hh_pdu_decode_nocrc(NULL, 20, &q), HH_ERR_INVAL);
+    HH_ASSERT_ERR(hh_pdu_encode_nocrc(NULL, buf, sizeof buf, &n), HH_ERR_INVAL);
+}
+
 /* CRC-32 of "123456789" equals the standard check value. */
 static void test_crc_check_value(void)
 {
@@ -276,6 +318,7 @@ static void test_rejects(void)
 
 HH_TEST_MAIN_BEGIN("pdu")
     HH_RUN(test_crc_check_value);
+    HH_RUN(test_nocrc_forms);
     HH_RUN(test_encode_vectors);
     HH_RUN(test_decode_a);
     HH_RUN(test_decode_b_c);
