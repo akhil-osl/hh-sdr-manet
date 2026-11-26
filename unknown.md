@@ -809,6 +809,23 @@ something, every silent radio founds on its own: the host simulation shows
 three of three radios founding in a cold start. The simulator also had no
 cold start; `joiners == nodes` is now allowed.
 
+**Re-entry after reset and isolation (2026-11-26):** `src/mac/entry.c` ages
+out a slot owner that was not heard for `t_age` superframes and keeps its
+slots unused for `t_quarantine` more (MAC-03 section 11.1). Both are example
+values of the design note, not agreed (D-14): `t_age` 5, `t_quarantine` 3. A
+radio that resets joins again from the start and never reclaims its old slot;
+the host simulation shows it back in 5 s and its old slot given to the next
+joiner after the age-out. A member also gives up an own slot that a member
+grants to another radio (MAC-03 section 11.6), and joins again if none is
+left. Not defined, so not built: how a radio that was isolated longer than
+`t_age` learns that its slots were given away. Both radios then send in the
+same slot and destroy each other's PDU, so no radio hears the other's claim;
+the host simulation shows the clash and nothing resolves it. It needs the
+"slots heard in use" field of the MAC beacon (MAC-03 D-2). Also open: whether
+age-out needs agreement from all neighbours (D-14), and the tie-break when two
+radios claim one slot and both are heard (the code lets the lower node id
+keep it; no document on `origin/main` states this for slots).
+
 ---
 
 ## U-24 — Linux network-interface binding for the OLSRv2 path

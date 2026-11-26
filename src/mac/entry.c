@@ -159,6 +159,8 @@ void hh_entry_params_default(hh_entry_params_t *p)
     p->apply_lead = 2;     /* TODO: not set by the specification */
     p->t_confirm = 2;      /* TODO: not set by the specification */
     p->n_leave = 3;        /* TODO: not decided */
+    p->t_age = 5;          /* TODO: example value of the design note, not agreed */
+    p->t_quarantine = 3;   /* TODO: example value of the design note, not agreed */
     p->n_found = 4;        /* TODO: example value, set from the time-to-net-ready budget */
     p->found_jitter = 2;   /* TODO: example value, not decided */
 }
@@ -288,12 +290,9 @@ static void arm_founding(hh_entry_t *e, const hh_slot_pos_t *pos)
     e->found_at = pos->abs_slot + e->found_wait;
 }
 
-/* Starts joining. Only a radio that owns no slot may join. A radio that hears nothing for the
- * founding wait founds a net instead (see hh_entry_tick). */
-hh_status_t hh_entry_join(hh_entry_t *e, const hh_slot_pos_t *pos)
+/* Starts an entry episode: the founding wait and the listen time begin now. */
+static void begin_join(hh_entry_t *e, const hh_slot_pos_t *pos)
 {
-    if (!e || !pos) return HH_ERR_INVAL;
-    if (e->state != HH_ENTRY_OFF && e->state != HH_ENTRY_REFUSED) return HH_ERR_STATE;
     e->st.t_start = pos->abs_slot;
     e->st.joined = false;
     if (e->p.n_found) {
@@ -302,6 +301,15 @@ hh_status_t hh_entry_join(hh_entry_t *e, const hh_slot_pos_t *pos)
         arm_founding(e, pos);
     }
     new_episode(e, pos);
+}
+
+/* Starts joining. Only a radio that owns no slot may join. A radio that hears nothing for the
+ * founding wait founds a net instead (see hh_entry_tick). */
+hh_status_t hh_entry_join(hh_entry_t *e, const hh_slot_pos_t *pos)
+{
+    if (!e || !pos) return HH_ERR_INVAL;
+    if (e->state != HH_ENTRY_OFF && e->state != HH_ENTRY_REFUSED) return HH_ERR_STATE;
+    begin_join(e, pos);
     HH_LOGI(COMP, "join_start", "node=%u sf=%u slot=%u", e->node_id, pos->superframe, pos->slot);
     return HH_OK;
 }
@@ -532,7 +540,11 @@ void hh_entry_on_command(hh_entry_t *e, const hh_slot_pos_t *pos, uint16_t src, 
         } else if (mine) {
             e->st.ignored_responses++;
         } else {
-            if (c.id == HH_ENTRY_CMD_GRANT) e->busy |= c.u.grant.slots;
+            if (c.id == HH_ENTRY_CMD_GRANT) {
+                e->busy |= c.u.grant.slots;
+                /* A member granted slots this radio owns: they were aged out elsewhere. Give them up. */
+                if (e->state == HH_ENTRY_MEMBER && !e->leaving) e->lost |= c.u.grant.slots & e->own;
+            }
             if (e->state == HH_ENTRY_MEMBER) member_heard_answer(e, dst, &c);
         }
         break;
@@ -559,6 +571,9 @@ void hh_entry_on_pdu(hh_entry_t *e, const hh_slot_pos_t *pos, uint16_t src, uint
     if (!((e->entry_slots >> pos->slot) & 1u)) e->busy |= 1ull << pos->slot;
     e->busy |= claims;
     if (!claims) return;
+    /* Two radios claim a slot: the lower node id keeps it. */
+    if (e->state == HH_ENTRY_MEMBER && !e->leaving && (claims & e->own) && src < e->node_id)
+        e->lost |= claims & e->own;
 
     for (unsigned i = 0; i < HH_ENTRY_PEERS_MAX; i++) {
         if (e->peers[i].used && e->peers[i].src == src) peer = &e->peers[i];
@@ -572,6 +587,8 @@ void hh_entry_on_pdu(hh_entry_t *e, const hh_slot_pos_t *pos, uint16_t src, uint
         peer->src = src;
     }
     peer->claims = claims;
+    peer->last_sf = pos->superframe;
+    peer->aged = false;
 
     p = find_prov(e, src);
     if (p && !p->is_reject && (p->slots & claims)) p->used = false;   /* confirmed by its first burst */
@@ -666,6 +683,28 @@ void hh_entry_tick(hh_entry_t *e, const hh_slot_pos_t *pos, hh_entry_act_t *act)
     memset(act, 0, sizeof *act);
     if (!e || !pos) return;
 
+    if (e->lost) {
+        /* Another radio with a lower id claims slots of this radio: give them up. Join again
+         * if none is left. */
+        e->own &= ~e->lost;
+        e->lost = 0;
+        act->own_changed = true;
+        act->own_slots = e->own;
+        e->st.conflicts++;
+        HH_LOGW(COMP, "slot_conflict", "node=%u own=%llx", e->node_id, (unsigned long long)e->own);
+        if (!e->own) begin_join(e, pos);
+    }
+    for (unsigned i = 0; i < HH_ENTRY_PEERS_MAX; i++) {
+        hh_entry_peer_t *q = &e->peers[i];
+        if (!q->used) continue;
+        if (e->p.t_age && !q->aged && pos->superframe >= q->last_sf + e->p.t_age) {
+            q->aged = true;   /* silent too long: the slots stay unused through the quarantine */
+            q->free_sf = pos->superframe + e->p.t_quarantine;
+            e->st.aged_out++;
+            HH_LOGD(COMP, "peer_aged", "node=%u peer=%u free_sf=%u", e->node_id, q->src, q->free_sf);
+        }
+        if (q->aged && pos->superframe >= q->free_sf) q->used = false;
+    }
     for (unsigned i = 0; i < HH_ENTRY_PEERS_MAX; i++) {
         hh_entry_peer_t *q = &e->peers[i];
         if (q->used && q->release_at && pos->superframe >= q->release_at) {

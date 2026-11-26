@@ -91,6 +91,8 @@ typedef struct {
     uint8_t  n_leave;        /* superframes in which a leaving radio sends its leave */
     uint8_t  n_found;        /* superframes of silence before the radio founds a net, 0 = never; > n_listen */
     uint8_t  found_jitter;   /* the radio adds 0 to found_jitter superframes of its own to n_found */
+    uint8_t  t_age;          /* superframes without a burst from a slot owner before it is aged out, 0 = never */
+    uint8_t  t_quarantine;   /* superframes an aged-out slot stays unused */
 } hh_entry_params_t;
 
 /* Values still to be decided are marked TODO in entry.c. */
@@ -130,6 +132,8 @@ typedef struct {
     uint32_t lapsed_grants;
     uint32_t bad_commands;
     uint32_t unknown_commands;
+    uint32_t aged_out;       /* slot owners dropped after t_age */
+    uint32_t conflicts;      /* own slots given up to a lower node id */
 } hh_entry_stats_t;
 
 typedef struct {
@@ -151,6 +155,9 @@ typedef struct {
     uint64_t claims;
     uint32_t release_at;     /* 0 = none */
     uint64_t release_slots;
+    uint32_t last_sf;        /* superframe of the last burst heard */
+    bool     aged;           /* silent too long: the slots are in quarantine until free_sf */
+    uint32_t free_sf;
     bool     used;
 } hh_entry_peer_t;
 
@@ -179,6 +186,7 @@ struct hh_entry {
     uint64_t          found_at;     /* slot at which the radio founds, 0 = not armed */
     hh_entry_state_t  state;
     uint64_t          own;
+    uint64_t          lost;         /* own slots another radio with a lower id also claims */
     /* Joining side. */
     uint64_t          busy;         /* slots heard in use */
     uint64_t          listen_end, deadline, holdoff_end;
