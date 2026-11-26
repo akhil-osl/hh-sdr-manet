@@ -109,6 +109,8 @@ static hh_alloc_params_t params20(void)
     p.fixed_slots = 1ull << 19;
     p.node_cap = 0;   /* no cap, so the other rules are tested alone */
     p.join_reserve = 0;   /* nor an idle reserve */
+    p.hold_slots = 0;     /* no smoothing and the spare slots rotate every superframe, as the rules are tested one by one */
+    p.rot_period = 1;
     return p;
 }
 
@@ -290,6 +292,98 @@ static void test_remove(void)
     hh_alloc_remove(&tab, 0);
     hh_alloc_remove(NULL, 1);
     HH_ASSERT(hh_alloc_find(&tab, 1) != NULL);
+}
+
+/* A drop in a report is not followed until the highest one is hold_slots old; a rise counts at once. */
+static void test_hold_smooths_drops(void)
+{
+    hh_alloc_params_t p = params20();
+    hh_alloc_map_t hi, lo, m;
+
+    p.hold_slots = 100;
+    p.stale_slots = 10000;
+    hh_alloc_table_init(&tab);
+    put(1, 0, 4, 0, 100);
+    put(2, 0, 0, 0, 100);
+    HH_ASSERT_OK(hh_alloc_compute(&p, &tab, 110, 0, &hi));
+    hh_alloc_table_init(&tab);
+    put(1, 0, 0, 0, 100);
+    put(2, 0, 0, 0, 100);
+    HH_ASSERT_OK(hh_alloc_compute(&p, &tab, 110, 0, &lo));
+    HH_ASSERT(memcmp(&hi, &lo, sizeof hi) != 0);
+
+    hh_alloc_table_init(&tab);
+    put(1, 0, 4, 0, 100);
+    put(2, 0, 0, 0, 100);
+    put(1, 0, 0, 0, 150);                                   /* the demand drops */
+    HH_ASSERT_OK(hh_alloc_compute(&p, &tab, 160, 0, &m));   /* the peak is 60 slots old */
+    HH_ASSERT(memcmp(&m, &hi, sizeof m) == 0);
+    HH_ASSERT_OK(hh_alloc_compute(&p, &tab, 200, 0, &m));   /* 100 slots old: no longer held */
+    HH_ASSERT(memcmp(&m, &lo, sizeof m) == 0);
+    p.hold_slots = 0;                                       /* smoothing off */
+    HH_ASSERT_OK(hh_alloc_compute(&p, &tab, 160, 0, &m));
+    HH_ASSERT(memcmp(&m, &lo, sizeof m) == 0);
+    p.hold_slots = 100;
+    put(1, 0, 4, 0, 210);                                   /* a rise counts at once */
+    HH_ASSERT_OK(hh_alloc_compute(&p, &tab, 210, 0, &m));
+    HH_ASSERT(memcmp(&m, &hi, sizeof m) == 0);
+}
+
+/* Voice demand that flips between 2 and 0 messages a frame gives the same map every time. */
+static void test_hold_oscillating_demand(void)
+{
+    hh_alloc_params_t p = params20();
+    hh_alloc_map_t first, m;
+    static const uint8_t voice[] = { 2, 0, 2, 0, 0, 2 };
+
+    p.hold_slots = 250;
+    p.stale_slots = 10000;
+    hh_alloc_table_init(&tab);
+    for (unsigned i = 0; i < sizeof voice; i++) {
+        uint64_t at = 100u * (i + 1u);
+        put(1, voice[i], 0, 0, at);
+        put(2, 0, 0, 0, at);
+        HH_ASSERT_OK(hh_alloc_compute(&p, &tab, at + 10, 0, &m));
+        if (i == 0) first = m;
+        HH_ASSERT(memcmp(&m, &first, sizeof m) == 0);
+    }
+}
+
+/* Voice admission sees the same held demand as the allocator. */
+static void test_hold_voice_admission_agrees(void)
+{
+    hh_alloc_params_t p = params20();
+    uint8_t r[HH_ALLOC_CLASSES] = { 0, 0, 7, 0, 0 };
+
+    p.hold_slots = 100;
+    p.stale_slots = 10000;
+    hh_alloc_table_init(&tab);
+    HH_ASSERT_OK(hh_alloc_note(&tab, 7, r, 100));           /* seven voice messages: six slots of the reserve */
+    r[2] = 0;
+    HH_ASSERT_OK(hh_alloc_note(&tab, 7, r, 150));
+    HH_ASSERT_EQ_INT((int)hh_alloc_voice_free(&p, &tab, 160), 0);   /* still held, the reserve is taken */
+    HH_ASSERT_EQ_INT((int)hh_alloc_voice_free(&p, &tab, 200), 4);   /* released: the whole reserve is free */
+}
+
+/* The spare slots change hands only every rot_period superframes. */
+static void test_rot_period_keeps_map(void)
+{
+    hh_alloc_params_t p = params20();
+    hh_alloc_map_t first, m;
+
+    p.rot_period = 10;
+    hh_alloc_table_init(&tab);
+    for (uint16_t n = 1; n <= 3; n++) put(n, 0, 0, 0, 1000);
+    HH_ASSERT_OK(hh_alloc_compute(&p, &tab, 1000, 0, &first));
+    for (uint32_t sf = 1; sf < 10; sf++) {
+        HH_ASSERT_OK(hh_alloc_compute(&p, &tab, 1000, sf, &m));
+        HH_ASSERT(memcmp(&m, &first, sizeof m) == 0);
+    }
+    HH_ASSERT_OK(hh_alloc_compute(&p, &tab, 1000, 10, &m));
+    HH_ASSERT(memcmp(&m, &first, sizeof m) != 0);
+    p.rot_period = 0;                                       /* 0 means every superframe */
+    HH_ASSERT_OK(hh_alloc_compute(&p, &tab, 1000, 1, &m));
+    HH_ASSERT(memcmp(&m, &first, sizeof m) != 0);
 }
 
 /* Entries older than the gone limit are freed, so a full table of silent nodes takes a new one. */
@@ -563,6 +657,10 @@ HH_TEST_MAIN_BEGIN("alloc")
     HH_RUN(test_unused_class_share_goes_on);
     HH_RUN(test_spare_slots_rotate);
     HH_RUN(test_stale_and_gone);
+    HH_RUN(test_hold_smooths_drops);
+    HH_RUN(test_hold_oscillating_demand);
+    HH_RUN(test_hold_voice_admission_agrees);
+    HH_RUN(test_rot_period_keeps_map);
     HH_RUN(test_remove);
     HH_RUN(test_evict_gone);
     HH_RUN(test_cap_holds_a_greedy_node);

@@ -104,7 +104,8 @@ hh_slot_enable_alloc(&slot, &p);
 
 Every value in `hh_alloc_params_t` marked TODO in `alloc.h` is a placeholder
 until the network owner decides it: voice reserve 4, weights 2 to 1, cap 8 of 20,
-idle reserve 1, stale and gone limits, messages per slot.
+idle reserve 1, stale and gone limits, messages per slot, hold of 5 frames,
+rotation every 10 superframes.
 
 ### Tests
 
@@ -120,7 +121,7 @@ Run them with `ctest --test-dir build --output-on-failure`.
 
 ### Known limits
 
-- No smoothing of demand and no rule keeping slot positions stable between maps.
+- Demand is smoothed by a peak hold (`hold_slots`). Positions stay put only while demand and membership do not change: the spare slots change hands every `rot_period` superframes, but a change in one node's quota still moves the slots of the nodes after it. A rule that keeps slots across changes needs the previous map at every node, which a late joiner does not have.
 - Demand counts messages, not calls, so two calls started in the same frame can both be admitted.
-- A member that leaves stays in the tables until its report goes stale.
+- A member that leaves is dropped from the demand table when its leave takes effect. A node that goes silent is dropped after the gone limit.
 - Open values and decisions: U-05 and U-06 in `unknown.md`.

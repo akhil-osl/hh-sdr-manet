@@ -38,6 +38,12 @@ hh_status_t hh_alloc_note(hh_alloc_table_t *t, uint16_t node, const uint8_t dept
     }
     memcpy(t->entry[i].depth, depth, HH_ALLOC_CLASSES);
     t->entry[i].seen_slot = slot;
+    for (unsigned c = 0; c < HH_ALLOC_CLASSES; c++) {
+        if (depth[c] >= t->entry[i].peak[c]) {   /* a report as high as the peak renews it */
+            t->entry[i].peak[c] = depth[c];
+            t->entry[i].peak_slot[c] = slot;
+        }
+    }
     return HH_OK;
 }
 
@@ -104,6 +110,16 @@ void hh_alloc_params_default(hh_alloc_params_t *p, uint16_t slots_per_frame)
     if (p->node_cap == 0) p->node_cap = 1;
     p->stale_slots = 5u * slots_per_frame;                  /* TODO: five frames */
     p->gone_slots = 250u * slots_per_frame;                 /* TODO: five superframes of 50 frames */
+    p->hold_slots = 5u * slots_per_frame;                   /* TODO: five frames */
+    p->rot_period = 10;                                   /* TODO: ten superframes */
+}
+
+/* Messages per frame a node counts as offering in class c: the latest report, or the held peak while it is younger than hold_slots. */
+static uint32_t offered(const hh_alloc_params_t *p, const hh_alloc_demand_t *d, unsigned c, uint64_t now_slot)
+{
+    uint64_t age = now_slot > d->peak_slot[c] ? now_slot - d->peak_slot[c] : 0u;
+
+    return d->peak[c] > d->depth[c] && age < p->hold_slots ? d->peak[c] : d->depth[c];
 }
 
 /* Checks that the parameters can be used. */
@@ -125,7 +141,8 @@ static unsigned bits(uint64_t m)
 }
 
 /* Adds a member in node order and works out what it wants beyond its keep-alive slot. The table holds at most 32 nodes. */
-static void add_member(const hh_alloc_params_t *p, member_t *m, unsigned *n, const hh_alloc_demand_t *d, uint64_t age)
+static void add_member(const hh_alloc_params_t *p, member_t *m, unsigned *n, const hh_alloc_demand_t *d, uint64_t age,
+                       uint64_t now_slot)
 {
     member_t x;
     unsigned i = *n;
@@ -136,7 +153,7 @@ static void add_member(const hh_alloc_params_t *p, member_t *m, unsigned *n, con
     if (age <= p->stale_slots) {
         for (unsigned c = 0; c < A_CLASSES; c++) {
             uint32_t mps = p->msgs_per_slot[mac_class[c]];
-            uint32_t need = ((uint32_t)d->depth[mac_class[c]] + mps - 1u) / mps;
+            uint32_t need = (offered(p, d, mac_class[c], now_slot) + mps - 1u) / mps;
             uint32_t take = need < first ? need : first;
             x.want[c] = need - take;
             first -= take;
@@ -199,7 +216,7 @@ hh_status_t hh_alloc_compute(const hh_alloc_params_t *p, const hh_alloc_table_t 
         if (!t->entry[i].used) continue;
         age = hh_alloc_age(&t->entry[i], now_slot);
         if (age > p->gone_slots) continue;
-        add_member(p, m, &n, &t->entry[i], age);
+        add_member(p, m, &n, &t->entry[i], age, now_slot);
     }
     memset(&map, 0, sizeof map);
     if (n == 0) {
@@ -207,7 +224,7 @@ hh_status_t hh_alloc_compute(const hh_alloc_params_t *p, const hh_alloc_table_t 
         return HH_OK;
     }
     if (n > navail) return HH_ERR_NOMEM;
-    rot = superframe % n;
+    rot = (superframe / (p->rot_period ? p->rot_period : 1u)) % n;
     cap = p->node_cap ? p->node_cap : HH_ALLOC_SLOTS_MAX;
     pool = navail - n;   /* slots beyond one keep-alive slot per member */
     idle = p->join_reserve < pool ? p->join_reserve : pool;   /* held back from demand too, for a joining radio */
@@ -322,7 +339,7 @@ static void voice_demand(const hh_alloc_params_t *p, const hh_alloc_table_t *t, 
         age = hh_alloc_age(d, now_slot);
         if (age > p->gone_slots) continue;
         (*members)++;
-        msgs = age <= p->stale_slots ? d->depth[HH_MAC_CLASS_VOICE] : 0u;
+        msgs = age <= p->stale_slots ? offered(p, d, HH_MAC_CLASS_VOICE, now_slot) : 0u;
         if (d->node == node) {
             msgs += extra_msgs;
             listed = true;

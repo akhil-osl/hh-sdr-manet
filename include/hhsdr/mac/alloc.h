@@ -23,6 +23,8 @@ typedef struct {
     uint16_t node;                       /* on-air address of the sender */
     uint8_t  depth[HH_ALLOC_CLASSES];    /* messages offered per frame and class, 255 = 255 or more */
     uint64_t seen_slot;                  /* absolute slot the report was sent in */
+    uint8_t  peak[HH_ALLOC_CLASSES];     /* highest depth held for smoothing, see hold_slots */
+    uint64_t peak_slot[HH_ALLOC_CLASSES];/* absolute slot the held peak was reported in */
 } hh_alloc_demand_t;
 
 typedef struct {
@@ -69,6 +71,10 @@ uint64_t hh_alloc_age(const hh_alloc_demand_t *d, uint64_t now_slot);
  *  5. Slots nobody asked for are dealt round-robin to all members, except
  *     join_reserve of them, which stay idle for network entry.
  *     The reserve is held back from the demand dealing too.
+ * Demand is smoothed (hold_slots): after a drop, the highest recent report keeps
+ * counting until it is hold_slots old, then the latest report counts. The
+ * layout depends on the quotas and on superframe / rot_period only, so with
+ * unchanged demand the map does not change inside a rot_period.
  * No node gets more than node_cap slots, whatever the class. What a capped
  * node cannot take goes to the others, and a slot nobody may take stays idle.
  * Control and emergency traffic are outside the sharing.
@@ -87,6 +93,8 @@ typedef struct {
     uint8_t  join_reserve;                      /* slots kept idle, even against demand, so a joining radio finds a free one; 0 = none. TODO */
     uint32_t stale_slots;                       /* a report older than this counts as no demand. TODO */
     uint32_t gone_slots;                        /* a node silent for this long is no longer a member. TODO */
+    uint32_t hold_slots;                        /* a higher report counts at once; a lower one only after the highest has been held this long; 0 = no smoothing. TODO */
+    uint16_t rot_period;                        /* superframes between changes of who is dealt the spare slots first; 0 or 1 = every superframe. TODO */
 } hh_alloc_params_t;
 
 typedef struct {
