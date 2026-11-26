@@ -296,7 +296,7 @@ slot_net_t *sn_create(const sn_config_t *cfg)
     unsigned entry_count = 0;
     for (uint64_t m = cfg ? cfg->entry_slots : 0; m; m &= m - 1u) entry_count++;
     if (!cfg || cfg->nodes < 2 || cfg->nodes > SN_MAX_NODES || cfg->nodes + entry_count > cfg->slots_per_frame ||
-        cfg->slots_per_frame > HH_SLOT_FRAME_MAX || cfg->joiners >= cfg->nodes ||
+        cfg->slots_per_frame > HH_SLOT_FRAME_MAX || cfg->joiners > cfg->nodes ||
         (cfg->joiners && !cfg->entry_slots))
         return NULL;
     n = calloc(1, sizeof *n);

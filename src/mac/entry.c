@@ -159,6 +159,8 @@ void hh_entry_params_default(hh_entry_params_t *p)
     p->apply_lead = 2;     /* TODO: not set by the specification */
     p->t_confirm = 2;      /* TODO: not set by the specification */
     p->n_leave = 3;        /* TODO: not decided */
+    p->n_found = 4;        /* TODO: example value, set from the time-to-net-ready budget */
+    p->found_jitter = 2;   /* TODO: example value, not decided */
 }
 
 /* Mixes the seed and the node id into a non-zero generator state. */
@@ -197,6 +199,7 @@ hh_status_t hh_entry_init(hh_entry_t *e, const hh_entry_params_t *p, const hh_sl
     if (p->be_min > p->be_max || p->be_max > 15u || !p->r_max || !p->c_max || !p->t_grant ||
         !p->slots_wanted || !p->n_leave)
         return HH_ERR_INVAL;
+    if (p->n_found && p->n_found <= p->n_listen) return HH_ERR_INVAL;   /* join a net you can hear before founding */
 
     memset(e, 0, sizeof *e);
     e->p = *p;
@@ -208,6 +211,7 @@ hh_status_t hh_entry_init(hh_entry_t *e, const hh_entry_params_t *p, const hh_sl
     e->valid = valid;
     e->entry_slots = cfg->entry_slots;
     e->rng = mix_seed(seed, cfg->node_id);
+    e->rng_found = mix_seed(seed ^ 0x464F554Eu, cfg->node_id);
     e->own = cfg->own_slots;
     e->state = e->own ? HH_ENTRY_MEMBER : HH_ENTRY_OFF;
     return HH_OK;
@@ -278,13 +282,25 @@ static void fail_attempt(hh_entry_t *e, const hh_slot_pos_t *pos, hh_entry_act_t
     else start_backoff(e);
 }
 
-/* Starts joining. Only a radio that owns no slot may join. */
+/* Restarts the founding wait from this slot. Hearing a net pushes the founding time away. */
+static void arm_founding(hh_entry_t *e, const hh_slot_pos_t *pos)
+{
+    e->found_at = pos->abs_slot + e->found_wait;
+}
+
+/* Starts joining. Only a radio that owns no slot may join. A radio that hears nothing for the
+ * founding wait founds a net instead (see hh_entry_tick). */
 hh_status_t hh_entry_join(hh_entry_t *e, const hh_slot_pos_t *pos)
 {
     if (!e || !pos) return HH_ERR_INVAL;
     if (e->state != HH_ENTRY_OFF && e->state != HH_ENTRY_REFUSED) return HH_ERR_STATE;
     e->st.t_start = pos->abs_slot;
     e->st.joined = false;
+    if (e->p.n_found) {
+        uint32_t jitter = rng_next(&e->rng_found) % ((uint32_t)e->p.found_jitter + 1u);
+        e->found_wait = (uint64_t)(e->p.n_found + jitter) * e->sp_super;
+        arm_founding(e, pos);
+    }
     new_episode(e, pos);
     HH_LOGI(COMP, "join_start", "node=%u sf=%u slot=%u", e->node_id, pos->superframe, pos->slot);
     return HH_OK;
@@ -496,6 +512,7 @@ void hh_entry_on_command(hh_entry_t *e, const hh_slot_pos_t *pos, uint16_t src, 
     rc = hh_entry_cmd_decode(body, len, &c);
     if (rc == HH_ERR_UNSUPPORTED) { e->st.unknown_commands++; return; }
     if (rc != HH_OK) { e->st.bad_commands++; return; }
+    if (e->found_at && c.id != HH_ENTRY_CMD_REQUEST) arm_founding(e, pos);   /* a member is talking: a net exists */
 
     switch (c.id) {
     case HH_ENTRY_CMD_REQUEST:
@@ -538,6 +555,7 @@ void hh_entry_on_pdu(hh_entry_t *e, const hh_slot_pos_t *pos, uint16_t src, uint
     hh_entry_prov_t *p;
 
     if (!e || !pos) return;
+    if (e->found_at && claims) arm_founding(e, pos);   /* a PDU with claims is a member's: a net exists */
     if (!((e->entry_slots >> pos->slot) & 1u)) e->busy |= 1ull << pos->slot;
     e->busy |= claims;
     if (!claims) return;
@@ -662,6 +680,20 @@ void hh_entry_tick(hh_entry_t *e, const hh_slot_pos_t *pos, hh_entry_act_t *act)
             if (!p->is_reject) e->st.lapsed_grants++;
             p->used = false;
         }
+    }
+
+    if (e->found_at && pos->abs_slot >= e->found_at &&
+        (e->state == HH_ENTRY_LISTEN || e->state == HH_ENTRY_BACKOFF || e->state == HH_ENTRY_WAIT_GRANT ||
+         e->state == HH_ENTRY_HOLDOFF)) {
+        /* Nothing was heard for the whole founding wait. Only the event is reported: which slot the
+         * founder takes and the state of the MAC are not defined yet (U-23). */
+        e->state = HH_ENTRY_FOUNDER;
+        e->found_at = 0;
+        e->req_out = false;
+        act->found = true;
+        act->found_sf = pos->superframe;
+        HH_LOGI(COMP, "net_founded", "node=%u sf=%u", e->node_id, pos->superframe);
+        return;
     }
 
     switch (e->state) {

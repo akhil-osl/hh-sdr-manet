@@ -796,6 +796,19 @@ reporting of the arrival offset by the logic, authentication of requests and
 grants, and the binding to the logic (U-28). Evidence:
 `evidence/f03-ak2/2026-11-12`.
 
+**Cold start and founder (2026-11-26):** `src/mac/entry.c` reports a founding
+event when a radio hears no member for `n_found` superframes plus its own
+jitter (MAC-03 section 10.1, PROPOSED). `n_found` (4) and the jitter (0 to 2)
+are example values with no source (MAC-03 D-6). What is not defined, so not
+built: which slot the founder takes while slots follow demand (U-06 of the
+slot scheduler work); the beacon the founder sends (founding superframe and
+node id are in the PDU codec, but the entry slot, window and time quality are
+open, MAC-03 D-2 and D-16); the MAC state of a founder; net time without GNSS
+(OI-9); and the merge of two nets that found together. Until the founder sends
+something, every silent radio founds on its own: the host simulation shows
+three of three radios founding in a cold start. The simulator also had no
+cold start; `joiners == nodes` is now allowed.
+
 ---
 
 ## U-24 — Linux network-interface binding for the OLSRv2 path

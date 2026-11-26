@@ -336,6 +336,42 @@ static void test_leave_frees_slot_for_later_joiner(void)
     sn_destroy(n);
 }
 
+/* Cold start: no member, three radios start together and hear nothing. The first founds between
+ * n_found and n_found + jitter superframes after the start. A founder sends nothing yet (its slot
+ * claim and beacon are open, U-23), so the others also found; this is the two-net case and is only
+ * counted here. */
+static void test_cold_start_founders(void)
+{
+    scn_t s = { "cold_start", 3, 3, 20, 1, 0, NULL };
+    hh_entry_params_t p;
+    track_t trk;
+    slot_net_t *n;
+    uint32_t first_ms = 0;
+    unsigned founders = 0;
+
+    hh_entry_params_default(&p);
+    memset(&trk, 0, sizeof trk);
+    n = build(&s, &trk);
+    HH_ASSERT(n != NULL);
+    if (!n) return;
+    for (uint32_t t = 0; t < 12000u; t++) {
+        sn_set_time(n, t);
+        if (t == 0)
+            for (unsigned i = 1; i <= s.nodes; i++) HH_ASSERT_OK(sn_join(n, i));
+        sn_step(n);
+        founders = 0;
+        for (unsigned i = 1; i <= s.nodes; i++)
+            if (hh_entry_state(sn_entry(n, i)) == HH_ENTRY_FOUNDER) founders++;
+        if (founders && !first_ms) first_ms = t;
+    }
+    printf("entry_sim scenario=cold_start nodes=%u founders=%u first_found_ms=%u\n", s.nodes, founders, first_ms);
+    HH_ASSERT(founders >= 1);
+    HH_ASSERT(first_ms >= p.n_found * 1000u);
+    HH_ASSERT(first_ms <= (p.n_found + p.found_jitter + 1u) * 1000u);
+    for (unsigned i = 1; i <= s.nodes; i++) HH_ASSERT(!sn_entry(n, i)->st.joined);
+    sn_destroy(n);
+}
+
 HH_TEST_MAIN_BEGIN("entry_net")
     hh_log_set_level(HH_LOG_ERROR);
     HH_RUN(test_single_joiner);
@@ -346,4 +382,5 @@ HH_TEST_MAIN_BEGIN("entry_net")
     HH_RUN(test_seeds_differ);
     HH_RUN(test_no_backoff_never_resolves);
     HH_RUN(test_leave_frees_slot_for_later_joiner);
+    HH_RUN(test_cold_start_founders);
 HH_TEST_MAIN_END()
