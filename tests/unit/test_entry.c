@@ -664,6 +664,10 @@ static void test_leave(void)
     HH_ASSERT(act.own_changed && act.own_slots == 0);
     HH_ASSERT_EQ_INT(hh_entry_state(&a), HH_ENTRY_OFF);
     hh_entry_tick(&b, &p, &act);
+    HH_ASSERT_EQ_INT(act.n_released, 1);                           /* b is told radio 1 has left */
+    HH_ASSERT_EQ_INT(act.released[0], 1);
+    hh_entry_tick(&b, &p, &act);
+    HH_ASSERT_EQ_INT(act.n_released, 0);                           /* only once */
 
     c = request(0x88880002u, 1ull << 3, 1);
     deliver(&b, (release + 1) * SUPER + ENTRY_SLOT, 10, HH_PDU_ADDR_BROADCAST, &c, &act);

@@ -157,6 +157,8 @@ typedef struct {
     uint64_t            own_slots;
     bool                failed;
     hh_mac_entry_fail_t fail_reason;
+    uint8_t             n_released;                      /* members whose leave took effect in this call */
+    uint16_t            released[HH_ENTRY_PEERS_MAX];    /* on-air addresses of those members */
 } hh_entry_act_t;
 
 struct hh_entry {

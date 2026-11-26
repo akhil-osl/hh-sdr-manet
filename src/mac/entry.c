@@ -651,6 +651,7 @@ void hh_entry_tick(hh_entry_t *e, const hh_slot_pos_t *pos, hh_entry_act_t *act)
     for (unsigned i = 0; i < HH_ENTRY_PEERS_MAX; i++) {
         hh_entry_peer_t *q = &e->peers[i];
         if (q->used && q->release_at && pos->superframe >= q->release_at) {
+            act->released[act->n_released++] = q->src;
             q->claims &= ~q->release_slots;
             q->release_at = 0;
             if (!q->claims) q->used = false;

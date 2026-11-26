@@ -265,6 +265,51 @@ static void test_stale_and_gone(void)
     HH_ASSERT_EQ_INT(slots_of(&m, 3), 0);
 }
 
+/* A removed node leaves the table and the map; the others and bad arguments are unaffected. */
+static void test_remove(void)
+{
+    hh_alloc_params_t p = params20();
+    hh_alloc_map_t with_three, without_two;
+
+    hh_alloc_table_init(&tab);
+    put(1, 0, 0, 50, 100);
+    put(2, 0, 0, 50, 100);
+    put(3, 0, 0, 50, 100);
+    HH_ASSERT_OK(hh_alloc_compute(&p, &tab, 110, 0, &with_three));
+    HH_ASSERT(slots_of(&with_three, 2) > 0);
+
+    hh_alloc_remove(&tab, 2);
+    HH_ASSERT(hh_alloc_find(&tab, 2) == NULL);
+    HH_ASSERT(hh_alloc_find(&tab, 1) != NULL);
+    HH_ASSERT(hh_alloc_find(&tab, 3) != NULL);
+    HH_ASSERT_OK(hh_alloc_compute(&p, &tab, 110, 0, &without_two));
+    HH_ASSERT_EQ_INT(slots_of(&without_two, 2), 0);
+    HH_ASSERT(slots_of(&without_two, 1) + slots_of(&without_two, 3) >= slots_of(&with_three, 1) + slots_of(&with_three, 3));
+
+    hh_alloc_remove(&tab, 2);      /* not in the table: nothing happens */
+    hh_alloc_remove(&tab, 0);
+    hh_alloc_remove(NULL, 1);
+    HH_ASSERT(hh_alloc_find(&tab, 1) != NULL);
+}
+
+/* Entries older than the gone limit are freed, so a full table of silent nodes takes a new one. */
+static void test_evict_gone(void)
+{
+    uint8_t r[HH_ALLOC_CLASSES];
+
+    hh_alloc_table_init(&tab);
+    for (unsigned n = 1; n <= HH_ALLOC_NODES_MAX; n++) put((uint16_t)n, 0, 0, 1, n <= 4 ? 5000 : 100);
+    report(r, 1);
+    HH_ASSERT_ERR(hh_alloc_note(&tab, 200, r, 5000), HH_ERR_NOMEM);
+
+    hh_alloc_evict_gone(&tab, 5000, 1000);   /* nodes 5 and up are 4900 slots old */
+    HH_ASSERT(hh_alloc_find(&tab, 4) != NULL);
+    HH_ASSERT(hh_alloc_find(&tab, 5) == NULL);
+    HH_ASSERT_OK(hh_alloc_note(&tab, 200, r, 5000));
+
+    hh_alloc_evict_gone(NULL, 5000, 1000);
+}
+
 /* More members than slots to give: refused and the map is not touched. */
 static void test_too_many_members(void)
 {
@@ -518,6 +563,8 @@ HH_TEST_MAIN_BEGIN("alloc")
     HH_RUN(test_unused_class_share_goes_on);
     HH_RUN(test_spare_slots_rotate);
     HH_RUN(test_stale_and_gone);
+    HH_RUN(test_remove);
+    HH_RUN(test_evict_gone);
     HH_RUN(test_cap_holds_a_greedy_node);
     HH_RUN(test_join_reserve_stays_idle);
     HH_RUN(test_cap_gives_the_rest_to_other_nodes);

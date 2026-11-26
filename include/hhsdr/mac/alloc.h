@@ -38,6 +38,12 @@ void hh_alloc_table_init(hh_alloc_table_t *t);
 hh_status_t hh_alloc_note(hh_alloc_table_t *t, uint16_t node, const uint8_t depth[HH_ALLOC_CLASSES],
                           uint64_t slot);
 
+/* Forgets a node, as when it has left. A node that is not in the table is not an error. */
+void hh_alloc_remove(hh_alloc_table_t *t, uint16_t node);
+
+/* Forgets every node silent for more than gone_slots, which the allocation no longer counts as members. */
+void hh_alloc_evict_gone(hh_alloc_table_t *t, uint64_t now_slot, uint32_t gone_slots);
+
 /* The latest report of a node, or NULL if none was heard. */
 const hh_alloc_demand_t *hh_alloc_find(const hh_alloc_table_t *t, uint16_t node);
 

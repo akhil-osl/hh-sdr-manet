@@ -41,6 +41,25 @@ hh_status_t hh_alloc_note(hh_alloc_table_t *t, uint16_t node, const uint8_t dept
     return HH_OK;
 }
 
+/* Frees the entry of a node. */
+void hh_alloc_remove(hh_alloc_table_t *t, uint16_t node)
+{
+    int i;
+
+    if (!t || node == 0) return;
+    i = index_of(t, node);
+    if (i >= 0) memset(&t->entry[i], 0, sizeof t->entry[i]);
+}
+
+/* Frees every entry older than gone_slots, the age at which hh_alloc_compute stops counting it. */
+void hh_alloc_evict_gone(hh_alloc_table_t *t, uint64_t now_slot, uint32_t gone_slots)
+{
+    if (!t) return;
+    for (unsigned i = 0; i < HH_ALLOC_NODES_MAX; i++)
+        if (t->entry[i].used && hh_alloc_age(&t->entry[i], now_slot) > gone_slots)
+            memset(&t->entry[i], 0, sizeof t->entry[i]);
+}
+
 /* Returns the latest report of a node, or NULL if none was heard. */
 const hh_alloc_demand_t *hh_alloc_find(const hh_alloc_table_t *t, uint16_t node)
 {

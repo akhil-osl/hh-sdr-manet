@@ -151,6 +151,7 @@ static void apply_entry(hh_slot_t *s, const hh_entry_act_t *act)
         hh_mac_set_own_slots(s->mac, (uint16_t)count_bits(act->own_slots));
     }
     if (act->failed) hh_mac_on_entry_failed(s->mac, act->fail_reason);
+    for (unsigned i = 0; i < act->n_released; i++) hh_alloc_remove(&s->demand, act->released[i]);   /* a member that left is no longer counted */
     if ((int)st == s->entry_state) return;
     s->entry_state = (int)st;
     switch (st) {
@@ -430,6 +431,7 @@ static void alloc_boundary(hh_slot_t *s, const hh_slot_pos_t *pos)
     }
     if (s->alloc_pending) apply_map(s, pos);
     s->st.alloc_runs++;
+    hh_alloc_evict_gone(&s->demand, pos->abs_slot, prm.gone_slots);   /* silent members free their table entry */
     if (s->entry) prm.fixed_slots |= hh_entry_provisional(s->entry);   /* grants not yet confirmed are not given away */
     if (hh_alloc_compute(&prm, &s->demand, pos->abs_slot, pos->superframe, &s->alloc_next) == HH_OK) {
         s->alloc_pending = true;

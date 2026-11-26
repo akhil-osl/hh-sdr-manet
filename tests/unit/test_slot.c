@@ -511,6 +511,24 @@ static void test_voice_admit_query(void)
     HH_ASSERT(!ok);
 }
 
+/* At a superframe boundary a node silent for longer than the gone limit is dropped from the demand table. */
+static void test_alloc_evicts_gone_node(void)
+{
+    hh_alloc_params_t ap;
+    uint8_t r[HH_ALLOC_CLASSES] = { 0, 0, 0, 0, 3 };
+
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 100, a_tx, NULL));
+    hh_alloc_params_default(&ap, 20);
+    ap.gone_slots = 500;
+    HH_ASSERT_OK(hh_slot_enable_alloc(&slot_a, &ap));
+    HH_ASSERT_OK(hh_alloc_note(&slot_a.demand, 7, r, 0));
+    run_ms(&slot_a, 400);
+    HH_ASSERT(hh_alloc_find(&slot_a.demand, 7) != NULL);   /* no boundary since, and not yet gone */
+    run_ms(&slot_a, 700);                                   /* the boundary at slot 1000: age 1000 */
+    HH_ASSERT(hh_alloc_find(&slot_a.demand, 7) == NULL);
+}
+
 /* A lower node id that claims one of this node's slots keeps it; a higher id does not. */
 static void test_alloc_clash_lower_id_keeps_slot(void)
 {
@@ -617,6 +635,7 @@ HH_TEST_MAIN_BEGIN("slot")
     HH_RUN(test_queue_report_stored_on_receive);
     HH_RUN(test_alloc_enable);
     HH_RUN(test_voice_admit_query);
+    HH_RUN(test_alloc_evicts_gone_node);
     HH_RUN(test_alloc_clash_lower_id_keeps_slot);
     HH_RUN(test_logic_adds_crc);
     HH_RUN(test_receive_drops);
