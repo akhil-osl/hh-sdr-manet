@@ -7,7 +7,7 @@
 #
 # The current codec is the line-oriented ASCII key=value protocol. The target
 # architecture calls for versioned TLV (ICD-2), which has no specification yet
-# (see unknown.md, U-01). When it exists, its codec is added here alongside the
+#. When it exists, its codec is added here alongside the
 # existing one -- no radiod or librc change required.
 # ---------------------------------------------------------------------------
 add_library(hhsdr_protocol STATIC

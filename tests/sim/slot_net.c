@@ -61,6 +61,8 @@ struct slot_net {
     unsigned    n_events;
     uint32_t    rng;
     uint32_t    gen_ms, run_ms;
+    uint32_t    adv_ms;     /* time reached by sn_advance */
+    bool        adv_on;
     uint64_t    pdus, tx_outside, collision_ev, channel_ev, corrupt_ev, route_changes, routing_fail;
 };
 
@@ -114,7 +116,8 @@ static void lose_for(slot_net_t *n, const node_t *tx, unsigned rx_id, pk_state_t
 static void send_app(node_t *nd, uint32_t id, const uint8_t *payload, uint16_t len, unsigned next)
 {
     slot_net_t *n = nd->net;
-    hh_mac_result_t r = hh_mac_send(&nd->mac, HH_FRAME_DATA, HH_MAC_CLASS_DATA, next, 0, payload, len);
+    hh_mac_class_t cls = payload[3] ? (hh_mac_class_t)payload[3] : HH_MAC_CLASS_DATA;   /* the flow's class, kept by relays */
+    hh_mac_result_t r = hh_mac_send(&nd->mac, HH_FRAME_DATA, cls, next, 0, payload, len);
     if (r == HH_MAC_ACCEPTED) return;
     mark(n, id, r == HH_MAC_TRY_AGAIN ? PK_QUEUE_DROP : PK_SCHED_REJECT);
     LOGF(n, "t=%u ev=send_refused node=%u pkt=%u result=%s\n", t_rel(n), (unsigned)nd->id, id,
@@ -324,6 +327,7 @@ static bool init_node(slot_net_t *n, unsigned i, bool joiner)
             hh_slot_attach_entry(&nd->sl, &nd->entry) != HH_OK)
             return false;
     }
+    if (cfg->alloc && hh_slot_enable_alloc(&nd->sl, cfg->alloc) != HH_OK) return false;
     return true;
 }
 
@@ -403,6 +407,12 @@ uint64_t sn_own_slots(const slot_net_t *n, unsigned node)
     return n && node >= 1 && node <= n->cfg.nodes ? n->nodes[node - 1].sl.cfg.own_slots : 0;
 }
 
+/* Returns the demand table of a node, or NULL for an invalid node number. */
+const hh_alloc_table_t *sn_demand(const slot_net_t *n, unsigned node)
+{
+    return n && node >= 1 && node <= n->cfg.nodes ? &n->nodes[node - 1].sl.demand : NULL;
+}
+
 /* Returns the MAC of a node, or NULL for an invalid node number. */
 hh_mac_t *sn_mac(slot_net_t *n, unsigned node)
 {
@@ -479,7 +489,7 @@ static void generate(slot_net_t *n)
             n->next_gen[f] += fl->interval_ms;
             if (id == MAX_PKTS) return;
             memset(buf, 0x5A, fl->size > sizeof buf ? sizeof buf : fl->size);
-            buf[0] = APP_MAGIC; buf[1] = (uint8_t)f; buf[2] = 0; buf[3] = 0;
+            buf[0] = APP_MAGIC; buf[1] = (uint8_t)f; buf[2] = 0; buf[3] = fl->cls;
             put32(buf + 4, id);
             buf[8] = (uint8_t)fl->dst; buf[9] = 0;
             n->pkts[id] = (pkt_t){ .flow = (uint8_t)f, .state = PK_INFLIGHT, .gen_ms = t, .enq_ms = t };
@@ -564,6 +574,28 @@ void sn_run(slot_net_t *n, uint32_t gen_ms, uint32_t drain_ms)
     }
     for (uint32_t i = 0; i < n->n_pkts; i++)
         if (n->pkts[i].state == PK_INFLIGHT) n->pkts[i].state = PK_DEADLINE;
+}
+
+/* Runs ms more milliseconds with traffic on, from where the last call stopped. For tests that act between runs. */
+void sn_advance(slot_net_t *n, uint32_t ms)
+{
+    if (!n->adv_on) {
+        n->adv_on = true;
+        n->gen_ms = n->run_ms = UINT32_MAX;
+        if (n->route_changes == 0) sn_compute_routes(n);
+    }
+    for (uint32_t end = n->adv_ms + ms; n->adv_ms < end; n->adv_ms += n->cfg.slot_ms) {
+        n->now = EPOCH_MS + n->adv_ms;
+        generate(n);
+        routing_messages(n);
+        sn_step(n);
+    }
+}
+
+/* Returns the slot scheduler of a node, or NULL for an invalid node number. */
+const hh_slot_t *sn_slot(const slot_net_t *n, unsigned node)
+{
+    return n && node >= 1 && node <= n->cfg.nodes ? &n->nodes[node - 1].sl : NULL;
 }
 
 /* ---- results ---- */

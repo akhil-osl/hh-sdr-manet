@@ -50,7 +50,7 @@ CARDS = [
     ("a1",   60, 200, 250, 140, "app",  "built",   "APPLICATIONS",
      ["Voice (MELPe) · Data / C2 / HMI", "IP sockets on manet0"]),
     ("a2",  350, 200, 250, 140, "app",  "built",   "MANET ROUTING",
-     ["hh_node_t · DV self-healing", "OLSRv2 deferred — U-09"]),
+     ["hh_node_t · DV self-healing", "OLSRv2 deferred"]),
     ("a3",  630, 200, 300, 140, "sca",  "tobuild", "REDHAWK CORE FRAMEWORK",
      ["DomainManager · DeviceManager", "ApplicationFactory · omniORB"]),
     ("a4",  960, 200, 300, 140, "sca",  "tobuild", "DOMAIN PROFILE  ($SDRROOT)",
@@ -62,22 +62,22 @@ CARDS = [
     ("b1",  630, 380, 300, 140, "sca",  "tobuild", "MANET_Node  —  CF::Resource",
      ["C++ servant : Resource_impl", "LifeCycle · PropertySet · Port"]),
     ("b2",  960, 380, 300, 140, "sca",  "blocked", "Radio  —  CF::Device",
-     ["DeviceManager-owned", "BLOCKED — U-03 / U-04"]),
+     ["DeviceManager-owned", "BLOCKED"]),
 
     # ---- Row C: the ORB/thread boundary (y=520) ----------------------------
     ("c1",  630, 560, 640, 100, "sca",  "tobuild", "ORB THREAD → CONTROL-LOOP BOUNDARY",
      ["omniORB dispatch threads → bounded request queue",
-      "drained by hh_node_tick() — keeps the no-locks invariant · U-11 / U-12"]),
+      "drained by hh_node_tick() — keeps the no-locks invariant"]),
 
     # ---- Row D: the existing C control plane (y=660) -----------------------
     ("d1",   60, 700, 250, 140, "control", "built", "LINUX IP STACK",
      ["skb priority / DSCP", "→ bearer class"]),
     ("d2",  350, 700, 250, 140, "control", "built", "librc / radioctl",
-     ["C API + CLI", "ASCII key=value today · U-01"]),
+     ["C API + CLI", "ASCII key=value today"]),
     ("d3",  630, 700, 300, 140, "control", "built", "radiod  —  PL OWNER",
      ["Only process that opens OpenCPI", "Lifecycle · events · fault registry"]),
     ("d4", 1300, 700, 290, 140, "time", "tobuild", "RADIO CLOCK DRIVER",
-     ["/dev/ptpN (PHC) + time regs", "Time plane absent — U-07"]),
+     ["/dev/ptpN (PHC) + time regs", "Time plane absent"]),
     ("d5",  960, 700, 300, 140, "data", "built", "manet0 net_device",
      ["pdu_dma rings · TLAST", "zero-copy per-class queues"]),
 
@@ -278,7 +278,7 @@ def build(logo_path):
 
     C.vertex("pl_bg", "", f"rounded=1;arcSize=2;html=1;fillColor=#DEEDE6;strokeColor=#2C5A45;"
              f"strokeWidth=1.5;dashed=1;", 40, 870, 1570, 150, collide=False)
-    C.vertex("pl_lbl", "PL (FPGA FABRIC) + RF/HW  —  contracts undefined (U-03/U-04)",
+    C.vertex("pl_lbl", "PL (FPGA FABRIC) + RF/HW  —  contracts undefined",
              txt(10, "#2C5A45", ital=True, align="right"), 950, 840, 660, 20)
 
     # --- banners --------------------------------------------------------------
@@ -328,7 +328,7 @@ def build(logo_path):
 
     C.vertex("tb_mat",
              "CONCEPT STAGE  ·  Blocks marked TO BUILD / BLOCKED do not exist. "
-             "BLOCKED items await the contracts recorded in unknown.md (U-01, U-03, U-04, U-07, U-09, U-11, U-12).",
+             "BLOCKED items await the contracts recorded in unknown.md.",
              cell_box("#F7E3E2", RED, "#912B27", 9, ital=True, align="center", sl=0),
              40, 1145, 1570, 20, collide=False)
 

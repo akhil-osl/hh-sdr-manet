@@ -197,8 +197,8 @@ static void test_undefined_contracts_are_refused(void)
 
     memset(&f, 0, sizeof f);
     HH_ASSERT_OK(hh_ocpi_backend_init(&b, &cfg, &r));
-    HH_ASSERT_ERR(hh_radio_set_channel(&r, 3), HH_ERR_UNSUPPORTED);          /* U-14 */
-    HH_ASSERT_ERR(hh_radio_transmit(&r, &f), HH_ERR_NOT_IMPLEMENTED);        /* U-15 */
+    HH_ASSERT_ERR(hh_radio_set_channel(&r, 3), HH_ERR_UNSUPPORTED);
+    HH_ASSERT_ERR(hh_radio_transmit(&r, &f), HH_ERR_NOT_IMPLEMENTED);
     HH_ASSERT_ERR(hh_radio_get_link_metrics(&r, 1, &m), HH_ERR_UNSUPPORTED);
 }
 

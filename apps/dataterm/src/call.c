@@ -102,10 +102,23 @@ hh_status_t hh_call_init(hh_call_t *c, const hh_call_config_t *cfg, const hh_clo
     return HH_OK;
 }
 
+/* Sets or clears the admission check. */
+void hh_call_set_admit(hh_call_t *c, hh_call_admit_fn admit, void *ctx)
+{
+    if (!c) return;
+    c->admit = admit;
+    c->admit_ctx = ctx;
+}
+
 hh_status_t hh_call_request(hh_call_t *c, hh_node_id_t to)
 {
     if (!c || to == HH_NODE_ID_INVALID) return HH_ERR_INVAL;
     if (c->state != HH_CALL_IDLE) return HH_ERR_STATE;
+    if (c->admit && !c->admit(c->admit_ctx)) {
+        c->counters.admit_refused++;
+        HH_LOGI(COMP, "call_not_admitted", "to=%u", to);
+        return HH_ERR_AGAIN;
+    }
     uint16_t id = (uint16_t)(c->last_id + 1u);
     if (id == 0) id = 1;
     hh_status_t s = tx(c, to, id, HH_CALL_MSG_REQUEST, HH_CALL_REASON_NONE);
@@ -172,7 +185,10 @@ void hh_call_on_rx(hh_call_t *c, hh_node_id_t from, const uint8_t *pdu, size_t l
 
     switch (type) {
     case HH_CALL_MSG_REQUEST:
-        if (c->state == HH_CALL_IDLE) {
+        if (c->state == HH_CALL_IDLE && c->admit && !c->admit(c->admit_ctx)) {
+            c->counters.admit_refused++;
+            (void)tx(c, from, id, HH_CALL_MSG_REJECT, HH_CALL_REASON_BUSY);
+        } else if (c->state == HH_CALL_IDLE) {
             c->peer = from;
             c->id = id;
             c->deadline = hh_now(c->clock) + c->cfg.ring_timeout_ms;

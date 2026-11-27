@@ -708,6 +708,7 @@ void hh_entry_tick(hh_entry_t *e, const hh_slot_pos_t *pos, hh_entry_act_t *act)
     for (unsigned i = 0; i < HH_ENTRY_PEERS_MAX; i++) {
         hh_entry_peer_t *q = &e->peers[i];
         if (q->used && q->release_at && pos->superframe >= q->release_at) {
+            act->released[act->n_released++] = q->src;
             q->claims &= ~q->release_slots;
             q->release_at = 0;
             if (!q->claims) q->used = false;
@@ -772,4 +773,17 @@ void hh_entry_tick(hh_entry_t *e, const hh_slot_pos_t *pos, hh_entry_act_t *act)
     default:
         break;
     }
+}
+
+/* Takes the slot set the allocator chose. A radio that is not a member, or is leaving, keeps what it has. */
+void hh_entry_set_own(hh_entry_t *e, uint64_t own)
+{
+    if (!e || e->state != HH_ENTRY_MEMBER || e->leaving) return;
+    e->own = own & e->valid & ~e->entry_slots;
+}
+
+/* Returns the slots of grants still waiting for the joining radio's first burst. */
+uint64_t hh_entry_provisional(const hh_entry_t *e)
+{
+    return e ? provisional_slots(e, NULL) : 0;
 }

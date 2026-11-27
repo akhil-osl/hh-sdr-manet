@@ -29,12 +29,12 @@ From the architecture's PL (FPGA FABRIC) region:
 
 This constrains radiod as much as the HDL: radiod must never drive T/R
 switching directly. The signal's timing, polarity, width and handshake are
-unspecified (U-08).
+unspecified.
 
 **Frequency hopping is PL-autonomous.** At 1000 hop/s, hopping is far too fast
 for request/response IPC. radiod's role is presumably limited to selecting a
 hopset — but the hopset-id property name and encoding, ownership of hopset
-selection, and missed-hop failure semantics are all unspecified (U-14).
+selection, and missed-hop failure semantics are all unspecified.
 
 This also leaves radiod's existing `set_channel` command only partially
 meaningful: it passes an **opaque** integer today, and

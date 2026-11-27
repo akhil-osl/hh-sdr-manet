@@ -128,7 +128,7 @@ static void test_kind_is_the_callers_choice(void)
 
     setup(&m, &r, &nif);
     hh_netif_open(&nif);
-    /* Kind for OLSRv2 traffic is undecided (U-24); any kind is carried. */
+    /* Kind for OLSRv2 traffic is undecided; any kind is carried. */
     HH_ASSERT_OK(hh_netif_send(&nif, HH_FRAME_ROUTING, 2, p, 1));
     HH_ASSERT_OK(hh_netif_send(&nif, HH_FRAME_BEACON, HH_NETIF_BROADCAST, p, 1));
     HH_ASSERT_OK(hh_netif_send(&nif, HH_FRAME_DATA, 2, p, 1));

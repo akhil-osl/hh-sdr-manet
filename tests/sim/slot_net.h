@@ -42,6 +42,9 @@ typedef struct {
     uint64_t entry_slots;
     unsigned joiners;
     const hh_entry_params_t *entry_params;   /* NULL = defaults */
+    /* Demand-driven slot allocation on every node. NULL = off: every node keeps
+     * slot (id - 1). Not combined with network entry. */
+    const hh_alloc_params_t *alloc;
     FILE    *log;                /* key=value lines, NULL = none */
     /* Called for every PDU sent, with the run time in ms. NULL = none. */
     void   (*pdu_hook)(void *ctx, uint32_t t_ms, const uint8_t *pdu, size_t len);
@@ -57,6 +60,7 @@ typedef struct {
     uint16_t size;               /* application packet bytes */
     uint32_t interval_ms;
     uint32_t start_ms;           /* after the start of the run */
+    uint8_t  cls;                /* hh_mac_class_t of the packets; 0 = data */
 } sn_flow_t;
 
 typedef enum { SN_EV_LINK_DOWN = 0, SN_EV_LINK_UP, SN_EV_REROUTE } sn_event_kind_t;
@@ -117,6 +121,10 @@ void sn_set_time(slot_net_t *net, uint32_t t_ms);
 void sn_step(slot_net_t *net);
 const hh_slot_stats_t *sn_slot_stats(const slot_net_t *net, unsigned node);
 
+/* Runs ms more milliseconds with traffic on, from where the last call stopped. */
+void sn_advance(slot_net_t *net, uint32_t ms);
+const hh_slot_t *sn_slot(const slot_net_t *net, unsigned node);
+
 /* Generate traffic for gen_ms, stop it, then drain for drain_ms. */
 void sn_run(slot_net_t *net, uint32_t gen_ms, uint32_t drain_ms);
 void sn_result(const slot_net_t *net, sn_result_t *out);
@@ -130,6 +138,9 @@ hh_status_t sn_reset(slot_net_t *net, unsigned node);
 hh_status_t sn_leave(slot_net_t *net, unsigned node);
 const hh_entry_t *sn_entry(const slot_net_t *net, unsigned node);
 uint64_t sn_own_slots(const slot_net_t *net, unsigned node);
+
+/* The queue reports a node has heard from the others. NULL for an invalid node number. */
+const hh_alloc_table_t *sn_demand(const slot_net_t *net, unsigned node);
 
 /* Capture of every PDU as pcap, link type 149 (DLT_USER2), no outer header.
  * Use sn_pcap_hook as pdu_hook with hook_ctx set to the FILE after sn_pcap_header(). */

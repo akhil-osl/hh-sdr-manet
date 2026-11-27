@@ -19,7 +19,7 @@
  * process that opens the OpenCPI application, with every other process
  * reaching the radio through the control protocol. That ownership is NOT
  * implemented here: the application XML, worker names, properties and ACI
- * lifecycle are all unspecified (see unknown.md, U-03 and U-04). radiod owns
+ * lifecycle are all unspecified. radiod owns
  * an hh_radio_ops_t backend, and a real backend will implement that same
  * vtable, so nothing in this file needs to change when one arrives.
  */
@@ -144,7 +144,7 @@ bool hh_radiod_shutdown_requested(const hh_radiod_t *d);
  *
  * Not yet exposed over the control protocol: reporting it would need either a
  * new response payload or an asynchronous event, and the wire format for
- * neither is specified (unknown.md, U-01 and U-05). The registry is
+ * neither is specified. The registry is
  * maintained and observable in-process so that the data exists and is tested
  * when a wire format does. */
 const hh_radiod_faults_t *hh_radiod_faults(const hh_radiod_t *d);

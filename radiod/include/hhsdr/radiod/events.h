@@ -10,7 +10,7 @@
  * ==========================================================================
  * WHAT THIS DELIBERATELY DOES NOT DEFINE
  * ==========================================================================
- * The authoritative fault taxonomy does not exist yet (see unknown.md, U-05):
+ * The authoritative fault taxonomy does not exist yet:
  * the real hardware fault list, severity levels, which faults latch versus
  * clear themselves, who may clear a latched fault, and required history depth
  * are all unspecified.
@@ -22,7 +22,7 @@
  *
  * It is also purely IN-PROCESS. radiod does not push events to clients,
  * because asynchronous delivery needs a wire framing for unsolicited
- * messages, and the control protocol has none (U-01: the protocol is strictly
+ * messages, and the control protocol has none (the protocol is strictly
  * one response per request). Clients poll. When an event framing exists, this
  * registry is the source that feeds it — that is why the record carries
  * timestamps and sequence numbers it does not strictly need today.

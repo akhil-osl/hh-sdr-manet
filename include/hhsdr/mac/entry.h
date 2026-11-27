@@ -167,6 +167,8 @@ typedef struct {
     uint64_t            own_slots;
     bool                failed;
     hh_mac_entry_fail_t fail_reason;
+    uint8_t             n_released;                      /* members whose leave took effect in this call */
+    uint16_t            released[HH_ENTRY_PEERS_MAX];    /* on-air addresses of those members */
     bool                found;       /* this radio founded a net: the founder is node_id */
     uint32_t            found_sf;    /* the founding superframe */
 } hh_entry_act_t;
@@ -242,6 +244,12 @@ bool hh_entry_next_command(hh_entry_t *e, const hh_slot_pos_t *pos, uint16_t bod
 
 /* An own-slot PDU was sent: the first one after joining is the confirmation. */
 void hh_entry_on_own_tx(hh_entry_t *e, const hh_slot_pos_t *pos);
+
+/* The allocator gave this radio a new slot set. Only a member that is not leaving takes it. */
+void hh_entry_set_own(hh_entry_t *e, uint64_t own);
+
+/* Slots held by grants that the joining radio has not yet confirmed with its first burst. */
+uint64_t hh_entry_provisional(const hh_entry_t *e);
 
 /* Slot bitmap of L bytes, bit n of the mask = bit n of the byte string. */
 uint64_t hh_entry_mask_from_bytes(const uint8_t *b, unsigned n);

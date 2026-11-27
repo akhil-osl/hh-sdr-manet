@@ -59,6 +59,9 @@ typedef struct {
 typedef hh_status_t (*hh_call_send_fn)(hh_node_id_t to, const uint8_t *pdu, size_t len,
                                        void *ctx);
 typedef void (*hh_call_event_fn)(const hh_call_event_t *ev, void *ctx);
+/* Asked before a call is placed or answered. False when the network has no room
+ * for another voice flow. The module does not know how the network decides. */
+typedef bool (*hh_call_admit_fn)(void *ctx);
 
 typedef struct {
     uint32_t setup_timeout_ms;  /* waiting for accept or reject */
@@ -70,6 +73,7 @@ typedef struct {
     uint64_t rx_stray;      /* valid, but not for the current call         */
     uint64_t rx_duplicate;  /* repeated request of the current call        */
     uint64_t busy_rejected;
+    uint64_t admit_refused; /* calls refused because the network had no room for voice */
     uint64_t timeouts;
     uint64_t tx_failed;     /* the send function refused a payload */
 } hh_call_counters_t;
@@ -80,6 +84,8 @@ typedef struct {
     hh_call_send_fn    send;
     hh_call_event_fn   event;
     void              *ctx;
+    hh_call_admit_fn   admit;
+    void              *admit_ctx;
     hh_call_state_t    state;
     hh_node_id_t       peer;
     uint16_t           id;
@@ -92,6 +98,12 @@ void hh_call_config_default(hh_call_config_t *cfg);
 
 hh_status_t hh_call_init(hh_call_t *c, const hh_call_config_t *cfg, const hh_clock_t *clock,
                          hh_call_send_fn send, hh_call_event_fn event, void *ctx);
+
+/* Sets the admission check, or NULL for none (the default). A request is then
+ * refused with HH_ERR_AGAIN before anything is sent, and an incoming request is
+ * answered with a busy reject without ringing. A call already up is never
+ * dropped for lack of room. */
+void hh_call_set_admit(hh_call_t *c, hh_call_admit_fn admit, void *ctx);
 
 /* Each call sends its message first. If the send function fails, the call
  * returns that status and the state does not change, so the caller can retry.

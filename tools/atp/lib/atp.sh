@@ -16,7 +16,7 @@
 #   reason      one line explaining the result
 #   started_utc / finished_utc   ISO-8601, from the host system clock
 #   time_source "system" — NOT the radio PHC: the time plane does not exist
-#               yet (unknown.md U-07), so evidence must not imply PHC time
+#               yet, so evidence must not imply PHC time
 #   host        uname -n of the machine that ran the check
 #   params      what was asked for (peer, duration, rate, ...)
 #   metrics     what was measured

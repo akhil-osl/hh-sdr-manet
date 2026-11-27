@@ -17,9 +17,9 @@ WHAT THIS DECODES
 WHAT THIS DOES NOT DECODE
   - Any frame header. The frame kind, source and destination are hh_frame_t
     struct fields that are never serialised; no air frame header exists
-    (unknown.md U-16).
+   .
   - Data-frame payloads, which are opaque user bytes.
-  - ICD-2 control traffic (unknown.md U-01) or ICD-1 DMA descriptors (U-06).
+  - ICD-2 control traffic or ICD-1 DMA descriptors.
 
 HOW FRAMES REACH IT
   Captures use private pcap link types, standing in for the missing frame

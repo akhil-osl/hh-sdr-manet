@@ -4,7 +4,7 @@
 
 This directory marks where the target architecture's PS-side OpenCPI RCC
 workers belong. No worker, spec, or build file exists here, because their
-names and property surfaces are unspecified — see U-03.
+names and property surfaces are unspecified.
 
 ## What belongs here
 
@@ -51,9 +51,9 @@ Outside this repository:
   assemblies.
 
 Whether that skeleton is merged here, kept as a sibling project, or becomes a
-submodule is itself undecided (U-10 in the audit; tracked as part of U-03).
+submodule is itself undecided.
 
 One further constraint: the OpenCPI ACI is a **C++** API and this project is
-strict C11 (`project(hh_sdr_manet C)`). How that boundary is crossed is U-11.
+strict C11 (`project(hh_sdr_manet C)`). How that boundary is crossed is open.
 
 See [`../unknown.md`](../unknown.md).

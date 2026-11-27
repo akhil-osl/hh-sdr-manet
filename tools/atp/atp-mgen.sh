@@ -15,8 +15,8 @@
 #
 # One-way latency is (receive time - send time) across two machines, so it is
 # only meaningful when their clocks agree. On the radio that agreement is what
-# the time plane is for, and the time plane does not exist yet (unknown.md
-# U-07). Latency is therefore reported only when the caller asserts
+# the time plane is for, and the time plane does not exist yet).
+# Latency is therefore reported only when the caller asserts
 # --clock-synced; asked for without it, the latency judgment is "blocked", not
 # silently computed from unsynchronised clocks.
 
@@ -218,7 +218,7 @@ fi
 if [ -n "$max_lat" ]; then
     result=pass
     if [ "$synced" != 1 ]; then
-        blocked="latency needs synchronised clocks; not asserted (--clock-synced), and the radio time plane does not exist yet (unknown.md U-07)"
+        blocked="latency needs synchronised clocks; not asserted (--clock-synced), and the radio time plane does not exist yet"
     else
         v=$(get .latency_ms.max)
         if [ -z "$v" ]; then

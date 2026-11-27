@@ -58,6 +58,14 @@ add_executable(test_entry unit/test_entry.c)
 target_link_libraries(test_entry PRIVATE hhsdr_mac)
 add_test(NAME test_entry COMMAND test_entry)
 
+add_executable(test_alloc unit/test_alloc.c)
+target_link_libraries(test_alloc PRIVATE hhsdr_mac)
+add_test(NAME test_alloc COMMAND test_alloc)
+
+add_executable(test_dscp unit/test_dscp.c)
+target_link_libraries(test_dscp PRIVATE hhsdr_mac)
+add_test(NAME test_dscp COMMAND test_dscp)
+
 add_executable(test_pdu unit/test_pdu.c)
 target_link_libraries(test_pdu PRIVATE hhsdr_mac)
 add_test(NAME test_pdu COMMAND test_pdu)
@@ -98,6 +106,13 @@ add_executable(test_slot_net scenario/test_slot_net.c)
 target_link_libraries(test_slot_net PRIVATE hhslotsim)
 add_test(NAME test_slot_net COMMAND test_slot_net)
 
+# Call setup refusal on the slot-timed network; needs the data terminal library (libcoap).
+if(TARGET hhsdr_dataterm)
+  add_executable(test_call_admit_net scenario/test_call_admit_net.c)
+  target_link_libraries(test_call_admit_net PRIVATE hhslotsim hhsdr_dataterm)
+  add_test(NAME test_call_admit_net COMMAND test_call_admit_net)
+endif()
+
 add_executable(test_entry_net scenario/test_entry_net.c)
 target_link_libraries(test_entry_net PRIVATE hhslotsim)
 target_include_directories(test_entry_net PRIVATE sim)
@@ -129,6 +144,24 @@ add_executable(hh-ring-bridge ${CMAKE_SOURCE_DIR}/tools/sim/hh_ring_bridge.c)
 target_include_directories(hh-ring-bridge PRIVATE ${CMAKE_SOURCE_DIR}/tools/sim)
 target_link_libraries(hh-ring-bridge PRIVATE hhringnet hhslotsim hhbridgeframes)
 set_target_properties(hh-ring-bridge PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+# hh-node: the MAC process of one node, and hh-ring-relay, the PC stand-in for the PL and the
+# radio. Development tooling only. hh-node needs CAP_NET_ADMIN to create its TAP.
+add_library(hhnoderelay STATIC ${CMAKE_SOURCE_DIR}/tools/node/ring_relay.c)
+target_include_directories(hhnoderelay PUBLIC ${CMAKE_SOURCE_DIR}/tools/node)
+target_link_libraries(hhnoderelay PUBLIC hhsdr_ring)
+
+add_executable(test_ring_relay unit/test_ring_relay.c)
+target_link_libraries(test_ring_relay PRIVATE hhnoderelay)
+add_test(NAME test_ring_relay COMMAND test_ring_relay)
+
+add_executable(hh-ring-relay ${CMAKE_SOURCE_DIR}/tools/node/hh_ring_relay.c)
+target_link_libraries(hh-ring-relay PRIVATE hhnoderelay hhsdr_ring_shm)
+set_target_properties(hh-ring-relay PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+add_executable(hh-node ${CMAKE_SOURCE_DIR}/tools/node/hh_node.c)
+target_link_libraries(hh-node PRIVATE hhsdr_ring_mac hhsdr_ring_shm hhbridgeframes)
+set_target_properties(hh-node PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 add_executable(test_slot unit/test_slot.c)
 target_link_libraries(test_slot PRIVATE hhsdr_mac)

@@ -222,8 +222,8 @@ static void test_packing_and_order(void)
 {
     hh_pdu_t p;
     reset();
-    /* Capacity 100: 22 bytes of overhead leave 78, so three 20-byte messages (25 each). */
-    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 100, a_tx, NULL));
+    /* Capacity 105: 27 bytes of overhead (queue report included) leave 78, so three 20-byte messages (25 each). */
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 105, a_tx, NULL));
     for (int i = 0; i < 5; i++) HH_ASSERT_EQ_INT(send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, B, 20), HH_MAC_ACCEPTED);
     HH_ASSERT_EQ_INT(send_n(&mac_a, HH_FRAME_ROUTING, HH_MAC_CLASS_CONTROL, HH_MAC_BROADCAST, 20), HH_MAC_ACCEPTED);
 
@@ -236,7 +236,7 @@ static void test_packing_and_order(void)
     HH_ASSERT_EQ_INT(p.msg[0].dst, HH_PDU_ADDR_BROADCAST);
     HH_ASSERT_EQ_INT(p.msg[1].cls, 4);
     HH_ASSERT(p.more_data);
-    HH_ASSERT(sent[0].len <= 100);
+    HH_ASSERT(sent[0].len <= 105);
     HH_ASSERT_OK(hh_pdu_decode(sent[1].bytes, sent[1].len, &p));
     HH_ASSERT_EQ_INT(p.n_msg, 3);
     HH_ASSERT(!p.more_data);
@@ -249,9 +249,9 @@ static void test_max_payload_follows_capacity(void)
 {
     hh_mac_status_t st;
     reset();
-    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 100, a_tx, NULL));
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 105, a_tx, NULL));
     HH_ASSERT_EQ_INT(hh_mac_status(&mac_a, &st), HH_MAC_OK);
-    HH_ASSERT_EQ_INT(st.max_payload, 73);   /* 100 - 22 overhead - 5 sub-header */
+    HH_ASSERT_EQ_INT(st.max_payload, 73);   /* 105 - 27 overhead - 5 sub-header */
     HH_ASSERT_EQ_INT(send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, B, 73), HH_MAC_ACCEPTED);
     HH_ASSERT_EQ_INT(send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, B, 74), HH_MAC_TOO_LARGE);
     run_ms(&slot_a, 1);
@@ -271,8 +271,8 @@ static void test_control_counts_against_capacity(void)
     HH_ASSERT_EQ_INT(slot_a.st.slots_with_routing, 1);
     HH_ASSERT_EQ_INT(slot_a.st.slots_with_control, 1);
     HH_ASSERT_EQ_INT(slot_a.st.user_bytes, 35);
-    HH_ASSERT_EQ_INT(slot_a.st.overhead_bytes, 22);
-    HH_ASSERT_EQ_INT(slot_a.st.pdu_bytes, 92);
+    HH_ASSERT_EQ_INT(slot_a.st.overhead_bytes, 27);
+    HH_ASSERT_EQ_INT(slot_a.st.pdu_bytes, 97);
     HH_ASSERT_EQ_INT(slot_a.st.capacity_bytes, 100);
     HH_ASSERT_EQ_INT(hh_slot_control_share_permille(&slot_a.st), 350);
     /* Control and user bytes share one capacity: a second control frame that
@@ -280,7 +280,7 @@ static void test_control_counts_against_capacity(void)
     send_n(&mac_a, HH_FRAME_ROUTING, HH_MAC_CLASS_CONTROL, HH_MAC_BROADCAST, 40);
     send_n(&mac_a, HH_FRAME_ROUTING, HH_MAC_CLASS_CONTROL, HH_MAC_BROADCAST, 40);
     run_ms(&slot_a, 20);
-    HH_ASSERT_EQ_INT(slot_a.st.messages_tx, 3);   /* one 45-byte message fits beside 22 bytes of overhead, not two */
+    HH_ASSERT_EQ_INT(slot_a.st.messages_tx, 3);   /* one 45-byte message fits beside 27 bytes of overhead, not two */
 }
 
 /* A beacon counts as control traffic but not as routing. */
@@ -347,6 +347,230 @@ static void test_receive_path(void)
     HH_ASSERT_EQ_INT(got[1].len, 20);
     HH_ASSERT_EQ_INT(got[1].payload[0], 0xA5);
     HH_ASSERT_EQ_INT(slot_b.st.rx_pdus, 2);
+}
+
+/* An own-slot PDU with no traffic still carries a zero queue report. */
+static void test_queue_report_empty(void)
+{
+    hh_pdu_t p;
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 100, a_tx, NULL));
+    run_ms(&slot_a, 1);
+    HH_ASSERT_EQ_INT(n_sent, 1);
+    HH_ASSERT_OK(hh_pdu_decode(sent[0].bytes, sent[0].len, &p));
+    HH_ASSERT(p.has_qreport);
+    for (int k = 0; k < 5; k++) HH_ASSERT_EQ_INT(p.qreport[k], 0);
+    HH_ASSERT_EQ_INT((int)sent[0].len, 27);   /* 22 bytes of overhead plus the 5-byte report */
+    HH_ASSERT_EQ_INT(slot_a.st.reports_tx, 1);
+}
+
+/* The report holds the messages offered in the frame, per class: those sent so far plus those still queued. */
+static void test_queue_report_is_offered_load(void)
+{
+    hh_pdu_t p;
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 100, a_tx, NULL));
+    send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, B, 20);
+    send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, B, 20);
+    send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, B, 20);
+    send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_VOICE, B, 20);
+    run_ms(&slot_a, 1);   /* room for two 25-byte messages: voice first, then one data */
+    HH_ASSERT_OK(hh_pdu_decode(sent[0].bytes, sent[0].len, &p));
+    HH_ASSERT_EQ_INT(p.n_msg, 2);
+    HH_ASSERT_EQ_INT(p.qreport[HH_MAC_CLASS_VOICE], 1);   /* one sent, none left */
+    HH_ASSERT_EQ_INT(p.qreport[HH_MAC_CLASS_DATA], 3);    /* one sent, two left */
+    HH_ASSERT(p.more_data);
+}
+
+/* Queues two 45-byte messages before every frame, so one fits each own slot. Returns the PDUs sent. */
+static int run_frames_with_two_messages(unsigned frames)
+{
+    for (unsigned f = 0; f < frames; f++) {
+        send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, B, 40);
+        send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, B, 40);
+        run_ms(&slot_a, 20);
+    }
+    return n_sent;
+}
+
+/* A node that carries all it is offered reports the same load from every own slot, whatever is left in its queue. */
+static void test_offered_load_is_the_same_from_every_slot(void)
+{
+    hh_pdu_t p;
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, (1u << 0) | (1u << 5) | (1u << 10) | (1u << 15), 100, a_tx, NULL));
+    HH_ASSERT_EQ_INT(run_frames_with_two_messages(4), 16);
+    for (int i = 0; i < 16; i++) {
+        HH_ASSERT_OK(hh_pdu_decode(sent[i].bytes, sent[i].len, &p));
+        HH_ASSERT_EQ_INT(p.qreport[HH_MAC_CLASS_DATA], 2);   /* also in slots 10 and 15, where nothing is left */
+    }
+}
+
+/* With too few slots the reported load rises every frame, because the backlog grows. */
+static void test_offered_load_rises_when_slots_are_short(void)
+{
+    hh_pdu_t p;
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 100, a_tx, NULL));
+    HH_ASSERT_EQ_INT(run_frames_with_two_messages(4), 4);
+    for (int i = 0; i < 4; i++) {
+        HH_ASSERT_OK(hh_pdu_decode(sent[i].bytes, sent[i].len, &p));
+        HH_ASSERT_EQ_INT(p.qreport[HH_MAC_CLASS_DATA], i + 2);
+    }
+}
+
+/* Frames in which the node sent nothing (late polls) leave no load behind. */
+static void test_offered_load_forgets_silent_frames(void)
+{
+    hh_pdu_t p;
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 100, a_tx, NULL));
+    send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, B, 40);
+    hh_slot_poll(&slot_a);   /* frame 0: one message sent */
+    t_now += 80;             /* frames 1 to 3 pass without a poll, their own slots are missed */
+    hh_slot_poll(&slot_a);   /* frame 4 */
+    HH_ASSERT_EQ_INT(n_sent, 2);
+    HH_ASSERT_OK(hh_pdu_decode(sent[1].bytes, sent[1].len, &p));
+    HH_ASSERT_EQ_INT(p.qreport[HH_MAC_CLASS_DATA], 0);
+}
+
+/* A heard queue report is stored with the sender and the slot it was sent in. */
+static void test_queue_report_stored_on_receive(void)
+{
+    const hh_alloc_demand_t *d;
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 100, a_tx, NULL));
+    HH_ASSERT_OK(setup_node(&slot_b, &mac_b, B, NET, 1u << 7, 100, b_tx, b_receiver));
+    forward_to_b = true;
+    send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, C, 20);
+    send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, C, 20);
+    send_n(&mac_a, HH_FRAME_DATA, HH_MAC_CLASS_DATA, C, 20);
+    run_ms(&slot_a, 21);   /* slot 0 sends two frames; slot 20 sends the third */
+    d = hh_alloc_find(&slot_b.demand, A);
+    HH_ASSERT(d != NULL);
+    HH_ASSERT_EQ_INT((int)d->seen_slot, 20);   /* the later report replaced the earlier one */
+    HH_ASSERT_EQ_INT(d->depth[HH_MAC_CLASS_DATA], 2);   /* two sent in the first frame, none left */
+    HH_ASSERT_EQ_INT(slot_b.st.reports_rx, 2);
+    HH_ASSERT_EQ_INT(slot_b.st.demand_dropped, 0);
+    HH_ASSERT(hh_alloc_find(&slot_a.demand, A) != NULL);   /* a node keeps its own last report */
+    HH_ASSERT(hh_alloc_find(&slot_a.demand, B) == NULL);   /* and has none for a node it never heard */
+}
+
+/* Builds a control-only PDU from a node that claims the given slot bits. */
+static size_t claim_pdu(uint16_t src, uint8_t claim_byte, uint8_t *buf, size_t cap)
+{
+    hh_pdu_t p;
+    size_t len = 0;
+    memset(&p, 0, sizeof p);
+    p.net_id = NET;
+    p.src = src;
+    p.time_quality = 0xFC;
+    p.slot_bytes = 3;
+    p.claims[0] = claim_byte;
+    if (hh_pdu_encode(&p, buf, cap, &len) != HH_OK) return 0;   /* the caller's receive then does nothing and its checks fail */
+    return len;
+}
+
+
+/* Allocation needs usable parameters, and takes the entry slots out of the map. */
+static void test_alloc_enable(void)
+{
+    hh_alloc_params_t ap;
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 100, a_tx, NULL));
+    hh_alloc_params_default(&ap, 20);
+    HH_ASSERT_ERR(hh_slot_enable_alloc(NULL, &ap), HH_ERR_INVAL);
+    HH_ASSERT_ERR(hh_slot_enable_alloc(&slot_a, NULL), HH_ERR_INVAL);
+    ap.weight_video = 0;
+    ap.weight_data = 0;
+    HH_ASSERT_ERR(hh_slot_enable_alloc(&slot_a, &ap), HH_ERR_INVAL);
+    hh_alloc_params_default(&ap, 20);
+    HH_ASSERT_OK(hh_slot_enable_alloc(&slot_a, &ap));
+    HH_ASSERT(slot_a.alloc_on);
+    HH_ASSERT_EQ_INT(slot_a.alloc_params.slots_per_frame, 20);
+}
+
+/* The voice admission query needs allocation, and says no once other nodes' calls use the reserve. */
+static void test_voice_admit_query(void)
+{
+    hh_alloc_params_t ap;
+    uint8_t others_calls[HH_ALLOC_CLASSES] = { 0, 0, 10, 0, 0 };
+    bool ok = true;
+
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 100, a_tx, NULL));
+    HH_ASSERT_ERR(hh_slot_voice_admit(&slot_a, 1, &ok), HH_ERR_STATE);   /* allocation is off */
+    hh_alloc_params_default(&ap, 20);
+    HH_ASSERT_OK(hh_slot_enable_alloc(&slot_a, &ap));
+    HH_ASSERT_ERR(hh_slot_voice_admit(&slot_a, 0, &ok), HH_ERR_INVAL);
+    HH_ASSERT_ERR(hh_slot_voice_admit(&slot_a, 1, NULL), HH_ERR_INVAL);
+    HH_ASSERT_OK(hh_slot_voice_admit(&slot_a, 1, &ok));
+    HH_ASSERT(ok);
+    HH_ASSERT_OK(hh_alloc_note(&slot_a.demand, 7, others_calls, 0));   /* node 7 offers ten voice messages a frame */
+    HH_ASSERT_OK(hh_slot_voice_admit(&slot_a, 1, &ok));
+    HH_ASSERT(!ok);
+}
+
+/* At a superframe boundary a node silent for longer than the gone limit is dropped from the demand table. */
+static void test_alloc_evicts_gone_node(void)
+{
+    hh_alloc_params_t ap;
+    uint8_t r[HH_ALLOC_CLASSES] = { 0, 0, 0, 0, 3 };
+
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 100, a_tx, NULL));
+    hh_alloc_params_default(&ap, 20);
+    ap.gone_slots = 500;
+    HH_ASSERT_OK(hh_slot_enable_alloc(&slot_a, &ap));
+    HH_ASSERT_OK(hh_alloc_note(&slot_a.demand, 7, r, 0));
+    run_ms(&slot_a, 400);
+    HH_ASSERT(hh_alloc_find(&slot_a.demand, 7) != NULL);   /* no boundary since, and not yet gone */
+    run_ms(&slot_a, 700);                                   /* the boundary at slot 1000: age 1000 */
+    HH_ASSERT(hh_alloc_find(&slot_a.demand, 7) == NULL);
+}
+
+/* With demand that does not change, the node's slots stop changing after the first maps. */
+static void test_alloc_positions_stay_put(void)
+{
+    hh_alloc_params_t ap;
+    uint8_t r[HH_ALLOC_CLASSES] = { 0, 0, 0, 0, 3 };
+    uint64_t changes;
+
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_a, &mac_a, A, NET, 1, 100, a_tx, NULL));
+    hh_alloc_params_default(&ap, 20);
+    HH_ASSERT_OK(hh_slot_enable_alloc(&slot_a, &ap));
+    HH_ASSERT_OK(hh_alloc_note(&slot_a.demand, 7, r, 0));
+    run_ms(&slot_a, 2500);
+    changes = slot_a.st.alloc_changes;
+    HH_ASSERT(slot_a.st.alloc_runs >= 3);
+    run_ms(&slot_a, 2000);                                  /* more maps, same demand */
+    HH_ASSERT(slot_a.st.alloc_runs >= 5);
+    HH_ASSERT_EQ_INT((int)slot_a.st.alloc_changes, (int)changes);
+}
+
+/* A lower node id that claims one of this node's slots keeps it; a higher id does not. */
+static void test_alloc_clash_lower_id_keeps_slot(void)
+{
+    hh_alloc_params_t ap;
+    hh_slot_pos_t pos = { 50, 0, 2, 10 };
+    uint8_t buf[64];
+    size_t len;
+
+    reset();
+    HH_ASSERT_OK(setup_node(&slot_b, &mac_b, B, NET, 1u << 3, 100, b_tx, b_receiver));
+    hh_alloc_params_default(&ap, 20);
+    HH_ASSERT_OK(hh_slot_enable_alloc(&slot_b, &ap));
+
+    len = claim_pdu(3, 0x08, buf, sizeof buf);   /* node 3 is above node 2 in id: node 2 keeps the slot */
+    hh_slot_receive(&slot_b, &pos, buf, len);
+    HH_ASSERT_EQ_INT((int)slot_b.cfg.own_slots, 8);
+    HH_ASSERT_EQ_INT(slot_b.st.alloc_clashes, 0);
+
+    len = claim_pdu(1, 0x08, buf, sizeof buf);   /* node 1 is below: node 2 gives the slot up */
+    hh_slot_receive(&slot_b, &pos, buf, len);
+    HH_ASSERT_EQ_INT((int)slot_b.cfg.own_slots, 0);
+    HH_ASSERT_EQ_INT(slot_b.st.alloc_clashes, 1);
 }
 
 /* With logic_adds_crc the scheduler sends and accepts PDUs without the CRC-32. */
@@ -423,6 +647,17 @@ HH_TEST_MAIN_BEGIN("slot")
     HH_RUN(test_late_poll_misses_own_slot);
     HH_RUN(test_clock_before_epoch);
     HH_RUN(test_receive_path);
+    HH_RUN(test_queue_report_empty);
+    HH_RUN(test_queue_report_is_offered_load);
+    HH_RUN(test_offered_load_is_the_same_from_every_slot);
+    HH_RUN(test_offered_load_rises_when_slots_are_short);
+    HH_RUN(test_offered_load_forgets_silent_frames);
+    HH_RUN(test_queue_report_stored_on_receive);
+    HH_RUN(test_alloc_enable);
+    HH_RUN(test_voice_admit_query);
+    HH_RUN(test_alloc_evicts_gone_node);
+    HH_RUN(test_alloc_positions_stay_put);
+    HH_RUN(test_alloc_clash_lower_id_keeps_slot);
     HH_RUN(test_logic_adds_crc);
     HH_RUN(test_receive_drops);
 HH_TEST_MAIN_END()

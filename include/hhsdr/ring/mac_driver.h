@@ -20,12 +20,14 @@ typedef struct {
     uint64_t rx_frames;        /* frames passed to the scheduler */
     uint64_t rx_crc_bad;       /* frames the PL marked bad, not passed up */
     uint64_t rx_bad_descriptor;/* length larger than the slot, dropped */
+    uint64_t rx_bad_width;     /* fixed-width mode: frame not of that width, or trailer length too large */
 } hh_ring_mac_stats_t;
 
 typedef struct {
     hh_ring_region_t   *region;
     hh_slot_t          *slot;
     uint16_t            lead_frames;   /* TDMA frames between building and sending, at least 1 */
+    uint16_t            width;         /* fixed ring frame width in bytes, 0 = frames are the PDU length */
     hh_ring_mac_stats_t st;
 } hh_ring_mac_t;
 
@@ -34,6 +36,14 @@ typedef struct {
  * CRC-32, because the PL appends it on transmit and removes it on receive. */
 hh_status_t hh_ring_mac_init(hh_ring_mac_t *m, hh_ring_region_t *region, hh_slot_t *slot,
                              uint16_t lead_frames);
+
+/* Fixed-width mode for a radio that carries one frame size only. Every ring
+ * frame is then exactly width bytes: the PDU, zero padding, and the PDU length
+ * as 2 bytes little-endian in the last two bytes. The scheduler capacity must
+ * not exceed width - 2. A received frame of another width is dropped. 0 turns
+ * the mode off. HH_ERR_INVAL on a null argument, or a width of 1 to 3 or above
+ * the ring slot size. */
+hh_status_t hh_ring_mac_set_width(hh_ring_mac_t *m, uint16_t width);
 
 /* Transmit function for hh_slot_init; pass the hh_ring_mac_t as ctx. */
 bool hh_ring_mac_tx(void *ctx, const hh_slot_pos_t *pos, const uint8_t *pdu, size_t len);

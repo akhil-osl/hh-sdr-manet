@@ -18,8 +18,8 @@ They test **only through interfaces that will still exist on hardware**:
 
 | Script | Talks to | Today | On the radio |
 |---|---|---|---|
-| `atp-iperf3.sh` | an IP address | network namespace | the mesh (`manet0`, U-06) |
-| `atp-mgen.sh` | an IP address | network namespace | the mesh (`manet0`, U-06) |
+| `atp-iperf3.sh` | an IP address | network namespace | the mesh (`manet0`) |
+| `atp-mgen.sh` | an IP address | network namespace | the mesh (`manet0`) |
 | `atp-capture.sh` | a network interface | `veth0` | `manet0` |
 | `atp-decode.sh` | a pcap file | analysis host | analysis host |
 | `atp-radioctl.sh` | `radioctl` (public CLI) | mock backend | real backend |
@@ -72,7 +72,7 @@ threshold, the script records the measurement and refuses to call it good.
 silently passing.
 
 `time_source` is always `"system"`. Timestamps come from the host clock, not
-the radio PHC, because the time plane does not exist yet (U-07).
+the radio PHC, because the time plane does not exist yet.
 
 ---
 
@@ -122,7 +122,7 @@ run are counted too.
 on one node from a receive time on another. Pass `--clock-synced` only when
 that is true, for example when both ends run on one host. Without it, a
 `--max-latency-ms` check reports `blocked`. On the radio, synchronised time is
-the job of the time plane, which does not exist yet (U-07).
+the job of the time plane, which does not exist yet.
 
 ### `atp-capture.sh` — packet capture
 
@@ -135,7 +135,7 @@ The radio only captures. The pcap is decoded afterwards on an analysis host.
 
 A capture can only see what the radio exposes as an interface. User IP
 traffic will cross `manet0`. The MANET's own beacon and routing frames have no
-defined capture point yet (U-16).
+defined capture point yet.
 
 ### `atp-radioctl.sh` — control-plane checks
 
@@ -170,7 +170,7 @@ them is a limit on the total, not a rate.
 
 The lifecycle expectations are radiod's documented behaviour, not invented
 limits. Today radiod always runs the mock backend. It has no hardware backend
-to select, because the PL/OpenCPI contracts are unspecified (U-03, U-04). The
+to select, because the PL/OpenCPI contracts are unspecified. The
 checks are therefore validated against the mock only. They use nothing but
 `radioctl`, so they run unchanged once a real backend exists.
 
@@ -234,11 +234,11 @@ opencpi/atp-ocpi.sh analyze --case ber-01 --log dma_stream.log -o ev
 | Application TC-15 | `--case apl-15` | every limit must be given: `--min-duration-s`, `--min-words-per-s`, `--max-loss-delta`, `--max-gap-growth` |
 | Application TC-16 | `watch --case apl-16` | `dma_stream` alive at start and end; no "finished on its own"; counter lines keep arriving; no new kernel error |
 | BER TC-1 | `--case ber-01` | `in_sync` true on every line; `err_count` 0; `bit_count` at least 9.2 Gbit; at least 600 s |
-| Operator TC-3 to 7, 10, 11; Application TC-4, 5, 8 to 14 | not automated yet | need CNF-07 or a method from QA (U-20) |
+| Operator TC-3 to 7, 10, 11; Application TC-4, 5, 8 to 14 | not automated yet | need CNF-07 or a method from QA |
 
 **Where the specification gives no number, there is no default.** The
 criterion is measured and the result is `unjudged` until the agreed number is
-passed (U-20). Kernel errors are counted with the pattern `board_stream.sh`
+passed. Kernel errors are counted with the pattern `board_stream.sh`
 itself uses (`oops|bad page`); change it with `--dmesg-pattern`.
 
 A log where a counter goes down (the application restarted mid-log), where a
@@ -285,7 +285,7 @@ past the version field, exactly as `hh_beacon_decode` refuses it.
   therefore use private pcap link types instead of a header: `DLT_USER0` for
   beacons and `DLT_USER1` for routing updates. This is a test-tooling
   convention, not an air format.
-- **On the radio, MANET frames have no defined capture point yet** (U-16).
+- **On the radio, MANET frames have no defined capture point yet**.
   Until one exists, the dissector decodes captures generated from the
   encoder, not live radio traffic.
 

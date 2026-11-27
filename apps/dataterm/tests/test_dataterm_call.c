@@ -159,6 +159,41 @@ static void test_busy_node_rejects_second_caller(void)
     HH_ASSERT_EQ_INT(node(2)->call.counters.busy_rejected, 1);
 }
 
+static bool g_room;
+static bool room(void *ctx) { (void)ctx; return g_room; }
+
+/* No room for voice: a caller is refused before anything is sent, and a callee answers busy without ringing. */
+static void test_no_room_for_voice_refuses_the_call(void)
+{
+    puts("    -- admission");
+    setup();
+    g_room = false;
+    hh_call_set_admit(&node(1)->call, room, NULL);
+    hh_call_set_admit(&node(2)->call, room, NULL);
+    HH_ASSERT_ERR(hh_call_request(&node(1)->call, 2), HH_ERR_AGAIN);
+    HH_ASSERT_EQ_INT(g_qn, 0);
+    HH_ASSERT_EQ_INT(node(1)->call.state, HH_CALL_IDLE);
+    HH_ASSERT_EQ_INT(node(1)->call.counters.admit_refused, 1);
+
+    hh_call_set_admit(&node(1)->call, NULL, NULL);   /* the caller has room, the callee has none */
+    HH_ASSERT_OK(hh_call_request(&node(1)->call, 2));
+    pump();
+    HH_ASSERT_EQ_INT(node(2)->call.state, HH_CALL_IDLE);
+    HH_ASSERT_EQ_INT(node(1)->call.state, HH_CALL_IDLE);
+    HH_ASSERT_EQ_INT(node(1)->last_reason, HH_CALL_REASON_BUSY);
+    HH_ASSERT_EQ_INT(node(2)->call.counters.admit_refused, 1);
+
+    g_room = true;   /* room again: the same call goes through */
+    HH_ASSERT_OK(hh_call_request(&node(1)->call, 2));
+    pump();
+    HH_ASSERT_EQ_INT(node(2)->call.state, HH_CALL_RINGING);
+    HH_ASSERT_OK(hh_call_accept(&node(2)->call));
+    pump();
+    g_room = false;   /* a call already up is not dropped when the room is gone */
+    advance(1000);
+    HH_ASSERT_EQ_INT(node(1)->call.state, HH_CALL_ACTIVE);
+}
+
 static void test_setup_timeout_clears_state(void)
 {
     puts("    -- setup timeout, state cleared, next call works");
@@ -305,6 +340,7 @@ HH_TEST_MAIN_BEGIN("dataterm call setup")
     HH_RUN(test_request_accept_release);
     HH_RUN(test_reject);
     HH_RUN(test_busy_node_rejects_second_caller);
+    HH_RUN(test_no_room_for_voice_refuses_the_call);
     HH_RUN(test_setup_timeout_clears_state);
     HH_RUN(test_ring_timeout_rejects_and_clears);
     HH_RUN(test_cancel_while_ringing_at_peer);

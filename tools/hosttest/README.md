@@ -8,7 +8,7 @@ ID and the firmware version.
 **Status:** development and test tooling. Nothing here is linked into, or
 installed by, a production target. Standard library only, Python 3.10 or newer.
 
-**Open contract:** the board's command and reply format is not defined (U-26).
+**Open contract:** the board's command and reply format is not defined.
 `hosttest/codec.py` is a placeholder, and the commands in the example config
 are examples. Only the fake board in `tests/` has been used so far.
 
@@ -63,7 +63,7 @@ heads and nets. Every edit is checked at once. Rows with a problem turn red, eac
 problem is listed, and Save plan stays disabled until the plan is valid. The
 window also shows the `dataterm -n ... -P ...` flags for one node. Net ID, groups
 and EUI-64 are saved in the plan file only, because dataterm has no input for
-them yet (U-29). The checks are in `hosttest/netplan.py` and run without a display.
+them yet (U-03). The checks are in `hosttest/netplan.py` and run without a display.
 
 File > Link status... opens the link status window. Start runs the board's own
 `radioctl opencpi get` for `rx_ber crc_ok_count`, `rx_ber crc_bad_count` and
@@ -162,7 +162,7 @@ Pass or fail compares the measured value to the limit as given; the
 uncertainty is logged, not applied.
 
 Only radio steps exist. Bench instrument steps wait for an instrument control
-contract (U-30), and the example limits are placeholders.
+contract (U-04), and the example limits are placeholders.
 
 ## Tests
 

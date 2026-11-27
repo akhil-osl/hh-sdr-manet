@@ -39,7 +39,7 @@ initialises, configures and starts the application named by `ocpi_app` on
 architecture's Note 1. It is tested against real OpenCPI 2.4.7 applications
 on the development host. It has **not** yet run on the radio board, and the
 board's bring-up steps (`ad9361_init`, the separate radio-setup application)
-are not part of it: whether radiod owns them is open ([`../unknown.md`](../unknown.md), U-19).
+are not part of it: whether radiod owns them is open.
 
 radiod still depends **only** on the `hh_radio_ops_t` vtable; `radiod.c` did
 not change to add the OpenCPI backend.
@@ -87,7 +87,7 @@ deliberately separate from the MANET node's `hh_config_t`:
 
 | Key | Default | Notes |
 |---|---|---|
-| `sock_path` | `/tmp/hh-radiod.sock` | `/tmp` is world-writable — see U-10 |
+| `sock_path` | `/tmp/hh-radiod.sock` | `/tmp` is world-writable |
 | `tick_interval_ms` | `10` | `poll()` timeout; bounds backend polling when idle |
 | `client_idle_timeout_ms` | `0` | 0 = disabled (historical behaviour) |
 | `log_level` | `info` | |
@@ -260,7 +260,7 @@ One qualification with `backend = ocpi`: the OpenCPI runtime starts its own
 container threads inside the process once an application exists, and links
 `pthread` to do so. radiod still makes every ACI call from its one control
 thread and shares no state with those threads, so nothing here needs a lock —
-but the process is no longer single-threaded as a whole (U-12).
+but the process is no longer single-threaded as a whole.
 
 Consequences worth knowing:
 
@@ -289,7 +289,7 @@ tracks, per fault kind: `active`, `count`, `first_seen`, `last_seen`,
 
 Built over **only the five fault kinds the protocol already defines** — `none`,
 `tx_failure`, `rx_silence`, `hw_fault`, `backend_io`. No severity levels, no
-hardware fault codes: that taxonomy is unspecified (U-05).
+hardware fault codes: that taxonomy is unspecified.
 
 Two behaviours that are deliberate, not incidental:
 
@@ -305,7 +305,7 @@ Two behaviours that are deliberate, not incidental:
 `clear_fault` clears **every** kind, because the command carries no kind.
 
 **Not exposed over the wire.** Reporting it needs a new response payload or an
-async event, and neither format is specified (U-01/U-05). Read it in-process
+async event, and neither format is specified. Read it in-process
 with `hh_radiod_faults()`.
 
 ---
@@ -339,8 +339,8 @@ caught inside it and turned into an `hh_status_t` plus an `aci_error` log line.
 | `close` (radiod `stop`) | `stop`, then release. Safe twice. |
 | `poll` | `wait(1 µs)`; an application that ended on its own is logged `app_finished` and reported not operational |
 | `get_status` | `operational` = open and not finished; everything else 0 (no property is defined as its source) |
-| `set_channel` | `HH_ERR_UNSUPPORTED` — no channel plan (U-14) |
-| `transmit` | `HH_ERR_NOT_IMPLEMENTED` — data plane undecided (U-15) |
+| `set_channel` | `HH_ERR_UNSUPPORTED` — no channel plan |
+| `transmit` | `HH_ERR_NOT_IMPLEMENTED` — data plane undecided |
 | `get_link_metrics` | `HH_ERR_UNSUPPORTED` |
 
 `hh_ocpi_backend_get_property()` reads any property of the running
@@ -368,8 +368,8 @@ than pretending to work.
 > **Note:** `hh-manet` still links this adapter and constructs its own instance.
 > That is a *latent* violation of the single-owner rule — harmless today because
 > the stub acquires nothing, but a real conflict the moment a working backend
-> exists. Severing it is blocked on U-15 (how the data plane reaches hardware
-> once only radiod may open the PL).
+> exists. Severing it is blocked on how the data plane reaches hardware
+> once only radiod may open the PL.
 
 ---
 
@@ -425,5 +425,4 @@ verb breaks older peers in both directions.
 `radiod_main.c`. Nothing else changes — that is the seam working as intended.
 
 **Before extending the OpenCPI backend** (board bring-up, status counters from
-application properties, frames), read U-03, U-04, U-12, U-14, U-15 and U-19 in
-[`../unknown.md`](../unknown.md).
+application properties, frames), read the open entries in [`../unknown.md`](../unknown.md).

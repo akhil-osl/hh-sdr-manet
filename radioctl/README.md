@@ -212,14 +212,13 @@ guessed at.
 
 **No `faults` command.** `radiod` maintains a full fault registry internally,
 but it is not exposed over the protocol: reporting it needs a new response
-payload or an async event, and neither wire format is specified
-([`../unknown.md`](../unknown.md), U-01/U-05).
+payload or an async event, and neither wire format is specified.
 
 **No `reset`.** Recovery is `clear-fault`, or `stop` then `start`.
 
 **`set-channel` takes an opaque integer.** The mapping from channel index to RF
 frequency is undefined (`radio.h` records it as *"logical channel index; mapping
-to RF TBD"*), and its relationship to a hopset is unspecified (U-14). The value
+to RF TBD"*), and its relationship to a hopset is unspecified. The value
 is passed through untouched.
 
 ---

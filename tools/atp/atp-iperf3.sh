@@ -9,7 +9,7 @@
 # Hardware-independent by construction: it only needs an IP route to PEER.
 # Today that route is a network namespace (selftest/netns-selftest.sh); on the
 # radio it is whatever carries IP across the mesh (manet0 in the target
-# architecture — not yet built, unknown.md U-06/U-15). Nothing here changes
+# architecture — not yet built). Nothing here changes
 # between the two; only the peer address does.
 #
 # The server side is deliberately not started from here: on the deployed radio

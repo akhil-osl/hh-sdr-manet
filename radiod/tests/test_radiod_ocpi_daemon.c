@@ -114,7 +114,7 @@ static void test_radiod_owns_opencpi_application(void)
     r = call(&c, HH_RC_CMD_STATUS, 0, 0);
     HH_ASSERT(r.operational);
 
-    /* Refused, not faked: no channel plan exists (U-14). */
+    /* Refused, not faked: no channel plan exists. */
     r = call(&c, HH_RC_CMD_SET_CHANNEL, 0, 3);
     HH_ASSERT(!r.ok);
     HH_ASSERT_EQ_INT(r.reason, HH_ERR_UNSUPPORTED);

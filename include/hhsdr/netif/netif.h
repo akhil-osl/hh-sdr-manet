@@ -3,7 +3,7 @@
  * (Linux manet0) and hh_radio_ops_t. OLSRd2 owns routing, Linux owns IP
  * forwarding; this only sends to a given next hop and delivers what arrives.
  *
- * Not decided, so not chosen here (unknown.md U-24): node-id mapping, IP, ARP,
+ * Not decided, so not chosen here: node-id mapping, IP, ARP,
  * MTU, and which frame kind each traffic type uses. Kind and next hop are
  * passed through unjudged (MAC-NETWORK-INTERFACE section 7.1, DP-11).
  *
