@@ -14,6 +14,19 @@ hh_status_t hh_ring_mac_init(hh_ring_mac_t *m, hh_ring_region_t *region, hh_slot
     return HH_OK;
 }
 
+#define TRAILER_BYTES 2u
+
+/* Turns the fixed-width mode on or off. */
+hh_status_t hh_ring_mac_set_width(hh_ring_mac_t *m, uint16_t width)
+{
+    if (!m) return HH_ERR_INVAL;
+    if (width != 0 && (width <= TRAILER_BYTES + 1 || width > m->region->tx.slot_size ||
+                       width > m->region->rx.slot_size))
+        return HH_ERR_INVAL;
+    m->width = width;
+    return HH_OK;
+}
+
 /* Ring class for a PDU: the most urgent class among its messages, control for
  * a PDU with none. Classes 0 to 4 are numbered alike in the PDU and the ring. */
 static uint8_t class_of(const uint8_t *pdu, size_t len)
@@ -42,7 +55,7 @@ bool hh_ring_mac_tx(void *ctx, const hh_slot_pos_t *pos, const uint8_t *pdu, siz
 
     if (!m || !pos || !pdu) return false;
     tx = &m->region->tx;
-    if (len > tx->slot_size) {
+    if (len > (m->width ? (size_t)m->width - TRAILER_BYTES : tx->slot_size)) {
         m->st.tx_too_big++;
         return false;
     }
@@ -55,8 +68,13 @@ bool hh_ring_mac_tx(void *ctx, const hh_slot_pos_t *pos, const uint8_t *pdu, siz
     frame %= m->slot->cfg.frames_per_superframe;
 
     memcpy(s.frame, pdu, len);
+    if (m->width) {
+        memset(s.frame + len, 0, m->width - len);
+        s.frame[m->width - 2] = (uint8_t)(len & 0xFF);
+        s.frame[m->width - 1] = (uint8_t)(len >> 8);
+    }
     memset(&d, 0, sizeof d);
-    d.length = (uint16_t)len;
+    d.length = m->width ? m->width : (uint16_t)len;
     d.traffic_class = class_of(pdu, len);
     d.target_superframe = super;
     d.target_frame = (uint16_t)frame;
@@ -102,8 +120,19 @@ uint32_t hh_ring_mac_poll(hh_ring_mac_t *m)
         } else if (!(d.flags & HH_RING_RX_CRC_OK)) {
             m->st.rx_crc_bad++;
         } else {
+            size_t len = d.length;
+            if (m->width) {
+                len = d.length == m->width
+                          ? (size_t)s.frame[m->width - 2] | ((size_t)s.frame[m->width - 1] << 8)
+                          : (size_t)m->width;
+                if (d.length != m->width || len > (size_t)m->width - TRAILER_BYTES) {
+                    m->st.rx_bad_width++;
+                    hh_ring_consume_release(rx, &s, 0);
+                    continue;
+                }
+            }
             rx_pos(m->slot, &d, &pos);
-            hh_slot_receive(m->slot, &pos, s.frame, d.length);
+            hh_slot_receive(m->slot, &pos, s.frame, len);
             m->st.rx_frames++;
             n++;
         }

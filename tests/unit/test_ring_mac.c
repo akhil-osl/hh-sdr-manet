@@ -227,6 +227,68 @@ static void test_rx_drops(void)
     HH_ASSERT_EQ_INT(hh_ring_view_used(&nb.region.rx), 0);
 }
 
+/* Fixed-width mode: the ring frame is the PDU, zeros, and the PDU length in the last two bytes. */
+static void test_fixed_width(void)
+{
+    enum { W = 100 };
+    uint8_t pay[20], pdu[W - 1];
+    uint16_t own = 0;
+    fake_pl_sent_t out;
+    hh_ring_tx_desc_t d;
+    hh_ring_slot_t s;
+    hh_slot_pos_t pos = { 0 };
+    hh_ring_rx_desc_t meta = { .slot_in_frame = 0, .superframe = 0 };
+
+    reset(16);
+    HH_ASSERT_ERR(hh_ring_mac_set_width(NULL, W), HH_ERR_INVAL);
+    HH_ASSERT_ERR(hh_ring_mac_set_width(&na.drv, 3), HH_ERR_INVAL);
+    HH_ASSERT_ERR(hh_ring_mac_set_width(&na.drv, SLOT_SIZE + 1), HH_ERR_INVAL);
+    HH_ASSERT_OK(hh_ring_mac_set_width(&na.drv, W));
+    HH_ASSERT_OK(hh_ring_mac_set_width(&nb.drv, W));
+    na.slot.cfg.capacity = W - 2;
+
+    for (unsigned i = 0; i < sizeof pay; i++) pay[i] = (uint8_t)(0xC0 + i);
+    hh_mac_send(&na.mac, HH_FRAME_DATA, HH_MAC_CLASS_DATA, B, 0, pay, sizeof pay);
+    run_ms(&na, 1);
+
+    HH_ASSERT_OK(peek_tx(&na, &d));
+    HH_ASSERT_EQ_INT(d.length, W);                              /* always the full width */
+    HH_ASSERT_EQ_INT(d.traffic_class, HH_RING_CLASS_DATA);
+    hh_ring_consume_peek(&na.region.tx, &s);
+    unsigned plen = s.frame[W - 2] | (s.frame[W - 1] << 8);
+    HH_ASSERT(plen > sizeof pay && plen <= W - 2);
+    HH_ASSERT_EQ_INT(s.frame[plen], 0);                         /* zeros between PDU and trailer */
+    HH_ASSERT_EQ_INT(s.frame[W - 3], 0);
+
+    HH_ASSERT_OK(fake_pl_transmit(&na.pl, &na.region, 0, 1, &own, 1, &out));
+    t_now = EPOCH + FRAME_MS;
+    HH_ASSERT_OK(fake_pl_receive(&nb.pl, &nb.region, out.bytes, out.length, &meta));
+    HH_ASSERT_EQ_INT(hh_ring_mac_poll(&nb.drv), 1);
+    HH_ASSERT_EQ_INT(nb.n_got, 1);
+    HH_ASSERT_EQ_INT(nb.got[0].len, sizeof pay);
+    HH_ASSERT(memcmp(nb.got[0].payload, pay, sizeof pay) == 0);
+
+    /* A PDU over width - 2 is refused. */
+    memset(pdu, 0, sizeof pdu);
+    HH_ASSERT(!hh_ring_mac_tx(&na.drv, &pos, pdu, W - 1));
+    HH_ASSERT_EQ_INT(na.drv.st.tx_too_big, 1);
+
+    /* A frame of another width, and a trailer longer than the frame, are dropped and counted. */
+    hh_ring_produce_begin(&nb.region.rx, &s);
+    meta.length = W - 4;
+    hh_ring_rx_desc_write(s.desc, &meta);
+    hh_ring_produce_commit(&nb.region.rx, &s, HH_RING_RX_CRC_OK);
+    hh_ring_produce_begin(&nb.region.rx, &s);
+    memset(s.frame, 0, W);
+    s.frame[W - 2] = W - 1;                                     /* length W - 1 does not fit */
+    meta.length = W;
+    hh_ring_rx_desc_write(s.desc, &meta);
+    hh_ring_produce_commit(&nb.region.rx, &s, HH_RING_RX_CRC_OK);
+    HH_ASSERT_EQ_INT(hh_ring_mac_poll(&nb.drv), 0);
+    HH_ASSERT_EQ_INT(nb.drv.st.rx_bad_width, 2);
+    HH_ASSERT_EQ_INT(hh_ring_view_used(&nb.region.rx), 0);
+}
+
 /* Bad arguments are refused. */
 static void test_args(void)
 {
@@ -248,5 +310,6 @@ HH_TEST_MAIN_BEGIN("ring_mac")
     HH_RUN(test_tx_ring_full);
     HH_RUN(test_end_to_end);
     HH_RUN(test_rx_drops);
+    HH_RUN(test_fixed_width);
     HH_RUN(test_args);
 HH_TEST_MAIN_END()

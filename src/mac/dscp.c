@@ -7,7 +7,8 @@
 #define W HH_MAC_CLASS_VIDEO
 #define D HH_MAC_CLASS_DATA
 
-/*
+/* CS3 and CS4 are "class selector" marks. They are plain priority levels: 3 and
+ * 4 (values 24 and 32). AF31 to AF33 and AF41 to AF43 are "assured forwarding" marks.
  * One row per DSCP value 0 to 63. Voice is EF (46). Video is CS3 (24), AF31 to
  * AF33 (26, 28, 30), CS4 (32) and AF41 to AF43 (34, 36, 38). Everything else is
  * data, which includes:

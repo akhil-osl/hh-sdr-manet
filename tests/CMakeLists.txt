@@ -145,6 +145,24 @@ target_include_directories(hh-ring-bridge PRIVATE ${CMAKE_SOURCE_DIR}/tools/sim)
 target_link_libraries(hh-ring-bridge PRIVATE hhringnet hhslotsim hhbridgeframes)
 set_target_properties(hh-ring-bridge PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
+# hh-node: the MAC process of one node, and hh-ring-relay, the PC stand-in for the PL and the
+# radio. Development tooling only. hh-node needs CAP_NET_ADMIN to create its TAP.
+add_library(hhnoderelay STATIC ${CMAKE_SOURCE_DIR}/tools/node/ring_relay.c)
+target_include_directories(hhnoderelay PUBLIC ${CMAKE_SOURCE_DIR}/tools/node)
+target_link_libraries(hhnoderelay PUBLIC hhsdr_ring)
+
+add_executable(test_ring_relay unit/test_ring_relay.c)
+target_link_libraries(test_ring_relay PRIVATE hhnoderelay)
+add_test(NAME test_ring_relay COMMAND test_ring_relay)
+
+add_executable(hh-ring-relay ${CMAKE_SOURCE_DIR}/tools/node/hh_ring_relay.c)
+target_link_libraries(hh-ring-relay PRIVATE hhnoderelay hhsdr_ring_shm)
+set_target_properties(hh-ring-relay PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+add_executable(hh-node ${CMAKE_SOURCE_DIR}/tools/node/hh_node.c)
+target_link_libraries(hh-node PRIVATE hhsdr_ring_mac hhsdr_ring_shm hhbridgeframes)
+set_target_properties(hh-node PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
 add_executable(test_slot unit/test_slot.c)
 target_link_libraries(test_slot PRIVATE hhsdr_mac)
 add_test(NAME test_slot COMMAND test_slot)
