@@ -37,7 +37,8 @@ typedef struct {
     uint32_t tc_interval_ms;     /* 0 = off */
     uint16_t tc_bytes;
     /* Network entry. entry_slots 0 = off. Otherwise the last `joiners` nodes start
-     * without a slot and join with sn_join(); the others own slot (id - 1). */
+     * without a slot and join with sn_join(); the others own slot (id - 1). joiners == nodes
+     * is a cold start with no member. */
     uint64_t entry_slots;
     unsigned joiners;
     const hh_entry_params_t *entry_params;   /* NULL = defaults */
@@ -124,6 +125,8 @@ hh_mac_t *sn_mac(slot_net_t *net, unsigned node);
 
 /* Network entry (only with entry_slots set). Node numbers are 1-based. */
 hh_status_t sn_join(slot_net_t *net, unsigned node);
+/* Silent power cycle of a node: it keeps no slot and no state. Follow with sn_join. */
+hh_status_t sn_reset(slot_net_t *net, unsigned node);
 hh_status_t sn_leave(slot_net_t *net, unsigned node);
 const hh_entry_t *sn_entry(const slot_net_t *net, unsigned node);
 uint64_t sn_own_slots(const slot_net_t *net, unsigned node);

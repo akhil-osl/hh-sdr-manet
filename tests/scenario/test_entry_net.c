@@ -336,6 +336,145 @@ static void test_leave_frees_slot_for_later_joiner(void)
     sn_destroy(n);
 }
 
+/* Cold start: no member, three radios start together and hear nothing. The first founds between
+ * n_found and n_found + jitter superframes after the start. A founder sends nothing yet (its slot
+ * claim and beacon are open, U-23), so the others also found; this is the two-net case and is only
+ * counted here. */
+static void test_cold_start_founders(void)
+{
+    scn_t s = { "cold_start", 3, 3, 20, 1, 0, NULL };
+    hh_entry_params_t p;
+    track_t trk;
+    slot_net_t *n;
+    uint32_t first_ms = 0;
+    unsigned founders = 0;
+
+    hh_entry_params_default(&p);
+    memset(&trk, 0, sizeof trk);
+    n = build(&s, &trk);
+    HH_ASSERT(n != NULL);
+    if (!n) return;
+    for (uint32_t t = 0; t < 12000u; t++) {
+        sn_set_time(n, t);
+        if (t == 0)
+            for (unsigned i = 1; i <= s.nodes; i++) HH_ASSERT_OK(sn_join(n, i));
+        sn_step(n);
+        founders = 0;
+        for (unsigned i = 1; i <= s.nodes; i++)
+            if (hh_entry_state(sn_entry(n, i)) == HH_ENTRY_FOUNDER) founders++;
+        if (founders && !first_ms) first_ms = t;
+    }
+    printf("entry_sim scenario=cold_start nodes=%u founders=%u first_found_ms=%u\n", s.nodes, founders, first_ms);
+    HH_ASSERT(founders >= 1);
+    HH_ASSERT(first_ms >= p.n_found * 1000u);
+    HH_ASSERT(first_ms <= (p.n_found + p.found_jitter + 1u) * 1000u);
+    for (unsigned i = 1; i <= s.nodes; i++) HH_ASSERT(!sn_entry(n, i)->st.joined);
+    sn_destroy(n);
+}
+
+/* Runs the network from t0 to t1 ms, calling at(t) before each step. */
+typedef void (*step_fn)(slot_net_t *n, uint32_t t);
+
+static void run_range(slot_net_t *n, uint32_t t0, uint32_t t1, step_fn at)
+{
+    for (uint32_t t = t0; t < t1; t++) {
+        sn_set_time(n, t);
+        at(n, t);
+        sn_step(n);
+    }
+}
+
+/* Node 2 power-cycles silently at 10 s and joins again. The others still list its old slot; it ages out
+ * after t_age and the quarantine, and the next joiner, node 5 at 30 s, gets it. */
+static void reset_events(slot_net_t *n, uint32_t t)
+{
+    if (t == 10000u) { HH_ASSERT_OK(sn_reset(n, 2)); HH_ASSERT_OK(sn_join(n, 2)); }
+    if (t == 30000u) HH_ASSERT_OK(sn_join(n, 5));
+}
+
+static void test_reset_and_reenter(void)
+{
+    scn_t s = { "reset", 5, 1, 20, 1, 0, NULL };
+    track_t trk;
+    slot_net_t *n;
+    uint32_t joined_ms = 0;
+
+    memset(&trk, 0, sizeof trk);
+    n = build(&s, &trk);
+    HH_ASSERT(n != NULL);
+    if (!n) return;
+    for (uint32_t t = 0; t < 29000u; t += 1000u) {
+        run_range(n, t, t + 1000u, reset_events);
+        if (!joined_ms && t >= 10000u && sn_entry(n, 2)->st.joined) joined_ms = t + 1000u - 10000u;
+    }
+    HH_ASSERT(sn_entry(n, 2)->st.joined);
+    HH_ASSERT(sn_own_slots(n, 2) == (1ull << 4));           /* not the old slot: the others still held it */
+    run_range(n, 29000u, 50000u, reset_events);
+    HH_ASSERT(sn_entry(n, 5)->st.joined);
+    HH_ASSERT(sn_own_slots(n, 5) == (1ull << 1));           /* the slot node 2 left behind, freed by age-out */
+    HH_ASSERT(sn_own_slots(n, 2) == (1ull << 4));
+    HH_ASSERT(slots_unique(n, s.nodes, 1ull << (s.slots_per_frame - 1u)));
+    printf("entry_sim scenario=reset reentry_ms_upper=%u old_slot_reused_by_node5=1\n", joined_ms);
+    sn_destroy(n);
+}
+
+/* Node 2 is cut off from the net at cut_ms and comes back at back_ms. Node 5 joins at 20 s. */
+static uint32_t cut_ms, back_ms;
+
+static void isolate_events(slot_net_t *n, uint32_t t)
+{
+    if (t == cut_ms || t == back_ms)
+        for (unsigned j = 1; j <= 5; j++)
+            if (j != 2) sn_link(n, 2, j, t == back_ms);
+    if (t == 20000u) HH_ASSERT_OK(sn_join(n, 5));
+}
+
+/* Node 2 is away for 3 s, less than t_age: nothing is aged out and node 5 gets a new slot. */
+static void test_short_isolation(void)
+{
+    scn_t s = { "isolation_short", 5, 1, 20, 1, 0, NULL };
+    track_t trk;
+    slot_net_t *n;
+
+    cut_ms = 10000u;
+    back_ms = 13000u;
+    memset(&trk, 0, sizeof trk);
+    n = build(&s, &trk);
+    HH_ASSERT(n != NULL);
+    if (!n) return;
+    run_range(n, 0, 40000u, isolate_events);
+    HH_ASSERT(sn_own_slots(n, 2) == (1ull << 1));
+    HH_ASSERT(sn_entry(n, 5)->st.joined);
+    HH_ASSERT(sn_own_slots(n, 5) == (1ull << 4));
+    HH_ASSERT(slots_unique(n, s.nodes, 1ull << (s.slots_per_frame - 1u)));
+    printf("entry_sim scenario=isolation_short node5_slots=%llx\n", (unsigned long long)sn_own_slots(n, 5));
+    sn_destroy(n);
+}
+
+/* Node 2 is away for 20 s. The others age its slot out and node 5 takes it. When node 2 comes back it
+ * still sends in that slot. Nothing tells either radio about the clash (U-23), so this only records it. */
+static void test_long_isolation(void)
+{
+    scn_t s = { "isolation_long", 5, 1, 20, 1, 0, NULL };
+    track_t trk;
+    slot_net_t *n;
+
+    cut_ms = 10000u;
+    back_ms = 30000u;
+    memset(&trk, 0, sizeof trk);
+    n = build(&s, &trk);
+    HH_ASSERT(n != NULL);
+    if (!n) return;
+    run_range(n, 0, 29000u, isolate_events);
+    HH_ASSERT(sn_entry(n, 5)->st.joined);
+    HH_ASSERT(sn_own_slots(n, 5) == (1ull << 1));           /* took the slot of the isolated node */
+    run_range(n, 29000u, 60000u, isolate_events);
+    printf("entry_sim scenario=isolation_long node2_slots=%llx node5_slots=%llx clash=%d conflicts=%u\n",
+           (unsigned long long)sn_own_slots(n, 2), (unsigned long long)sn_own_slots(n, 5),
+           sn_own_slots(n, 2) == sn_own_slots(n, 5), sn_entry(n, 5)->st.conflicts);
+    sn_destroy(n);
+}
+
 HH_TEST_MAIN_BEGIN("entry_net")
     hh_log_set_level(HH_LOG_ERROR);
     HH_RUN(test_single_joiner);
@@ -346,4 +485,8 @@ HH_TEST_MAIN_BEGIN("entry_net")
     HH_RUN(test_seeds_differ);
     HH_RUN(test_no_backoff_never_resolves);
     HH_RUN(test_leave_frees_slot_for_later_joiner);
+    HH_RUN(test_cold_start_founders);
+    HH_RUN(test_reset_and_reenter);
+    HH_RUN(test_short_isolation);
+    HH_RUN(test_long_isolation);
 HH_TEST_MAIN_END()

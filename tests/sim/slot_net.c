@@ -42,6 +42,7 @@ typedef struct {
     uint8_t       pdu[HH_PDU_MAX_LEN];
     uint32_t      next_hello, next_tc;
     hh_entry_t    entry;
+    unsigned      resets;       /* power cycles so far, mixed into the entry seed */
 } node_t;
 
 struct slot_net {
@@ -289,6 +290,43 @@ void sn_config_default(sn_config_t *c, uint16_t nodes)
     c->tc_bytes = 40;              /* TODO: placeholder size */
 }
 
+/* Starts the MAC, slot scheduler and entry logic of node index i. A joiner owns no slot. */
+static bool init_node(slot_net_t *n, unsigned i, bool joiner)
+{
+    const sn_config_t *cfg = &n->cfg;
+    node_t *nd = &n->nodes[i];
+    hh_mac_config_t mc;
+    hh_slot_config_t sc;
+
+    nd->net = n;
+    nd->id = i + 1u;
+    nd->slot = i;
+    hh_mac_config_default(&mc, nd->id, &n->clock);
+    mc.receive = on_mac_rx;
+    mc.receive_ctx = nd;
+    mc.report_period_sf = 0;
+    if (hh_mac_init(&nd->mac, &mc) != HH_MAC_OK || hh_mac_open(&nd->mac) != HH_MAC_OK) return false;
+    hh_mac_set_state(&nd->mac, joiner ? HH_MAC_WAIT_TIME : HH_MAC_STEADY);
+    hh_slot_config_default(&sc, nd->id, cfg->net_id);
+    sc.slots_per_frame = cfg->slots_per_frame;
+    sc.frames_per_superframe = cfg->frames_per_superframe;
+    sc.slot_ms = cfg->slot_ms;
+    sc.capacity = cfg->capacity;
+    sc.own_slots = joiner ? 0 : 1ull << i;
+    sc.entry_slots = cfg->entry_slots;
+    sc.epoch_ms = EPOCH_MS;
+    if (hh_slot_init(&nd->sl, &sc, &n->clock, &nd->mac, on_tx, nd) != HH_OK) return false;
+    if (cfg->entry_slots) {
+        hh_entry_params_t ep;
+        hh_entry_params_default(&ep);
+        if (cfg->entry_params) ep = *cfg->entry_params;
+        if (hh_entry_init(&nd->entry, &ep, &sc, cfg->seed + nd->resets) != HH_OK ||
+            hh_slot_attach_entry(&nd->sl, &nd->entry) != HH_OK)
+            return false;
+    }
+    return true;
+}
+
 /* Creates the network with its nodes, MACs and schedulers. Returns NULL if the configuration is invalid. */
 slot_net_t *sn_create(const sn_config_t *cfg)
 {
@@ -296,7 +334,7 @@ slot_net_t *sn_create(const sn_config_t *cfg)
     unsigned entry_count = 0;
     for (uint64_t m = cfg ? cfg->entry_slots : 0; m; m &= m - 1u) entry_count++;
     if (!cfg || cfg->nodes < 2 || cfg->nodes > SN_MAX_NODES || cfg->nodes + entry_count > cfg->slots_per_frame ||
-        cfg->slots_per_frame > HH_SLOT_FRAME_MAX || cfg->joiners >= cfg->nodes ||
+        cfg->slots_per_frame > HH_SLOT_FRAME_MAX || cfg->joiners > cfg->nodes ||
         (cfg->joiners && !cfg->entry_slots))
         return NULL;
     n = calloc(1, sizeof *n);
@@ -313,35 +351,7 @@ slot_net_t *sn_create(const sn_config_t *cfg)
 
     for (unsigned i = 0; i < cfg->nodes; i++) {
         node_t *nd = &n->nodes[i];
-        hh_mac_config_t mc;
-        hh_slot_config_t sc;
-        bool joiner;
-        nd->net = n;
-        nd->id = i + 1u;
-        nd->slot = i;
-        hh_mac_config_default(&mc, nd->id, &n->clock);
-        mc.receive = on_mac_rx;
-        mc.receive_ctx = nd;
-        mc.report_period_sf = 0;
-        if (hh_mac_init(&nd->mac, &mc) != HH_MAC_OK || hh_mac_open(&nd->mac) != HH_MAC_OK) { sn_destroy(n); return NULL; }
-        joiner = i >= cfg->nodes - cfg->joiners;
-        hh_mac_set_state(&nd->mac, joiner ? HH_MAC_WAIT_TIME : HH_MAC_STEADY);
-        hh_slot_config_default(&sc, nd->id, cfg->net_id);
-        sc.slots_per_frame = cfg->slots_per_frame;
-        sc.frames_per_superframe = cfg->frames_per_superframe;
-        sc.slot_ms = cfg->slot_ms;
-        sc.capacity = cfg->capacity;
-        sc.own_slots = joiner ? 0 : 1ull << i;
-        sc.entry_slots = cfg->entry_slots;
-        sc.epoch_ms = EPOCH_MS;
-        if (hh_slot_init(&nd->sl, &sc, &n->clock, &nd->mac, on_tx, nd) != HH_OK) { sn_destroy(n); return NULL; }
-        if (cfg->entry_slots) {
-            hh_entry_params_t ep;
-            hh_entry_params_default(&ep);
-            if (cfg->entry_params) ep = *cfg->entry_params;
-            if (hh_entry_init(&nd->entry, &ep, &sc, cfg->seed) != HH_OK ||
-                hh_slot_attach_entry(&nd->sl, &nd->entry) != HH_OK) { sn_destroy(n); return NULL; }
-        }
+        if (!init_node(n, i, i >= cfg->nodes - cfg->joiners)) { sn_destroy(n); return NULL; }
         nd->next_hello = (uint32_t)((uint64_t)i * cfg->hello_interval_ms / cfg->nodes);
         nd->next_tc = (uint32_t)((uint64_t)i * cfg->tc_interval_ms / cfg->nodes);
     }
@@ -355,6 +365,15 @@ void sn_destroy(slot_net_t *n)
     free(n->nodes);
     free(n->pkts);
     free(n);
+}
+
+/* Power-cycles a node without a word: its MAC, slots and entry state start again with no slot and a new
+ * seed for the back-off draws. Call sn_join to start its entry. */
+hh_status_t sn_reset(slot_net_t *n, unsigned node)
+{
+    if (!n || node < 1 || node > n->cfg.nodes || !n->cfg.entry_slots) return HH_ERR_INVAL;
+    n->nodes[node - 1].resets++;
+    return init_node(n, node - 1u, true) ? HH_OK : HH_ERR_INVAL;
 }
 
 /* Starts network entry on a node that owns no slot. */

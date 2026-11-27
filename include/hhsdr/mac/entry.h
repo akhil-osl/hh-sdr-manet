@@ -89,6 +89,10 @@ typedef struct {
     uint8_t  apply_lead;     /* superframes from the grant to the apply-at superframe */
     uint8_t  t_confirm;      /* superframes after apply-at before an unused grant lapses */
     uint8_t  n_leave;        /* superframes in which a leaving radio sends its leave */
+    uint8_t  n_found;        /* superframes of silence before the radio founds a net, 0 = never; > n_listen */
+    uint8_t  found_jitter;   /* the radio adds 0 to found_jitter superframes of its own to n_found */
+    uint8_t  t_age;          /* superframes without a burst from a slot owner before it is aged out, 0 = never */
+    uint8_t  t_quarantine;   /* superframes an aged-out slot stays unused */
 } hh_entry_params_t;
 
 /* Values still to be decided are marked TODO in entry.c. */
@@ -102,7 +106,8 @@ typedef enum {
     HH_ENTRY_GRANTED,        /* grant accepted, waiting for the apply-at superframe */
     HH_ENTRY_HOLDOFF,        /* gave up, waiting before a new episode */
     HH_ENTRY_REFUSED,        /* rejected for good, until the operator acts */
-    HH_ENTRY_MEMBER          /* owns slots, answers requests */
+    HH_ENTRY_MEMBER,         /* owns slots, answers requests */
+    HH_ENTRY_FOUNDER         /* founded a net, owns no slot yet; the slot claim is not defined (U-23) */
 } hh_entry_state_t;
 
 typedef struct {
@@ -127,6 +132,8 @@ typedef struct {
     uint32_t lapsed_grants;
     uint32_t bad_commands;
     uint32_t unknown_commands;
+    uint32_t aged_out;       /* slot owners dropped after t_age */
+    uint32_t conflicts;      /* own slots given up to a lower node id */
 } hh_entry_stats_t;
 
 typedef struct {
@@ -148,6 +155,9 @@ typedef struct {
     uint64_t claims;
     uint32_t release_at;     /* 0 = none */
     uint64_t release_slots;
+    uint32_t last_sf;        /* superframe of the last burst heard */
+    bool     aged;           /* silent too long: the slots are in quarantine until free_sf */
+    uint32_t free_sf;
     bool     used;
 } hh_entry_peer_t;
 
@@ -157,6 +167,8 @@ typedef struct {
     uint64_t            own_slots;
     bool                failed;
     hh_mac_entry_fail_t fail_reason;
+    bool                found;       /* this radio founded a net: the founder is node_id */
+    uint32_t            found_sf;    /* the founding superframe */
 } hh_entry_act_t;
 
 struct hh_entry {
@@ -169,8 +181,12 @@ struct hh_entry {
     uint64_t          valid;        /* slots of the frame */
     uint64_t          entry_slots;
     uint32_t          rng;
+    uint32_t          rng_found;    /* own generator, so founding does not shift the back-off draws */
+    uint64_t          found_wait;   /* slots of silence before founding, jitter included */
+    uint64_t          found_at;     /* slot at which the radio founds, 0 = not armed */
     hh_entry_state_t  state;
     uint64_t          own;
+    uint64_t          lost;         /* own slots another radio with a lower id also claims */
     /* Joining side. */
     uint64_t          busy;         /* slots heard in use */
     uint64_t          listen_end, deadline, holdoff_end;
