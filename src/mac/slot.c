@@ -163,6 +163,7 @@ static void apply_entry(hh_slot_t *s, const hh_entry_act_t *act)
     case HH_ENTRY_GRANTED:   hh_mac_set_state(s->mac, HH_MAC_ENTRY); break;
     case HH_ENTRY_MEMBER:    hh_mac_set_state(s->mac, HH_MAC_STEADY); break;
     case HH_ENTRY_OFF:       hh_mac_set_state(s->mac, HH_MAC_WAIT_TIME); break;
+    case HH_ENTRY_FOUNDER:   break;   /* TODO: the MAC state of a founder is not defined (U-23) */
     }
 }
 

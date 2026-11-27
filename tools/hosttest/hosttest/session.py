@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
 
+from .board_ssh import SshStatusSource
 from .codec import LineCodec
 from .command import CommandClient
 from .config import Config, load_config
@@ -29,6 +30,7 @@ class Session:
     log_path: str
     _transport: TcpTransport
     _writer: ResultsWriter
+    status_source: SshStatusSource | None = None
 
     def close(self) -> None:
         self._transport.close()
@@ -50,4 +52,5 @@ def build_session(config_path: str,
         writer.set_unit_serial(unit_serial)
     runner = SequenceRunner(config, transport, CommandClient(transport, LineCodec()),
                         writer, now, on_result)
-    return Session(config, runner, log_path, transport, writer)
+    source = SshStatusSource(config.status) if config.status else None
+    return Session(config, runner, log_path, transport, writer, source)

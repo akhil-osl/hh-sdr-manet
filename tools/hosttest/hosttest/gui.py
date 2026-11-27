@@ -10,6 +10,7 @@ from tkinter import font as tkfont
 from .config import ConfigError
 from .controller import CONNECTED, Busy, Controller
 from .netplan_gui import NetPlanWindow
+from .status_gui import StatusWindow
 
 PAD = 8
 POLL_MS = 100
@@ -66,6 +67,7 @@ class App:
         file_menu = tk.Menu(bar, tearoff=False)
         file_menu.add_command(label="Load config...", command=self.choose_config)
         file_menu.add_command(label="Network plan...", command=self.open_netplan)
+        file_menu.add_command(label="Link status...", command=self.open_status)
         file_menu.add_separator()
         file_menu.add_command(label="Quit", command=self.on_close)
         run_menu = tk.Menu(bar, tearoff=False)
@@ -249,6 +251,14 @@ class App:
         win = getattr(self, "netplan_window", None)
         if win is None or not win.winfo_exists():
             win = self.netplan_window = NetPlanWindow(self.root)
+        win.lift()
+        return win
+
+    def open_status(self) -> StatusWindow:
+        """Open the link status window; reuse it if already open."""
+        win = getattr(self, "status_window", None)
+        if win is None or not win.winfo_exists():
+            win = self.status_window = StatusWindow(self.root, self.ctl)
         win.lift()
         return win
 

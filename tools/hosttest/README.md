@@ -17,6 +17,7 @@ are examples. Only the fake board in `tests/` has been used so far.
 ```
 cli.py / gui.py      operator interfaces (gui.py is a thin Tkinter view)
 controller.py        GUI state, worker thread and event queue, no Tkinter
+status.py            link status and neighbour table: parsing, ages, stale marking
 session.py           builds the runner and everything under it from a config
 runner.py            connect, read identity, run the test list, log each test
 command.py           send one command, wait for its tag, return a verdict
@@ -64,6 +65,24 @@ window also shows the `dataterm -n ... -P ...` flags for one node. Net ID, group
 and EUI-64 are saved in the plan file only, because dataterm has no input for
 them yet (U-03). The checks are in `hosttest/netplan.py` and run without a display.
 
+File > Link status... opens the link status window. Start runs the board's own
+`radioctl opencpi get` for `rx_ber crc_ok_count`, `rx_ber crc_bad_count` and
+`rx_fts link_status` over ssh every 2 s (the commands in `docs/BOARD-RUNBOOK.md`,
+section 5; nothing new on the board). It does not use the test link, but it is one
+task like a test run, so a test run waits until Stop. Needs key login to the board
+(`ssh -o BatchMode=yes`, no password prompt) and the `status` section in the config.
+
+The board has no link flag, so the window derives one. Link is `up` when the good
+frame count rose since the previous good read, `down` when it did not, and
+`unknown` on the first read or after the counter went backwards (a restart).
+`link_status` is shown only for information: it stayed 7 with the far transmitter
+off. `down` also appears when the link is fine but nobody is sending, because the
+count only rises while frames flow. A value is live only if the last read succeeded
+and is less than 5 s old. After a failed or old read the row stays but turns grey
+and says STALE, and the reason is shown. One RF head is shown and neighbours say
+"not available": the number of heads and a neighbour source are not defined (U-03
+in `unknown.md`). The model and the parsing run without a display.
+
 To try the CLI or GUI without a board, run the fake board and point the config
 at `127.0.0.1` and the same port:
 
@@ -83,6 +102,11 @@ JSON has no comments, so each field is described here.
 | `board.connect_timeout_s` | Limit for one connection attempt |
 | `board.connect_attempts`, `board.connect_backoff_s` | Bounded retry; the wait doubles after each failure |
 | `log_dir` | Folder for logs, default `hosttest-results` |
+| `status` | Optional. Where the Link status window reads. Without it the window cannot start |
+| `status.ssh_target` | `[user@]host` of the board, for ssh |
+| `status.radioctl_dir` | Folder on the board that holds `radioctl` |
+| `status.radiod_socket` | radiod socket on the board, default `/tmp/r.sock` |
+| `status.timeout_s` | Limit for one read, default 4 |
 | `identity` | Command run after each connect to read the board ID and firmware version |
 | `identity.board_id_field`, `identity.firmware_field` | Reply fields that hold them |
 | `tests[].id` | Unique test name, used by `--test` |
@@ -146,5 +170,7 @@ contract (U-04), and the example limits are placeholders.
 ctest --test-dir build -R hosttest --output-on-failure
 ```
 
-`tests/fake_board.py` is a scripted loopback server standing in for a board.
-It is test code only. The tests use no hardware.
+`tests/fake_board.py` is a scripted loopback server standing in for a board, and
+`FakeSsh`, which answers the status read with radioctl-format text. It is test
+code only. The tests run no ssh and use no hardware. The status window cannot be
+tried without a board; `run_fake_board.py` does not serve it.

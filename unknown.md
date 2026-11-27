@@ -278,6 +278,43 @@ structure, the burst-mode air interface and U-02.
 
 ---
 
+## U-07 — Network entry: founder, re-entry after isolation
+
+**Status:** OPEN
+
+**Zoho task:** AC2O-T1846
+
+**Scope:** `src/mac/entry.c`, cold start and re-entry on the radio link.
+
+**What is missing:**
+
+- The founder: which slot it takes while slots follow demand (U-06), the beacon it
+  sends (the entry slot, window and time quality), its MAC state, and the merge of
+  two nets that founded together. Until the founder sends something, every silent
+  radio founds on its own: the host simulation shows three of three radios founding
+  in a cold start.
+- Net time without GNSS.
+- Re-entry after an isolation longer than `t_age`: the radio is not told that its
+  slots were given away, so both radios send in the same slot and destroy each
+  other's PDU. It needs the "slots heard in use" field of the MAC beacon.
+- Whether age-out needs agreement from all neighbours, and the tie-break when two
+  radios claim one slot and both are heard (the code lets the lower node id keep it;
+  no document states this for slots).
+- The entry values `n_found` (4), the founding jitter (0 to 2), `t_age` (5) and
+  `t_quarantine` (3) are examples with no source.
+
+**Current implementation:** a radio that hears no member for `n_found` superframes
+plus its jitter reports a founding event. A slot owner not heard for `t_age`
+superframes is aged out and its slots stay unused for `t_quarantine` more. A radio
+that resets joins again from the start and never reclaims its old slot. A member gives
+up an own slot that a member grants to another radio, and joins again if none is left.
+Tested on the host simulation only.
+
+**What can proceed:** the host simulation and its tests. The radio-link proof waits on
+a second board.
+
+---
+
 ## Summary
 
 | ID | Topic | Status | Primary source | Zoho task |
@@ -288,6 +325,7 @@ structure, the burst-mode air interface and U-02.
 | U-04 | Bench instrument control contract for test sequences | OPEN | Test and hardware engineers + budget owner | not yet given |
 | U-05 | MAC demand report in the control block | OPEN | Frame specification owner | AC2O-T2589 |
 | U-06 | Dynamic slot allocation policy | OPEN | Network owner + logic owner | AC2O-T2589 |
+| U-07 | Network entry: founder, re-entry after isolation | OPEN | MAC owner + network owner | AC2O-T1846 |
 
 **Unblocked and proceeding:** the structural refactor — `protocol/`, `librc/`,
 `radioctl/`, `radiod/` — carrying today's working ASCII control protocol

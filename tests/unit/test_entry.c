@@ -52,6 +52,8 @@ static void make(hh_entry_t *e, unsigned id, uint64_t own, uint32_t seed)
     c.own_slots = own;
     c.entry_slots = 1ull << ENTRY_SLOT;
     hh_entry_params_default(&p);
+    p.n_found = 0;   /* these tests join a net that is there; founding has its own tests */
+    p.t_age = 0;     /* and feed single PDUs; age-out has its own tests */
     HH_ASSERT_OK(hh_entry_init(e, &p, &c, seed));
 }
 
@@ -706,6 +708,292 @@ static void test_init_validation(void)
     }
 }
 
+/* ---- cold start: founding ---- */
+
+/* Starts a joining radio at slot 0 with the example founding values. */
+static void found_start(hh_entry_t *e, unsigned id, uint32_t seed, uint8_t n_found)
+{
+    hh_slot_config_t c;
+    hh_entry_params_t p;
+    hh_slot_pos_t pos = pos_of(0);
+    hh_slot_config_default(&c, id, NET);
+    c.entry_slots = 1ull << ENTRY_SLOT;
+    hh_entry_params_default(&p);
+    p.n_found = n_found;
+    HH_ASSERT_OK(hh_entry_init(e, &p, &c, seed));
+    HH_ASSERT_OK(hh_entry_join(e, &pos));
+}
+
+/* Runs slots from *abs until the radio founds a net or max slots pass. Returns the founding
+ * superframe, or -1. Sets *abs to the next slot. */
+static int64_t found_run(hh_entry_t *e, uint64_t *abs, uint64_t max)
+{
+    for (uint64_t i = 0; i < max; i++, (*abs)++) {
+        hh_slot_pos_t p = pos_of(*abs);
+        hh_entry_act_t act;
+        hh_entry_tick(e, &p, &act);
+        if (act.found) { (*abs)++; return act.found_sf; }
+    }
+    return -1;
+}
+
+/* A radio that hears nothing founds once, between n_found and n_found + jitter superframes. */
+static void test_founds_after_silence(void)
+{
+    hh_entry_t e;
+    uint64_t abs = 0;
+    int64_t sf;
+    hh_slot_pos_t p;
+    hh_entry_act_t act;
+
+    found_start(&e, 5, 3, 4);
+    sf = found_run(&e, &abs, 20ull * SUPER);
+    HH_ASSERT(sf >= 4 && sf <= 6);
+    HH_ASSERT_EQ_INT(hh_entry_state(&e), HH_ENTRY_FOUNDER);
+
+    /* Once: nothing more is reported, and the founder cannot join. */
+    HH_ASSERT_EQ_INT((int)found_run(&e, &abs, 20ull * SUPER), -1);
+    p = pos_of(abs);
+    hh_entry_tick(&e, &p, &act);
+    HH_ASSERT(!act.found && !act.own_changed);
+    HH_ASSERT_ERR(hh_entry_join(&e, &p), HH_ERR_STATE);
+}
+
+/* The wait differs from radio to radio, so one radio founds first. */
+static void test_founding_time_differs_per_radio(void)
+{
+    bool seen[3] = { false, false, false };
+    unsigned distinct = 0;
+
+    for (uint32_t seed = 1; seed <= 16; seed++) {
+        hh_entry_t e;
+        uint64_t abs = 0;
+        int64_t sf;
+        found_start(&e, 7, seed, 4);
+        sf = found_run(&e, &abs, 20ull * SUPER);
+        HH_ASSERT(sf >= 4 && sf <= 6);
+        if (!seen[sf - 4]) { seen[sf - 4] = true; distinct++; }
+    }
+    HH_ASSERT_EQ_INT((int)distinct, 3);
+}
+
+/* Hearing a PDU or a command restarts the wait: a radio that hears a net never founds. */
+static void test_heard_net_prevents_founding(void)
+{
+    hh_entry_t e;
+    uint64_t abs = 0, last = 0;
+    int64_t sf;
+    hh_entry_cmd_t c;
+    hh_entry_act_t act;
+
+    found_start(&e, 5, 3, 4);
+    for (uint32_t s = 0; s < 30; s++) {                           /* a PDU every superframe */
+        hh_slot_pos_t p;
+        HH_ASSERT_EQ_INT((int)found_run(&e, &abs, SUPER - 1), -1);
+        p = pos_of(abs);
+        hh_entry_on_pdu(&e, &p, 9, 1ull << 3);
+        last = abs;
+        abs++;
+    }
+    HH_ASSERT(hh_entry_state(&e) != HH_ENTRY_FOUNDER);
+
+    /* A command from a member counts as well. */
+    memset(&c, 0, sizeof c);
+    c.id = HH_ENTRY_CMD_REJECT;
+    c.u.reject.request_id = 0x1234;
+    c.u.reject.reason = HH_ENTRY_REJECT_FULL;
+    deliver(&e, abs, 9, 0xFFFF, &c, &act);
+    last = abs;
+
+    /* Silence from here on: founds the full wait after the last thing heard. */
+    sf = found_run(&e, &abs, 20ull * SUPER);
+    HH_ASSERT(sf >= (int64_t)(last / SUPER) + 4);
+    HH_ASSERT(sf <= (int64_t)(last / SUPER) + 7);
+}
+
+/* Another joiner's request, or a PDU without claims, is not a net: the radio still founds. */
+static void test_heard_joiner_does_not_prevent_founding(void)
+{
+    hh_entry_t e;
+    uint64_t abs = 0;
+    int64_t sf = -1;
+    hh_entry_cmd_t c;
+
+    found_start(&e, 5, 3, 4);
+    memset(&c, 0, sizeof c);
+    c.id = HH_ENTRY_CMD_REQUEST;
+    c.u.request.request_id = 0x77;
+    c.u.request.slots_wanted = 1;
+    c.u.request.bitmap_bytes = 3;
+    while (sf < 0 && abs < 20ull * SUPER) {
+        hh_slot_pos_t p = pos_of(abs);
+        hh_entry_act_t act;
+        if (abs % SUPER == 10) {
+            deliver(&e, abs, 9, 0xFFFF, &c, &act);
+            hh_entry_on_pdu(&e, &p, 9, 0);
+        }
+        sf = found_run(&e, &abs, 1);
+    }
+    HH_ASSERT(sf >= 4 && sf <= 6);
+}
+
+/* Founding is off with n_found 0, and n_found must be longer than n_listen. */
+static void test_founding_params(void)
+{
+    hh_entry_t e;
+    hh_slot_config_t c;
+    hh_entry_params_t p;
+    uint64_t abs = 0;
+
+    found_start(&e, 5, 3, 0);
+    HH_ASSERT_EQ_INT((int)found_run(&e, &abs, 40ull * SUPER), -1);
+    HH_ASSERT(hh_entry_state(&e) != HH_ENTRY_FOUNDER);
+
+    hh_slot_config_default(&c, 5, NET);
+    c.entry_slots = 1ull << ENTRY_SLOT;
+    hh_entry_params_default(&p);
+    p.n_found = p.n_listen;
+    HH_ASSERT_ERR(hh_entry_init(&e, &p, &c, 1), HH_ERR_INVAL);
+    p.n_found = (uint8_t)(p.n_listen + 1u);
+    HH_ASSERT_OK(hh_entry_init(&e, &p, &c, 1));
+}
+
+/* ---- age-out and slot conflict ---- */
+
+/* A fresh member (id 1, slot 0) hears radio 2 claim slot 1 in superframe 0, then answers a request
+ * in superframe sf. Sets *slots to the slots it grants. */
+static void grant_after_silence(uint32_t sf, uint8_t t_age, uint64_t *slots)
+{
+    hh_entry_t m;
+    hh_slot_config_t c;
+    hh_entry_params_t p;
+    hh_entry_cmd_t rq, g;
+    hh_entry_act_t act;
+    hh_slot_pos_t pos = pos_of(5);
+    uint64_t t = (uint64_t)sf * SUPER + ENTRY_SLOT;
+    uint16_t dst = 0;
+
+    hh_slot_config_default(&c, 1, NET);
+    c.own_slots = 1u << 0;
+    c.entry_slots = 1ull << ENTRY_SLOT;
+    hh_entry_params_default(&p);
+    p.t_age = t_age;
+    HH_ASSERT_OK(hh_entry_init(&m, &p, &c, 1));
+    hh_entry_on_pdu(&m, &pos, 2, 1u << 1);
+    for (uint32_t i = 1; i <= sf; i++) {                    /* the timers run every superframe */
+        pos = pos_of((uint64_t)i * SUPER);
+        hh_entry_tick(&m, &pos, &act);
+    }
+    rq = request(0xAABB0001u, ALL_FREE, 1);
+    deliver(&m, t, 7, HH_PDU_ADDR_BROADCAST, &rq, &act);
+    HH_ASSERT(take(&m, t + 1, &g, &dst));
+    HH_ASSERT_EQ_INT(g.id, HH_ENTRY_CMD_GRANT);
+    *slots = g.u.grant.slots;
+}
+
+/* A silent owner keeps its slot for t_age superframes, then the slot waits t_quarantine more. */
+static void test_age_out_and_quarantine(void)
+{
+    static const struct { uint32_t sf; uint8_t t_age; uint64_t want; } cases[] = {
+        { 4, 5, 1ull << 2 },     /* silent for 4 superframes: still owned */
+        { 5, 5, 1ull << 2 },     /* aged out, in quarantine */
+        { 7, 5, 1ull << 2 },
+        { 8, 5, 1ull << 1 },     /* free again after t_age + t_quarantine */
+        { 40, 0, 1ull << 2 },    /* t_age 0: never aged out */
+    };
+    for (unsigned i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        uint64_t got = 0;
+        grant_after_silence(cases[i].sf, cases[i].t_age, &got);
+        HH_ASSERT(got == cases[i].want);
+    }
+}
+
+/* An owner that keeps sending is not aged out, and a gap shorter than t_age does not age it. */
+static void test_heard_owner_is_not_aged(void)
+{
+    hh_entry_t m;
+    hh_slot_config_t c;
+    hh_entry_params_t p;
+    hh_entry_act_t act;
+    hh_entry_cmd_t rq, g;
+    uint16_t dst = 0;
+    uint64_t t;
+
+    hh_slot_config_default(&c, 1, NET);
+    c.own_slots = 1u << 0;
+    c.entry_slots = 1ull << ENTRY_SLOT;
+    hh_entry_params_default(&p);
+    HH_ASSERT_OK(hh_entry_init(&m, &p, &c, 1));
+    for (uint32_t sf = 0; sf < 30; sf++) {
+        hh_slot_pos_t pos = pos_of((uint64_t)sf * SUPER + 5);
+        if (sf != 6 && sf != 7) hh_entry_on_pdu(&m, &pos, 2, 1u << 1);   /* a gap, then it is back */
+        hh_entry_tick(&m, &pos, &act);
+    }
+    t = 30ull * SUPER + ENTRY_SLOT;
+    rq = request(0xAABB0002u, ALL_FREE, 1);
+    deliver(&m, t, 7, HH_PDU_ADDR_BROADCAST, &rq, &act);
+    HH_ASSERT(take(&m, t + 1, &g, &dst));
+    HH_ASSERT(g.u.grant.slots == (1ull << 2));
+}
+
+/* A grant to another radio that names an own slot takes that slot away; no slot left means join again. */
+static void test_grant_of_own_slot(void)
+{
+    hh_entry_t m;
+    hh_entry_cmd_t g;
+    hh_entry_act_t act;
+    hh_slot_pos_t p = pos_of(100);
+    uint64_t t = 4u * SUPER + ENTRY_SLOT;
+
+    memset(&g, 0, sizeof g);
+    g.id = HH_ENTRY_CMD_GRANT;
+    g.u.grant.request_id = 0x55;
+    g.u.grant.apply_at = 6;
+    g.u.grant.bitmap_bytes = 3;
+    g.u.grant.slots = 1u << 3;
+    g.u.grant.arrival_offset = HH_ENTRY_OFFSET_NONE;
+
+    make(&m, 2, (1u << 3) | (1u << 4), 1);
+    deliver(&m, t, 1, 7, &g, &act);                         /* member 1 grants slot 3 to radio 7 */
+    hh_entry_tick(&m, &p, &act);
+    HH_ASSERT(act.own_changed && act.own_slots == (1u << 4));
+    HH_ASSERT_EQ_INT(hh_entry_state(&m), HH_ENTRY_MEMBER);
+
+    make(&m, 2, 1u << 3, 1);
+    deliver(&m, t, 1, 7, &g, &act);
+    hh_entry_tick(&m, &p, &act);
+    HH_ASSERT(act.own_changed && act.own_slots == 0);
+    HH_ASSERT_EQ_INT(hh_entry_state(&m), HH_ENTRY_LISTEN);
+}
+
+/* Two radios claim one slot: the lower node id keeps it, the other gives it up. A radio that has no
+ * slot left joins again. */
+static void test_slot_conflict(void)
+{
+    hh_entry_t m;
+    hh_entry_act_t act;
+    hh_slot_pos_t p = pos_of(100);
+
+    make(&m, 5, 1u << 3, 1);                                /* last slot, lower id claims it */
+    hh_entry_on_pdu(&m, &p, 2, 1u << 3);
+    hh_entry_tick(&m, &p, &act);
+    HH_ASSERT(act.own_changed && act.own_slots == 0);
+    HH_ASSERT_EQ_INT(hh_entry_state(&m), HH_ENTRY_LISTEN);
+    HH_ASSERT_EQ_INT((int)m.st.conflicts, 1);
+
+    make(&m, 5, (1u << 3) | (1u << 4), 1);                  /* a spare slot: stay a member */
+    hh_entry_on_pdu(&m, &p, 2, 1u << 3);
+    hh_entry_tick(&m, &p, &act);
+    HH_ASSERT(act.own_changed && act.own_slots == (1u << 4));
+    HH_ASSERT_EQ_INT(hh_entry_state(&m), HH_ENTRY_MEMBER);
+
+    make(&m, 2, 1u << 3, 1);                                /* the other side keeps its slot */
+    hh_entry_on_pdu(&m, &p, 5, 1u << 3);
+    hh_entry_tick(&m, &p, &act);
+    HH_ASSERT(!act.own_changed);
+    HH_ASSERT_EQ_INT(hh_entry_state(&m), HH_ENTRY_MEMBER);
+}
+
 HH_TEST_MAIN_BEGIN("entry")
     hh_log_set_level(HH_LOG_ERROR);
     HH_RUN(test_vector_d_request);
@@ -727,4 +1015,13 @@ HH_TEST_MAIN_BEGIN("entry")
     HH_RUN(test_member_grant_lapses_or_is_confirmed);
     HH_RUN(test_leave);
     HH_RUN(test_init_validation);
+    HH_RUN(test_founds_after_silence);
+    HH_RUN(test_founding_time_differs_per_radio);
+    HH_RUN(test_heard_net_prevents_founding);
+    HH_RUN(test_heard_joiner_does_not_prevent_founding);
+    HH_RUN(test_founding_params);
+    HH_RUN(test_age_out_and_quarantine);
+    HH_RUN(test_heard_owner_is_not_aged);
+    HH_RUN(test_slot_conflict);
+    HH_RUN(test_grant_of_own_slot);
 HH_TEST_MAIN_END()

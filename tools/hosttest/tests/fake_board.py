@@ -94,6 +94,44 @@ def example_handler(line: str) -> list:
     return [f"{tag} ERR\n"]
 
 
+def radioctl_text(crc_ok: int, crc_bad: int, link_status: int) -> str:
+    """What the board's three `radioctl opencpi get` calls print, as in the runbook."""
+    out = []
+    for worker, prop, value, kind in (("rx_ber", "crc_ok_count", crc_ok, "ulonglong"),
+                                      ("rx_ber", "crc_bad_count", crc_bad, "ulonglong"),
+                                      ("rx_fts", "link_status", link_status, "uchar")):
+        out.append(f"worker={worker}\nproperty={prop}\nvalue={value}\n"
+                   f"type={kind}\naccess=ro\n")
+    return "".join(out)
+
+
+class FakeSsh:
+    """Stands in for subprocess.run of ssh. Test code sets what the board "says".
+
+    crc_ok rises by `step` on each call while `frames_flow` is true. Set `fail`
+    to a string for an ssh error, `hang` to make the call time out.
+    """
+
+    def __init__(self) -> None:
+        self.crc_ok, self.crc_bad, self.link_status, self.step = 0, 0, 7, 10
+        self.frames_flow = True
+        self.fail = ""
+        self.hang = False
+        self.calls: list[list] = []
+
+    def __call__(self, argv, **kwargs):
+        import subprocess
+        self.calls.append(argv)
+        if self.hang:
+            raise subprocess.TimeoutExpired(argv, kwargs.get("timeout", 0))
+        if self.fail:
+            return subprocess.CompletedProcess(argv, 255, "", self.fail + "\n")
+        if self.frames_flow:
+            self.crc_ok += self.step
+        text = radioctl_text(self.crc_ok, self.crc_bad, self.link_status)
+        return subprocess.CompletedProcess(argv, 0, text, "")
+
+
 def config_doc(port: int, log_dir: str = "results", attempts: int = 2) -> dict:
     """Config for a board on loopback, in the shape load_config expects."""
     return {
@@ -101,6 +139,8 @@ def config_doc(port: int, log_dir: str = "results", attempts: int = 2) -> dict:
                   "port": port, "connect_timeout_s": 1.0,
                   "connect_attempts": attempts, "connect_backoff_s": 0.0},
         "log_dir": log_dir,
+        "status": {"ssh_target": "root@192.0.2.10",
+                   "radioctl_dir": "/opt/radhawk_each_worker_status"},
         "identity": {"command": "EXAMPLE_ID", "expect": {"status": "OK"},
                      "timeout_s": 1.0, "board_id_field": "id",
                      "firmware_field": "fw"},

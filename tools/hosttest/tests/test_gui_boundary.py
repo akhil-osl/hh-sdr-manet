@@ -27,7 +27,7 @@ def imported(module_file):
 
 class BoundaryTest(unittest.TestCase):
     def test_gui_side_does_not_reach_below_the_runner(self):
-        for module in ("gui.py", "controller.py"):
+        for module in ("gui.py", "controller.py", "status_gui.py"):
             self.assertEqual(imported(module) & FORBIDDEN, set(), module)
 
     def test_controller_has_no_tkinter(self):

@@ -9,6 +9,12 @@
     "connect_backoff_s": 0.5
   },
   "log_dir": "hosttest-results",
+  "status": {
+    "ssh_target": "root@192.168.10.20",
+    "radioctl_dir": "/opt/radhawk_each_worker_status",
+    "radiod_socket": "/tmp/r.sock",
+    "timeout_s": 4.0
+  },
   "identity": {
     "command": "EXAMPLE_ID",
     "expect": { "status": "OK" },
