@@ -332,7 +332,10 @@ static void send_own(hh_slot_t *s, const hh_slot_pos_t *pos)
         if (s->sent_cur[f->cls] < UINT16_MAX) s->sent_cur[f->cls]++;
         p->n_msg++;
     }
-    p->more_data = queue_left(s->mac, left);
+    queue_left(s->mac, left);
+    /* The PL CRC generator and checker accept frame control 0xA841 only, so a
+     * frame with the more-data bit (0xA851) gets no CRC. Never set the bit. */
+    p->more_data = false;
     offered_load(s, left, p->qreport);   /* demand: what the node offers per frame, whichever slot reports it */
 
     if (encode_pdu(s, p, &len) != HH_OK) {
