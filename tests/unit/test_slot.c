@@ -235,7 +235,7 @@ static void test_packing_and_order(void)
     HH_ASSERT_EQ_INT(p.msg[0].cls, 0);
     HH_ASSERT_EQ_INT(p.msg[0].dst, HH_PDU_ADDR_BROADCAST);
     HH_ASSERT_EQ_INT(p.msg[1].cls, 4);
-    HH_ASSERT(p.more_data);
+    HH_ASSERT(!p.more_data);   /* never set: the PL CRC accepts 0xA841 only */
     HH_ASSERT(sent[0].len <= 105);
     HH_ASSERT_OK(hh_pdu_decode(sent[1].bytes, sent[1].len, &p));
     HH_ASSERT_EQ_INT(p.n_msg, 3);
@@ -379,7 +379,7 @@ static void test_queue_report_is_offered_load(void)
     HH_ASSERT_EQ_INT(p.n_msg, 2);
     HH_ASSERT_EQ_INT(p.qreport[HH_MAC_CLASS_VOICE], 1);   /* one sent, none left */
     HH_ASSERT_EQ_INT(p.qreport[HH_MAC_CLASS_DATA], 3);    /* one sent, two left */
-    HH_ASSERT(p.more_data);
+    HH_ASSERT(!p.more_data);   /* the queue report carries the backlog, not the bit */
 }
 
 /* Queues two 45-byte messages before every frame, so one fits each own slot. Returns the PDUs sent. */
