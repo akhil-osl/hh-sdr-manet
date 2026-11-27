@@ -50,6 +50,13 @@ class TestRunner:
         self._transport.close()
         self._client.reset()
 
+    def query(self, command: str, timeout_s: float) -> tuple[bool, dict, str]:
+        """Send one command on the open link, not logged: (ok, reply fields, reason)."""
+        if not self._transport.is_open:
+            return False, {}, "link not open"
+        res = self._client.execute(command, [], {"status": "OK"}, timeout_s)
+        return res.verdict == PASS, res.fields, res.reason
+
     def run(self, test_ids: list[str] | None = None) -> list[dict]:
         """Run the selected tests (all when None). Returns the records written."""
         self._cancel.clear()

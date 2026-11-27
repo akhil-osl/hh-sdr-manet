@@ -2,7 +2,8 @@
 
 Usage: python3 tests/run_fake_board.py [--port 9000] [--value 42]
 Point config/hosttest.json at 127.0.0.1 and the same port. Stop with Ctrl+C.
-Test code only: the commands are the placeholder examples, not a real board's.
+Test code only: the commands are placeholders, not a real board's. The Link
+status window reads over ssh and does not use this server.
 """
 import argparse
 import os

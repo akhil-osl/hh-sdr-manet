@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from typing import Callable
 
 from .results import UNKNOWN
 from .session import Session, build_session
+from .status import StatusModel
 
 DISCONNECTED = "Disconnected"
 CONNECTING = "Connecting"
@@ -21,6 +23,10 @@ LINK_LOST = "Link lost"
 
 class Busy(Exception):
     """An action was requested while a worker task was running."""
+
+
+class StatusNotConfigured(Exception):
+    """The loaded config has no 'status' section, so there is nowhere to read."""
 
 
 class Controller:
@@ -38,6 +44,9 @@ class Controller:
         self.cancelling = False
         self.records: list[dict] = []
         self.last_by_test: dict[str, dict] = {}
+        self.status = StatusModel()
+        self.status_running = False
+        self._status_stop = threading.Event()
 
     def load(self, path: str) -> None:
         """Replace the session with one built from `path`. Raises ConfigError."""
@@ -52,6 +61,7 @@ class Controller:
         self._was_connected = False
         self.records = []
         self.last_by_test = {}
+        self.status.clear()
 
     @property
     def loaded(self) -> bool:
@@ -71,7 +81,36 @@ class Controller:
         self._start(lambda runner: runner.run(test_ids), CONNECTING
                     if not self._connected() else CONNECTED)
 
+    @property
+    def status_configured(self) -> bool:
+        return self.session is not None and self.session.status_source is not None
+
+    def start_status(self, period_s: float = 2.0) -> None:
+        """Read the board's link counters every period_s until stopped.
+
+        The read goes over ssh, not over the test link. A failed read marks the
+        value stale; nothing is shown as live that was not just read.
+        """
+        self._require_idle()
+        if not self.status_configured:
+            raise StatusNotConfigured("the config has no status section")
+        source = self.session.status_source
+        self._status_stop.clear()
+
+        def poll_status(_runner) -> None:
+            while not self._status_stop.is_set():
+                ok, counters, reason = source.read()
+                self._events.put(("status", time.monotonic(), ok, counters, reason))
+                self._status_stop.wait(period_s)
+
+        self._start(poll_status, self.link)
+        self.status_running = True
+
+    def stop_status(self) -> None:
+        self._status_stop.set()
+
     def cancel(self) -> None:
+        self._status_stop.set()
         if self.running and self.session is not None:
             self.cancelling = True
             self.session.runner.cancel()
@@ -87,6 +126,8 @@ class Controller:
             kind = event[0]
             if kind == "record":
                 self._apply_record(event[1])
+            elif kind == "status":
+                self._apply_status(*event[1:])
             elif kind == "done":
                 self._finish()
             applied.append(event)
@@ -145,8 +186,12 @@ class Controller:
         elif record["check"] not in ("connect", "identity"):
             self.last_by_test[record["check"]] = record
 
+    def _apply_status(self, at: float, ok: bool, counters: dict, reason: str) -> None:
+        self.status.set_reading(at, counters if ok else None, "" if ok else reason)
+
     def _finish(self) -> None:
         self.running = False
+        self.status_running = False
         self.cancelling = False
         if self._connected():
             self.link = CONNECTED

@@ -64,6 +64,26 @@ def full(**overrides) -> dict:
     return doc
 
 
+class StatusConfigTest(unittest.TestCase):
+    def status(self, **fields):
+        base = {"ssh_target": "root@192.0.2.10", "radioctl_dir": "/opt/x"}
+        return load_config(write(full(status={**base, **fields}))).status
+
+    def test_status_section_is_optional(self):
+        self.assertIsNone(load_config(write(full())).status)
+
+    def test_defaults_are_the_runbook_socket_and_a_timeout(self):
+        st = self.status()
+        self.assertEqual((st.radiod_socket, st.timeout_s), ("/tmp/r.sock", 4.0))
+
+    def test_bad_values_are_rejected(self):
+        for fields in ({"ssh_target": "-oProxyCommand=x"}, {"ssh_target": "a b"},
+                       {"ssh_target": ""}, {"radioctl_dir": ""},
+                       {"radiod_socket": ""}, {"timeout_s": 0}, {"timeout_s": "4"}):
+            with self.assertRaises(ConfigError, msg=str(fields)):
+                self.status(**fields)
+
+
 class TestListConfigTest(unittest.TestCase):
     def test_example_file_loads_with_identity_and_tests(self):
         cfg = load_config(EXAMPLE)

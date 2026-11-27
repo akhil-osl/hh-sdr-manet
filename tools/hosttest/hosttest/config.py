@@ -42,11 +42,21 @@ class IdentityConfig:
 
 
 @dataclass(frozen=True)
+class StatusConfig:
+    """Where the Link status window reads: the board's radioctl, over ssh."""
+    ssh_target: str
+    radioctl_dir: str
+    radiod_socket: str
+    timeout_s: float
+
+
+@dataclass(frozen=True)
 class Config:
     board: BoardConfig
     identity: IdentityConfig
     tests: list
     log_dir: str
+    status: StatusConfig | None = None
 
 
 def _require(obj: dict, key: str, kind, where: str):
@@ -117,6 +127,28 @@ def _board(doc: dict, path: str) -> BoardConfig:
     )
 
 
+def _status(doc: dict, path: str) -> StatusConfig | None:
+    """The optional 'status' object. Without it the Link status window cannot start."""
+    if "status" not in doc:
+        return None
+    raw = _require(doc, "status", dict, path)
+    where = f"{path} status"
+    target = _require(raw, "ssh_target", str, where)
+    if not target or target.startswith("-") or any(c.isspace() for c in target):
+        raise ConfigError(f"{where}: 'ssh_target' must be [user@]host")
+    directory = _require(raw, "radioctl_dir", str, where)
+    if not directory:
+        raise ConfigError(f"{where}: 'radioctl_dir' must not be empty")
+    sock = raw.get("radiod_socket", "/tmp/r.sock")
+    if not isinstance(sock, str) or not sock:
+        raise ConfigError(f"{where}: 'radiod_socket' must be a non-empty string")
+    if "timeout_s" not in raw:
+        raw = {**raw, "timeout_s": 4.0}
+    timeout_s = _positive(_require(raw, "timeout_s", (int, float), where),
+                          "timeout_s", where)
+    return StatusConfig(target, directory, sock, timeout_s)
+
+
 def load_board(path: str) -> BoardConfig:
     return _board(_read(path), path)
 
@@ -149,4 +181,5 @@ def load_config(path: str) -> Config:
     log_dir = doc.get("log_dir", "hosttest-results")
     if not isinstance(log_dir, str) or not log_dir:
         raise ConfigError(f"{path}: 'log_dir' must be a non-empty string")
-    return Config(board=board, identity=identity, tests=tests, log_dir=log_dir)
+    return Config(board=board, identity=identity, tests=tests, log_dir=log_dir,
+                  status=_status(doc, path))
